@@ -1,0 +1,73 @@
+:root {
+  color-scheme: dark;
+
+  /* Flächen */
+  --bg: #07090c;
+  --panel: rgba(15, 18, 23, 0.78);
+  --panel-strong: rgba(17, 21, 27, 0.94);
+  --panel-solid: #11151a;
+  --surface: rgba(255, 255, 255, 0.035);
+  --surface-hover: rgba(255, 255, 255, 0.06);
+  --surface-active: rgba(255, 255, 255, 0.09);
+  --field: rgba(0, 0, 0, 0.28);
+  --field-hover: rgba(0, 0, 0, 0.38);
+
+  /* Linien */
+  --border: rgba(255, 255, 255, 0.065);
+  --border-strong: rgba(255, 255, 255, 0.11);
+  --divider: rgba(255, 255, 255, 0.05);
+
+  /* Text */
+  --text: #e7ecf2;
+  --text-2: #a3aebb;
+  --text-3: #6f7a88;
+  --text-4: #4c5562;
+
+  /* Akzente */
+  --accent: #4cc2ff;
+  --accent-strong: #7ad3ff;
+  --accent-bg: rgba(76, 194, 255, 0.12);
+  --accent-bg-strong: rgba(76, 194, 255, 0.2);
+  --accent-border: rgba(76, 194, 255, 0.38);
+  --ok: #45d6a0;
+  --warn: #ffb547;
+  --warn-bg: rgba(255, 181, 71, 0.1);
+  --danger: #ff6b6b;
+  --danger-bg: rgba(255, 107, 107, 0.1);
+  --ray: #ffd27a;
+
+  /* Typografie */
+  --font: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Inter', 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
+  --font-mono: 'SF Mono', 'JetBrains Mono', ui-monospace, Menlo, Consolas, monospace;
+  --fs-xs: 10.5px;
+  --fs-sm: 11.5px;
+  --fs: 12.5px;
+  --fs-md: 13.5px;
+  --fs-lg: 15px;
+
+  /* Maße */
+  --toolbar-h: 48px;
+  --status-h: 28px;
+  --gap: 10px;
+  --left-w: 268px;
+  --right-w: 316px;
+  --r-sm: 6px;
+  --r: 8px;
+  --r-lg: 12px;
+
+  /* Effekte */
+  --blur: blur(20px) saturate(150%);
+  --shadow: 0 10px 40px rgba(0, 0, 0, 0.45), 0 1px 0 rgba(255, 255, 255, 0.03) inset;
+  --shadow-sm: 0 4px 16px rgba(0, 0, 0, 0.35);
+  --ease: cubic-bezier(0.2, 0.7, 0.2, 1);
+  --t-fast: 120ms;
+  --t: 200ms;
+}
+
+@media (max-width: 1280px) {
+  :root {
+    --left-w: 236px;
+    --right-w: 292px;
+    --fs: 12px;
+  }
+}
