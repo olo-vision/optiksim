@@ -6,10 +6,12 @@ import { makeRigid, toLocalPoint, toWorldPoint, type Vec3 } from '@/core/math/ve
 import { getElementDefinition } from './elementRegistry';
 import { DEFAULT_EYE_ANATOMY } from './derived/eyeGeometry';
 import { elementAxialExtent } from './derived/elementShape';
+import { isOnEye, seatTransform } from './derived/contactSeat';
 import {
   SCHEMA_VERSION,
   type ElementKind,
   type EyeEntity,
+  type LensElement,
   type LightSourceEntity,
   type MeasurePointEntity,
   type OpticalElement,
@@ -119,6 +121,10 @@ export function createElement(kind: ElementKind, doc: SceneDocument, distance?: 
     }
   }
   el.transform = identityTransform(eyeLocalToWorld(doc.eye, [0, 0, centerZ]), [...doc.eye.transform.rotation] as Vec3);
+  if (isOnEye(el)) {
+    const t = seatTransform(el, doc.eye);
+    el.transform = { ...el.transform, position: t.position, rotation: t.rotation };
+  }
   return el;
 }
 
@@ -161,18 +167,15 @@ export function cloneElement(el: OpticalElement, existingNames: string[], offset
   return copy;
 }
 
-/** Setzt eine Kontaktlinse auf die Hornhaut (Rückflächenscheitel = Hornhautscheitel − Tränenfilm). */
+/**
+ * Setzt eine Kontaktlinse zentriert auf die Hornhaut (contact.onEye = true).
+ * Die Lage wird danach als Constraint aus dem Auge abgeleitet (siehe contactSeat.ts).
+ */
 export function seatOnCornea<T extends OpticalElement>(el: T, doc: SceneDocument): T {
-  const tear = el.family === 'lens' && el.contact ? el.contact.tearFilmThickness : 0;
-  const ext = elementAxialExtent(el);
-  return {
-    ...el,
-    transform: {
-      ...el.transform,
-      position: eyeLocalToWorld(doc.eye, [0, 0, -(tear + ext.back)]),
-      rotation: [...doc.eye.transform.rotation] as Vec3,
-    },
-  };
+  if (el.family !== 'lens' || !el.contact) return el;
+  const next = { ...el, contact: { ...el.contact, onEye: true, centration: { x: 0, y: 0 }, tilt: { x: 0, y: 0 } } } as LensElement;
+  const t = seatTransform(next, doc.eye);
+  return { ...next, transform: { ...next.transform, position: t.position, rotation: t.rotation } } as unknown as T;
 }
 
 /** Verschiebt ein Element entlang der Augenachse, sodass der augenseitige Scheitel den Abstand `distance` hat. */

@@ -4,10 +4,10 @@
  */
 import type { LightSourceEntity, SceneDocument } from '@/model/types';
 import { add, dot, madd, makeRigid, normalize, scale, sub, toWorldDir, toWorldPoint, type Vec3 } from '@/core/math/vec';
-import { solidFromElement } from './solids';
+import { sceneSolids } from './solids';
 import { buildEyeTraceModel, type EyeTraceModel } from './eyeTracer';
 import { refract } from './refraction';
-import type { FocusAnalysis, Ray, RayPath, RayTermination, TraceResult, TraceSettings, TraceableSolid } from './types';
+import type { AstigmaticFocus, FocusAnalysis, Ray, RayPath, RayTermination, SolidHit, TraceResult, TraceSettings, TraceableSolid } from './types';
 
 export const DEFAULT_TRACE_SETTINGS: TraceSettings = {
   maxSteps: 48,
@@ -15,51 +15,73 @@ export const DEFAULT_TRACE_SETTINGS: TraceSettings = {
   ambientIndex: 1.0,
 };
 
-/** Erzeugt die Startstrahlen einer Lichtquelle (Meridional- und optional Sagittalschnitt). */
-export function generateSourceRays(src: LightSourceEntity, eyeApex: Vec3): Array<Ray & { offset: number }> {
+/**
+ * Erzeugt die Startstrahlen einer Lichtquelle.
+ * Standard: Meridionalschnitt (lokal Y) und optional Sagittalschnitt (lokal X).
+ * Mit `fanDirs` (Welt-Richtungen) werden die Fächer entlang dieser Richtungen gelegt
+ * (z. B. Hauptschnitte eines astigmatischen Systems).
+ */
+export function generateSourceRays(
+  src: LightSourceEntity,
+  eyeApex: Vec3,
+  fanDirs?: Vec3[],
+  countOverride?: number,
+  diameterOverride?: number,
+): Array<Ray & { offset: number; fan: number }> {
   const rigid = makeRigid(src.transform.position, src.transform.rotation);
   const origin = src.transform.position;
   const forward = normalize(toWorldDir(rigid, [0, 0, 1]));
   const up = normalize(toWorldDir(rigid, [0, 1, 0]));
   const right = normalize(toWorldDir(rigid, [1, 0, 0]));
-  const { rayCount, beamDiameter, kind, sagittal } = src.source;
-  const count = Math.max(1, Math.min(101, Math.round(rayCount)));
+  const { kind, sagittal } = src.source;
+  const beamDiameter = diameterOverride ?? src.source.beamDiameter;
+  const count = Math.max(1, Math.min(101, Math.round(countOverride ?? src.source.rayCount)));
   const offsets: number[] = [];
   for (let i = 0; i < count; i++) offsets.push(count === 1 ? 0 : -beamDiameter / 2 + (beamDiameter * i) / (count - 1));
-  const axes: Vec3[] = sagittal ? [up, right] : [up];
-  const rays: Array<Ray & { offset: number }> = [];
-  for (const ax of axes) {
+  const project = (v: Vec3) => normalize(sub(v, scale(forward, dot(v, forward))));
+  const axes: Vec3[] = fanDirs ? fanDirs.map(project) : sagittal ? [up, right] : [up];
+  const rays: Array<Ray & { offset: number; fan: number }> = [];
+  axes.forEach((ax, fan) => {
     for (const off of offsets) {
-      if (ax === right && Math.abs(off) < 1e-9) continue; // Hauptstrahl nicht doppelt
-      if (kind === 'parallel') {
-        rays.push({ origin: madd(origin, ax, off), dir: forward, offset: off });
+      if (fan > 0 && Math.abs(off) < 1e-9) continue; // Hauptstrahl nicht doppelt
+      if (kind === 'parallel' || kind === 'line') {
+        rays.push({ origin: madd(origin, ax, off), dir: forward, offset: off, fan });
       } else {
         // Punktquelle: Zielpunkte in der Ebene des Hornhautscheitels
         const dist = Math.max(1, dot(sub(eyeApex, origin), forward));
         const target = madd(madd(origin, forward, dist), ax, off);
-        rays.push({ origin, dir: normalize(sub(target, origin)), offset: off });
+        rays.push({ origin, dir: normalize(sub(target, origin)), offset: off, fan });
       }
     }
-  }
+  });
   return rays;
 }
 
+const TIE = 1e-6;
+
+/**
+ * Verfolgt einen Strahl. Koinzidente Grenzflächen (z. B. KL-Rückfläche = Tränenfilm-Vorderfläche)
+ * werden in einem Schritt behandelt: erst alle Medienwechsel, dann eine Brechung n₁ → n₂.
+ * Trifft der Strahl die Hornhaut (auch aus dem Tränenfilm heraus), übernimmt der sequentielle Augen-Tracer
+ * mit dem aktuellen Außenmedium.
+ */
 function traceRay(ray0: Ray, solids: TraceableSolid[], eye: EyeTraceModel | null, settings: TraceSettings): Omit<RayPath, 'index' | 'sourceId' | 'color' | 'offset'> {
   const points: Vec3[] = [ray0.origin];
   let ray = ray0;
-  const stack: TraceableSolid[] = [];
-  const currentN = () => (stack.length ? stack[stack.length - 1].n : settings.ambientIndex);
+  let stack: TraceableSolid[] = [];
+  const topN = (st: TraceableSolid[]) => (st.length ? st[st.length - 1].n : settings.ambientIndex);
 
   for (let step = 0; step < settings.maxSteps; step++) {
-    let best: { t: number; solid: TraceableSolid; normal: Vec3; entering: boolean; optical: boolean } | null = null;
+    const hits: Array<SolidHit & { solid: TraceableSolid }> = [];
     for (const s of solids) {
       const h = s.intersect(ray, 1e-6);
-      if (h && (!best || h.t < best.t)) best = { ...h, solid: s };
+      if (h) hits.push({ ...h, solid: s });
     }
-    const tEye = eye && stack.length === 0 ? eye.entryDistance(ray) : null;
+    let best = hits.length ? hits.reduce((a, b) => (b.t < a.t ? b : a)) : null;
+    const tEye = eye ? eye.entryDistance(ray) : null;
 
-    if (tEye !== null && (!best || tEye < best.t)) {
-      const inside = eye!.traceInside(ray, currentN());
+    if (tEye !== null && (!best || tEye <= best.t + TIE)) {
+      const inside = eye!.traceInside(ray, topN(stack));
       points.push(...inside.points);
       return { points, termination: inside.termination, finalDir: inside.finalDir };
     }
@@ -67,26 +89,25 @@ function traceRay(ray0: Ray, solids: TraceableSolid[], eye: EyeTraceModel | null
       points.push(madd(ray.origin, ray.dir, settings.escapeLength));
       return { points, termination: 'escaped' };
     }
+    const group = hits.filter((h) => h.t <= best!.t + TIE);
     const p = madd(ray.origin, ray.dir, best.t);
     points.push(p);
-    if (!best.optical) return { points, termination: 'blocked' };
+    if (group.some((h) => !h.optical)) return { points, termination: 'blocked' };
 
-    const n1 = currentN();
-    let n2: number;
-    if (best.entering) n2 = best.solid.n;
-    else {
-      const rest = stack.filter((s) => s !== best!.solid);
-      n2 = rest.length ? rest[rest.length - 1].n : settings.ambientIndex;
-    }
-    const r = refract(ray.dir, best.normal, n1, n2);
-    if (!r.totalInternalReflection) {
-      if (best.entering) stack.push(best.solid);
+    const next = [...stack];
+    for (const h of group) {
+      if (h.entering) next.push(h.solid);
       else {
-        const i = stack.lastIndexOf(best.solid);
-        if (i >= 0) stack.splice(i, 1);
+        const i = next.lastIndexOf(h.solid);
+        if (i >= 0) next.splice(i, 1);
       }
     }
+    const n1 = topN(stack);
+    const n2 = topN(next);
+    const r = Math.abs(n1 - n2) < 1e-12 ? { dir: ray.dir, totalInternalReflection: false } : refract(ray.dir, best.normal, n1, n2);
+    if (!r.totalInternalReflection) stack = next;
     ray = { origin: p, dir: r.dir };
+    best = null;
   }
   return { points, termination: 'max-steps' };
 }
@@ -150,22 +171,159 @@ function analyzeFocus(paths: RayPath[], eye: EyeTraceModel): FocusAnalysis | nul
   };
 }
 
+/* ---------------------- Astigmatismus-Analyse ---------------------- */
+
+/** Welt-Richtung eines Meridians (TABO-Grad) im Augenrahmen. */
+function meridianWorld(eye: EyeTraceModel, deg: number): Vec3 {
+  const th = (deg * Math.PI) / 180;
+  return normalize(toWorldDir(eye.rigid, [-Math.cos(th), Math.sin(th), 0]));
+}
+
+interface MeridianFocus {
+  deg: number;
+  point: Vec3;
+  defocus: number;
+}
+
+/**
+ * Abtastung der Fokuslage in 36 Meridianen (je Hauptstrahl + zwei achsnahe Strahlen, ±0,4 mm).
+ * Anpassung D(φ) = a + b·cos2φ + c·sin2φ liefert die Hauptschnitte (Brennlinien).
+ */
+function meridianScan(src: LightSourceEntity, solids: TraceableSolid[], eye: EyeTraceModel, settings: TraceSettings): { a: number; amp: number; degMax: number; samples: MeridianFocus[] } | null {
+  const retinaAxial = dot(sub(eye.retinaPoleWorld, eye.apexWorld), eye.axisWorld);
+  const samples: MeridianFocus[] = [];
+  for (let deg = 0; deg < 180; deg += 5) {
+    const rays = generateSourceRays(src, eye.apexWorld, [meridianWorld(eye, deg)], 3, 0.8);
+    const lines: Array<{ o: Vec3; d: Vec3 }> = [];
+    for (const r of rays) {
+      const res = traceRay(r, solids, eye, settings);
+      if (res.termination !== 'retina' || !res.finalDir) break;
+      lines.push({ o: res.points[res.points.length - 1], d: normalize(res.finalDir) });
+    }
+    if (lines.length !== 3) continue;
+    const pnt = leastSquaresPoint(lines);
+    if (!pnt) continue;
+    samples.push({ deg, point: pnt, defocus: dot(sub(pnt, eye.apexWorld), eye.axisWorld) - retinaAxial });
+  }
+  if (samples.length < 6) return null;
+  // Kleinste Quadrate für a, b, c
+  let S = [0, 0, 0, 0, 0, 0, 0, 0, 0];
+  const y = [0, 0, 0];
+  for (const smp of samples) {
+    const f = [1, Math.cos((2 * smp.deg * Math.PI) / 180), Math.sin((2 * smp.deg * Math.PI) / 180)];
+    for (let i = 0; i < 3; i++) {
+      y[i] += f[i] * smp.defocus;
+      for (let j = 0; j < 3; j++) S[i * 3 + j] += f[i] * f[j];
+    }
+  }
+  const det = S[0] * (S[4] * S[8] - S[5] * S[7]) - S[1] * (S[3] * S[8] - S[5] * S[6]) + S[2] * (S[3] * S[7] - S[4] * S[6]);
+  if (Math.abs(det) < 1e-12) return null;
+  const solve = (col: number) => {
+    const M = [...S];
+    M[col] = y[0];
+    M[3 + col] = y[1];
+    M[6 + col] = y[2];
+    return (M[0] * (M[4] * M[8] - M[5] * M[7]) - M[1] * (M[3] * M[8] - M[5] * M[6]) + M[2] * (M[3] * M[7] - M[4] * M[6])) / det;
+  };
+  const a = solve(0);
+  const b = solve(1);
+  const c = solve(2);
+  S = [];
+  const amp = Math.hypot(b, c);
+  let degMax = ((Math.atan2(c, b) / 2) * 180) / Math.PI;
+  degMax = ((degMax % 180) + 180) % 180 || 180;
+  return { a, amp, degMax, samples };
+}
+
+function focalPointForMeridian(src: LightSourceEntity, solids: TraceableSolid[], eye: EyeTraceModel, settings: TraceSettings, deg: number): Vec3 | null {
+  const rays = generateSourceRays(src, eye.apexWorld, [meridianWorld(eye, deg)], 3, 0.8);
+  const lines: Array<{ o: Vec3; d: Vec3 }> = [];
+  for (const r of rays) {
+    const res = traceRay(r, solids, eye, settings);
+    if (res.termination !== 'retina' || !res.finalDir) return null;
+    lines.push({ o: res.points[res.points.length - 1], d: normalize(res.finalDir) });
+  }
+  return leastSquaresPoint(lines);
+}
+
+/** Ausdehnung eines Strahlenfächers in einer Ebene senkrecht zur Augenachse. */
+function fanWidthAt(paths: RayPath[], fan: number, planePoint: Vec3, axis: Vec3): number {
+  const pts: Vec3[] = [];
+  for (const p of paths) {
+    if (p.fan !== fan || p.termination !== 'retina' || !p.finalDir) continue;
+    const o = p.points[p.points.length - 1];
+    const d = normalize(p.finalDir);
+    const den = dot(d, axis);
+    if (Math.abs(den) < 1e-9) continue;
+    const t = dot(sub(planePoint, o), axis) / den;
+    pts.push(madd(o, d, t));
+  }
+  if (pts.length < 2) return 0;
+  let w = 0;
+  for (let i = 0; i < pts.length; i++) for (let j = i + 1; j < pts.length; j++) w = Math.max(w, Math.hypot(...sub(pts[i], pts[j])));
+  return w;
+}
+
+const ASTIG_THRESHOLD_MM = 0.01;
+
 export function traceScene(doc: SceneDocument, settings: TraceSettings = DEFAULT_TRACE_SETTINGS): TraceResult {
   const t0 = performance.now();
-  const solids = doc.elements.filter((e) => e.visible).map(solidFromElement);
+  const solids = sceneSolids(doc);
   const eye = doc.eye.visible ? buildEyeTraceModel(doc.eye) : null;
   const apex = eye ? eye.apexWorld : toWorldPoint(makeRigid(doc.eye.transform.position, doc.eye.transform.rotation), [0, 0, 0]);
   const stats: Record<RayTermination, number> = { retina: 0, escaped: 0, blocked: 0, absorbed: 0, 'max-steps': 0 };
   const paths: RayPath[] = [];
+  let astig: AstigmaticFocus | null = null;
+  const principalSource = doc.lights.find((l) => l.visible);
+
+  // 1) Meridian-Abtastung (unsichtbare Analysestrahlen) mit der ersten Lichtquelle
+  let principal: [number, number] | null = null;
+  let scan: ReturnType<typeof meridianScan> = null;
+  if (eye && principalSource) {
+    scan = meridianScan(principalSource, solids, eye, settings);
+    if (scan && 2 * scan.amp > ASTIG_THRESHOLD_MM) principal = [scan.degMax, (scan.degMax + 90) % 180 || 180];
+  }
+
+  // 2) Sichtbare Strahlen
   for (const src of doc.lights) {
     if (!src.visible) continue;
-    const rays = generateSourceRays(src, apex);
+    const mode = src.source.fanMode ?? 'principal';
+    const fanDirs =
+      eye && principal && mode === 'principal' ? [meridianWorld(eye, principal[0]), meridianWorld(eye, principal[1])] : undefined;
+    const rays = generateSourceRays(src, apex, fanDirs ?? (mode === 'cross' && eye ? [meridianWorld(eye, 90), meridianWorld(eye, 180)] : undefined));
     rays.forEach((r, i) => {
       const res = traceRay(r, solids, eye, settings);
       stats[res.termination]++;
-      paths.push({ ...res, index: i, sourceId: src.id, color: src.source.color, offset: r.offset });
+      paths.push({ ...res, index: i, sourceId: src.id, color: r.fan === 1 && fanDirs ? SECOND_FAN_COLOR : src.source.color, offset: r.offset, fan: r.fan });
     });
   }
+
+  // 3) Brennlinien
+  if (eye && principalSource && principal && scan) {
+    const retinaAxial = dot(sub(eye.retinaPoleWorld, eye.apexWorld), eye.axisWorld);
+    const lines = principal.map((deg, k) => {
+      const pnt = focalPointForMeridian(principalSource, solids, eye, settings, deg) ?? eye.retinaPoleWorld;
+      const width = fanWidthAt(paths, 1 - k, pnt, eye.axisWorld);
+      return {
+        meridianDeg: deg,
+        defocusMm: dot(sub(pnt, eye.apexWorld), eye.axisWorld) - retinaAxial,
+        pointWorld: pnt,
+        lineDirWorld: meridianWorld(eye, deg + 90),
+        lengthMm: Math.max(0.3, width),
+      };
+    }) as AstigmaticFocus['lines'];
+    const mid = scale(add(lines[0].pointWorld, lines[1].pointWorld), 0.5);
+    astig = {
+      lines,
+      sturmIntervalMm: Math.abs(lines[0].defocusMm - lines[1].defocusMm),
+      leastConfusionWorld: mid,
+      leastConfusionDefocusMm: (lines[0].defocusMm + lines[1].defocusMm) / 2,
+    };
+  }
+
   const focus = eye ? analyzeFocus(paths, eye) : null;
+  if (focus && astig) focus.astigmatism = astig;
   return { paths, focus, stats, computeMs: performance.now() - t0 };
 }
+
+export const SECOND_FAN_COLOR = '#7fd8ff';

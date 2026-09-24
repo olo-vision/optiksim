@@ -210,7 +210,19 @@ function contactDraft(kind: LensKind, design: 'rigid' | 'soft'): ElementDraft {
     mediumId,
     { diameter: rigid ? 9.6 : 14.2, centerThickness: t, frontRadius: Number(R1.toFixed(3)), backRadius: bc },
     {
-      contact: { design, tearFilmThickness: rigid ? 0.01 : 0.005 },
+      contact: {
+        design,
+        tearFilmThickness: rigid ? 0.01 : 0.005,
+        onEye: true,
+        tearFilm: true,
+        nTear: 1.336,
+        centration: { x: 0, y: 0 },
+        tilt: { x: 0, y: 0 },
+        opticZoneDiameter: rigid ? 7.8 : 8.0,
+        peripheralCurves: rigid ? [{ radius: 8.6, width: 0.6 }, { radius: 10.4, width: 0.3 }] : [],
+        edgeThicknessNominal: rigid ? 0.12 : 0.08,
+        eccentricity: 0,
+      },
       appearance: { tint: rigid ? '#cfe4ff' : '#e6f3ff', transparency: 0.9, finish: 'clear' },
     },
   );

@@ -10,6 +10,45 @@
  */
 import { SCHEMA_VERSION, type SceneDocument } from '@/model/types';
 import { createEmptyScene, createEye } from '@/model/sceneFactory';
+import { applyConstraints, DEFAULT_TEAR_INDEX } from '@/model/derived/contactSeat';
+import { placementOf } from '@/model/derived/measurements';
+import type { OpticalElement } from '@/model/types';
+
+/**
+ * v1 → v2:
+ *  - Kontaktlinsen: neue Felder mit Standardwerten; sitzt die Linse (wie in Phase 1 üblich) zentriert
+ *    auf der Hornhaut, wird sie als „aufgesetzt“ markiert und der Tränenfilm aktiviert.
+ *  - Auge: Ametropie-Modell 'auto'. Sphärische Hornhaut bleibt sphärisch (keine R2-Felder).
+ *  - Lichtquellen: Fächermodus 'principal' (verhält sich ohne Astigmatismus wie Phase 1).
+ */
+export function migrateV1toV2(doc: SceneDocument): SceneDocument {
+  const elements = doc.elements.map((e): OpticalElement => {
+    if (e.family !== 'lens' || !e.contact) return e;
+    const p = placementOf(doc.eye, e);
+    const seated = Math.abs(p.vertexDistance - e.contact.tearFilmThickness) < 0.05 && p.decentration.r < 0.2 && p.tiltDeg < 0.5;
+    return {
+      ...e,
+      contact: {
+        tearFilm: true,
+        nTear: DEFAULT_TEAR_INDEX,
+        centration: { x: 0, y: 0 },
+        tilt: { x: 0, y: 0 },
+        opticZoneDiameter: e.contact.design === 'rigid' ? 7.8 : 8.0,
+        peripheralCurves: [],
+        eccentricity: 0,
+        ...e.contact,
+        onEye: e.contact.onEye ?? seated,
+      },
+    };
+  });
+  return {
+    ...doc,
+    schemaVersion: SCHEMA_VERSION,
+    eye: { ...doc.eye, ametropiaMode: doc.eye.ametropiaMode ?? 'auto' },
+    elements,
+    lights: doc.lights.map((l) => ({ ...l, source: { fanMode: 'principal', intensity: 1, deviceRole: 'none', ...l.source } })),
+  };
+}
 
 const KEY_SCENES = 'optical-eye-lab.scenes.v1';
 const KEY_AUTOSAVE = 'optical-eye-lab.autosave.v1';
@@ -61,8 +100,8 @@ export function migrateDocument(raw: unknown): SceneDocument | null {
     environment: { ...base.environment, ...(r.environment ?? {}) },
     display: { ...base.display, ...(r.display ?? {}) },
   };
-  // zukünftige Migrationen: if ((r.schemaVersion ?? 1) < 2) { … }
-  return doc;
+  if ((r.schemaVersion ?? 1) < 2) return applyConstraints(migrateV1toV2(doc));
+  return applyConstraints(doc);
 }
 
 function readRecords(): SavedSceneRecord[] {
@@ -129,6 +168,10 @@ export interface Preferences {
   gizmoSize: number;
   translationSnap: number;
   rotationSnap: number;
+  /** Zylinderschreibweise in der Anzeige (Phase 2) */
+  cylForm: 'minus' | 'plus';
+  /** Parametersteuerung im Inspector (Phase 2) */
+  paramMode: 'optical' | 'geometry';
 }
 
 export const DEFAULT_PREFS: Preferences = {
@@ -138,6 +181,8 @@ export const DEFAULT_PREFS: Preferences = {
   gizmoSize: 0.9,
   translationSnap: 0.5,
   rotationSnap: 5,
+  cylForm: 'minus',
+  paramMode: 'optical',
 };
 
 export function readPrefs(): Preferences {

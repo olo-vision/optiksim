@@ -6,8 +6,22 @@
  * Lokales System: Mittelpunkt = Mitte zwischen den Scheiteln, Licht läuft in +Z.
  */
 import type { LensElement, OpticalElement } from '../types';
-import { checkLensShape } from '@/core/math/surfaces';
-import { maxOutlineRadius } from '@/core/math/outline';
+import { checkLensShapeGeneral, type SurfaceSpec } from '@/core/math/surfaces';
+import { outlineRadius } from '@/core/math/outline';
+
+/** Flächenbeschreibungen einer Linse aus dem Datenmodell (freier Zustand). */
+export function lensSurfaces(el: LensElement): { front: SurfaceSpec; back: SurfaceSpec } {
+  const p = el.lens;
+  const front: SurfaceSpec = p.frontRadius2 === undefined ? { R: p.frontRadius } : { R: p.frontRadius, R2: p.frontRadius2, axis: p.frontAxis ?? 180 };
+  const back: SurfaceSpec = p.backRadius2 === undefined ? { R: p.backRadius } : { R: p.backRadius, R2: p.backRadius2, axis: p.backAxis ?? 180 };
+  return { front, back };
+}
+
+/** Konturfunktion r(φ) in lokalen Polarkoordinaten. */
+export function lensOutlineFn(el: LensElement): (phi: number) => number {
+  const p = el.lens;
+  return (phi) => outlineRadius(p.outline, p.diameter, p.width, p.height, phi);
+}
 
 export interface LensShape {
   frontVertexZ: number;
@@ -24,8 +38,9 @@ export function resolveLensShape(el: LensElement): LensShape {
   const cached = lensCache.get(el.lens);
   if (cached) return cached;
   const p = el.lens;
-  const h = maxOutlineRadius(p.outline, p.diameter, p.width, p.height);
-  const c = checkLensShape(p.frontRadius, p.backRadius, p.centerThickness, h);
+  const { front, back } = lensSurfaces(el);
+  const isContact = !!el.contact;
+  const c = checkLensShapeGeneral(front, back, p.centerThickness, lensOutlineFn(el), isContact ? 0.02 : 0.05);
   const shape: LensShape = {
     frontVertexZ: -c.centerThickness / 2,
     backVertexZ: c.centerThickness / 2,

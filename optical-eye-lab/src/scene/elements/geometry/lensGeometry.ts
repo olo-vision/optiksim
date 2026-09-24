@@ -7,11 +7,14 @@
  * Lokales System: Licht in +Z, Vorderscheitel bei −t/2, Rückscheitel bei +t/2.
  */
 import * as THREE from 'three';
-import { isPlano, sag } from '@/core/math/surfaces';
+import { sagGradXY, sagXY, type SurfaceSpec } from '@/core/math/surfaces';
 
 export interface LensGeometryInput {
   R1: number;
   R2: number;
+  /** Optionale (torische) Flächenbeschreibungen; überschreiben R1/R2 */
+  frontSpec?: SurfaceSpec;
+  backSpec?: SurfaceSpec;
   /** effektive Mittendicke */
   thickness: number;
   /** Konturfunktion r(φ) */
@@ -22,16 +25,16 @@ export interface LensGeometryInput {
   zOffset?: number;
 }
 
-function surfaceNormal(R: number, vertexZ: number, x: number, y: number, z: number, outward: 1 | -1): [number, number, number] {
-  if (isPlano(R)) return [0, 0, outward];
-  const cz = vertexZ + R;
-  // Vorderfläche: n = (p − C)/R ;  Rückfläche: n = −(p − C)/R
-  const s = outward === -1 ? 1 / R : -1 / R;
-  return [x * s, y * s, (z - cz) * s];
+/** Außennormale: vorn (outward −1) zeigt nach −z, hinten (+1) nach +z. */
+function surfaceNormal(spec: SurfaceSpec, x: number, y: number, outward: 1 | -1): [number, number, number] {
+  const [gx, gy] = sagGradXY(spec, x, y);
+  return outward === -1 ? [gx, gy, -1] : [-gx, -gy, 1];
 }
 
 export function buildLensGeometry(input: LensGeometryInput): THREE.BufferGeometry {
-  const { R1, R2, thickness, outline } = input;
+  const { thickness, outline } = input;
+  const front: SurfaceSpec = input.frontSpec ?? { R: input.R1 };
+  const back: SurfaceSpec = input.backSpec ?? { R: input.R2 };
   const NR = input.radialSegments ?? 20;
   const NA = input.angularSegments ?? 96;
   const zo = input.zOffset ?? 0;
@@ -55,7 +58,7 @@ export function buildLensGeometry(input: LensGeometryInput): THREE.BufferGeometr
   };
 
   // --- Flächen (vorn: outward −1, hinten: outward +1) ---
-  const buildSurface = (R: number, vz: number, outward: 1 | -1) => {
+  const buildSurface = (spec: SurfaceSpec, vz: number, outward: 1 | -1) => {
     const center = pushV(0, 0, vz, outward === -1 ? [0, 0, -1] : [0, 0, 1]);
     const ring: number[][] = [];
     for (let i = 1; i <= NR; i++) {
@@ -66,8 +69,8 @@ export function buildLensGeometry(input: LensGeometryInput): THREE.BufferGeometr
         const r = s * rMax[j];
         const x = r * Math.cos(phi);
         const y = r * Math.sin(phi);
-        const z = vz + sag(R, r);
-        row.push(pushV(x, y, z, surfaceNormal(R, vz, x, y, z, outward)));
+        const z = vz + sagXY(spec, x, y);
+        row.push(pushV(x, y, z, surfaceNormal(spec, x, y, outward)));
       }
       ring.push(row);
     }
@@ -83,8 +86,8 @@ export function buildLensGeometry(input: LensGeometryInput): THREE.BufferGeometr
     return ring[NR - 1];
   };
 
-  const frontEdge = buildSurface(R1, zf, -1);
-  const backEdge = buildSurface(R2, zb, 1);
+  const frontEdge = buildSurface(front, zf, -1);
+  const backEdge = buildSurface(back, zb, 1);
 
   // --- Rand ---
   const rimF: number[] = [];

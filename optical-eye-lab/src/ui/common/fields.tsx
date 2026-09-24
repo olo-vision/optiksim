@@ -7,6 +7,8 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { clamp, formatNumber, parseNumber, roundTo, UNITS, type UnitId } from '@/core/units';
 import { useAppStore } from '@/state/store';
+import type { Explanation } from '@/engine/physics/explain';
+import { ExplainButton } from './Explain';
 
 interface NumberFieldProps {
   label: ReactNode;
@@ -311,11 +313,14 @@ export function ToggleField({ label, value, onChange, disabled }: { label: React
 }
 
 /** Nur-Lese-Zeile für berechnete Werte. */
-export function ReadoutRow({ label, value, formula, tone }: { label: ReactNode; value: ReactNode; formula?: string; tone?: 'accent' | 'warn' }) {
+export function ReadoutRow({ label, value, formula, tone, explain }: { label: ReactNode; value: ReactNode; formula?: string; tone?: 'accent' | 'warn' | 'ok'; explain?: Explanation }) {
   return (
-    <div className={`readout${tone ? ` readout--${tone}` : ''}`} data-tip={formula} data-tip-side="left">
+    <div className={`readout${tone ? ` readout--${tone}` : ''}`} data-tip={explain ? undefined : formula} data-tip-side="left">
       <span className="readout__label">{label}</span>
-      <span className="readout__value">{value}</span>
+      <span className="readout__value">
+        {value}
+        {explain && <ExplainButton explanation={explain} />}
+      </span>
     </div>
   );
 }

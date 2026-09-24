@@ -7,6 +7,7 @@ import { ROOM_ID } from '@/model/types';
 import { TextField } from '../common/fields';
 import { Kbd, Section } from '../common/controls';
 import { ElementInspector } from './ElementInspector';
+import { LensInspector } from './LensInspector';
 import { EyeInspector } from './EyeInspector';
 import { LightInspector, MeasurePointInspector, RoomInspector } from './OtherInspectors';
 
@@ -46,6 +47,7 @@ export function Inspector() {
   if (selectedId === ROOM_ID) body = <RoomInspector />;
   else if (!entity) body = <EmptyInspector />;
   else if (entity.entityType === 'eye') body = <EyeInspector eye={entity} />;
+  else if (entity.entityType === 'element' && entity.family === 'lens') body = <LensInspector key={entity.id} el={entity} />;
   else if (entity.entityType === 'element') body = <ElementInspector key={entity.id} el={entity} />;
   else if (entity.entityType === 'light') body = <LightInspector key={entity.id} light={entity} />;
   else body = <MeasurePointInspector key={entity.id} point={entity} />;

@@ -1,6 +1,6 @@
 # Optical Eye Lab
 
-Interaktive 3D-Simulationsumgebung für Augenoptik – **Phase 1: Grundsystem**.
+Interaktive 3D-Simulationsumgebung für Augenoptik – **Phase 2: Fehlsichtigkeit, Sph/Cyl/Achse, torische Optik, Tränenlinse** (Details: [docs/PHASE2.md](docs/PHASE2.md)).
 
 Ein virtuelles optisches Labor mit parametrischem Modellauge (Le Grand), frei platzierbaren optischen Elementen, CAD-Bedienung, Bemaßung, optischer Achse, Inspector und lokalem Speichern. Die Architektur ist auf spätere Module (Fehlsichtigkeit, Kontaktlinsensitz, Skiaskopie, Lernmodus …) vorbereitet.
 
@@ -23,6 +23,7 @@ Weitere Befehle:
 | `npm run preview` | Produktions-Build lokal ansehen |
 | `npm run typecheck` | Nur TypeScript prüfen |
 | `npm test` | Unit-Tests der Optik- und Raytracing-Engine |
+| `npm run test:e2e` | Browser-Tests (Dev-Server muss laufen; einmalig `npx playwright install chromium`) |
 
 Alles läuft lokal – kein Backend, kein Login, keine externen Dienste.
 
@@ -70,6 +71,28 @@ Funktionen, die noch nicht umgesetzt sind, erscheinen ausschließlich deaktivier
 
 ---
 
+## Neu in Phase 2
+
+- **Refraktionsstatus des Auges**:
+  - Eingabe von Sph / Cyl / A.
+  - Art der Fehlsichtigkeit wählbar: automatisch, Achsenametropie oder Brechungsametropie.
+  - Das Auge wird dafür exakt umgerechnet (Baulänge bzw. torische Hornhaut).
+- **Optische Werte ↔ Geometrie**:
+  - Linsen, Brillengläser und Kontaktlinsen lassen sich wahlweise über Sph/Cyl/A oder über Radien je Hauptschnitt einstellen.
+  - Beide Modi bearbeiten dasselbe Objekt.
+  - Plus- und Minuszylinder sind gleichwertig, die Transposition wird angezeigt.
+- **Torische Flächen** in Geometrie, Darstellung und Raytracing.
+- **Korrektion live**: Wirkung am Hornhautscheitel (HSA), Restrefraktion und Fokuslage, jeweils mit Info-Erklärung (Formel mit eingesetzten Werten).
+- **Tränenfilm und Tränenlinse**:
+  - Echtes Medium mit n = 1,336 zwischen Kontaktlinse und Hornhaut.
+  - Anzeige von Sitzklasse, Tränenraumprofil und Auflage.
+  - Weiche Linsen schmiegen sich an (vereinfacht).
+- **Astigmatismus sichtbar**: zwei Brennlinien, Sturmsches Intervall und Strahlenfächer entlang der Hauptschnitte.
+- **Demo-Szenen**:
+  - Emmetropes Auge, Myopie, Hyperopie, Astigmatismus
+  - Myopie mit Brillenkorrektion, mit Kontaktlinse und mit formstabiler KL samt Tränenlinse
+  - Geänderter HSA, torisches Glas, Kepler-System
+
 ## Konventionen
 
 - **1 Three.js-Einheit = 1 mm.** Winkel im Datenmodell in Grad, Brechkraft in dpt.
@@ -77,6 +100,9 @@ Funktionen, die noch nicht umgesetzt sind, erscheinen ausschließlich deaktivier
 - **Radien-Vorzeichen:** r > 0 → Krümmungsmittelpunkt liegt in Lichtrichtung hinter dem Scheitel. `0` = plan.
 - **Element-Ursprung** = Mitte zwischen Vorder- und Rückscheitel; lokale +Z-Achse = optische Achse des Elements.
 - **Prisma-Basislage** (Frontansicht auf das Auge): 0° rechts · 90° oben · 180° links · 270° unten.
+- **Zylinderachsen (TABO)**: Blick auf das Auge, 0° rechts, gegen den Uhrzeigersinn, Wertebereich (0°, 180°].
+- **Refraktion des Auges** bezieht sich auf den **Hornhautscheitel**. Brillenwerte werden über F/(1 − d·F) umgerechnet.
+- **Source of Truth** ist die Geometrie; Sph/Cyl/A werden immer daraus berechnet.
 
 ---
 
@@ -121,8 +147,9 @@ src/
 
 ---
 
-## Bekannte Grenzen (bewusst, Phase 1)
+## Bekannte Grenzen
 
-- Strahlengang ist eine **Vorschau**: nur sphärische/plane Flächen, keine Dispersion, keine Fresnel-Verluste, kein Tränenfilm (Luftspalt statt Tränenlinse), homogene Augenlinse.
-- Keine Refraktionssimulation, Skiaskopie, Fluoreszein, Sitzberechnung, Aberrationen höherer Ordnung, Lernmodus – vorbereitet, aber nicht umgesetzt.
+- Strahlengang: sphärische, plane und torische (bikonische) Flächen; keine Dispersion, keine Fresnel-Verluste, homogene Augenlinse.
+- Siehe [docs/PHASE2.md](docs/PHASE2.md) → „Vereinfachungen“.
+- Skiaskopie, Fluoreszeinbild, KL-Sitzsimulation, Spaltlampe, Lernmodus: vorbereitet, noch nicht umgesetzt (Phase 3).
 - Die Szene ist für Desktop, Notebook und Tablet im Querformat ausgelegt.

@@ -6,6 +6,7 @@ import { useEffect } from 'react';
 import * as THREE from 'three';
 import { useThree } from '@react-three/fiber';
 import { useAppStore } from '@/state/store';
+import * as physics from '@/engine/physics';
 import { useObjectRegistry } from './interaction/objectRegistry';
 
 export function DevHooks() {
@@ -17,6 +18,7 @@ export function DevHooks() {
     if (!import.meta.env.DEV) return;
     const w = window as unknown as Record<string, unknown>;
     w.__oel = useAppStore;
+    w.__oelPhysics = physics;
     w.__oelRender = () => {
       const t0 = performance.now();
       gl.render(scene, camera);

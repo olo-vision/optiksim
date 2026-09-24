@@ -17,6 +17,7 @@ import { registerRef } from '../interaction/objectRegistry';
 import { selectableHandlers, useHoverStore } from '../interaction/hover';
 import { SelectionBracket } from '../interaction/SelectionBracket';
 import { EyeLabels } from './EyeLabels';
+import { corneaSpec } from '@/model/derived/effectiveLens';
 
 function ellipseProfile(e: Ellipse, t0: number, t1: number, steps = 64, inset = 0) {
   const pts: Array<{ h: number; z: number }> = [];
@@ -52,6 +53,7 @@ export const EyeModel = memo(function EyeModel({ eye }: { eye: EyeEntity }) {
       80,
     );
     const cornea = buildLensGeometry({
+      frontSpec: corneaSpec(eye),
       R1: a.corneaFrontRadius,
       R2: a.corneaBackRadius,
       thickness: a.corneaThickness,

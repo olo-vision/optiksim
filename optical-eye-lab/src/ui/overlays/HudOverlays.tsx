@@ -8,6 +8,7 @@ import { useHoverStore } from '@/scene/interaction/hover';
 import { useTraceResultStore } from '@/scene/overlays/traceResultStore';
 import { entityInfo } from '@/model/derived/infoCards';
 import { computeMeasurements } from '@/model/derived/measurements';
+import { computeCorrection, formatRx } from '@/engine/physics';
 import { formatNumber, formatValue } from '@/core/units';
 import { ElementGlyph, EyeGlyph } from '../common/ElementGlyph';
 
@@ -47,7 +48,10 @@ export function MeasurementBar() {
   const decimals = useAppStore((s) => s.prefs.decimals);
   const result = useTraceResultStore((s) => s.result);
   const report = useMemo(() => computeMeasurements(doc), [doc]);
+  const cylForm = useAppStore((s) => s.prefs.cylForm);
+  const correction = useMemo(() => computeCorrection(doc, cylForm), [doc, cylForm]);
   const focus = doc.display.showRays ? result?.focus : null;
+  const residualOk = Math.abs(correction.residualRx.sph) < 0.125 && Math.abs(correction.residualRx.cyl) < 0.125;
 
   return (
     <div className="measure-bar">
@@ -75,7 +79,21 @@ export function MeasurementBar() {
           );
         })}
       </div>
-      {focus && (
+      <span
+        className={`measure-bar__rx${residualOk ? ' is-ok' : ''}`}
+        data-testid="residual-rx"
+        data-tip={correction.hasCorrection ? 'Restrefraktion am Hornhautscheitel (Vergenzrechnung, Matrixform)' : 'Refraktion des Auges am Hornhautscheitel'}
+        data-tip-side="top"
+      >
+        {correction.hasCorrection ? 'Rest ' : 'Auge '}
+        {formatRx(correction.hasCorrection ? correction.residualRx : correction.eye.rx)}
+      </span>
+      {focus?.astigmatism && (
+        <span className="measure-bar__focus" data-tip="Abstand der beiden Brennlinien (Raytracing)" data-tip-side="top">
+          Sturm {formatNumber(focus.astigmatism.sturmIntervalMm, 2)} mm
+        </span>
+      )}
+      {focus && !focus.astigmatism && (
         <span
           className={`measure-bar__focus${Math.abs(focus.paraxialDefocusMm) < 0.05 ? ' is-ok' : ''}`}
           data-tip="Lage des achsnahen Fokus relativ zur Retina (Vorschau-Raytracing). Details in der Lichtquelle."

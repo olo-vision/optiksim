@@ -14,9 +14,10 @@
  * sodass ein Undo-Schritt die ganze Geste zurücknimmt.
  */
 import { create } from 'zustand';
-import type { ElementKind, EyePartId, OpticalElement, SceneDocument, SceneEntity, Transform, Vec3 } from '@/model/types';
+import type { ElementKind, EyePartId, LensElement, OpticalElement, SceneDocument, SceneEntity, Transform, Vec3 } from '@/model/types';
 import { EYE_ID, ROOM_ID } from '@/model/types';
-import { cloneElement, createElement, createEmptyScene, createLightSource, createMeasurePoint } from '@/model/sceneFactory';
+import { cloneElement, createElement, createEmptyScene, createLightSource, createMeasurePoint, worldToEyeLocal } from '@/model/sceneFactory';
+import { applyConstraints, isOnEye } from '@/model/derived/contactSeat';
 import { buildPreset, DEFAULT_PRESET_ID } from './presets';
 import {
   DEFAULT_PREFS,
@@ -175,7 +176,8 @@ export const useAppStore = create<AppState>()((set, get) => ({
 
   commit: (mutate) => {
     const { doc, past, gestureActive } = get();
-    const next = mutate(doc);
+    // Constraints (z. B. aufgesetzte Kontaktlinsen folgen dem Auge) nach jeder Änderung anwenden
+    const next = applyConstraints(mutate(doc));
     if (next === doc) return;
     if (gestureActive) {
       set({ doc: next, dirty: true });
@@ -228,7 +230,15 @@ export const useAppStore = create<AppState>()((set, get) => ({
 
   setTransform: (id, t) =>
     get().commit((doc) =>
-      mapEntity(doc, id, (e) => ({ ...e, transform: { ...e.transform, ...t } }) as SceneEntity),
+      mapEntity(doc, id, (e) => {
+        // Aufgesetzte Kontaktlinse: Verschieben ändert die Zentrierung, die Linse bleibt auf der Hornhaut
+        if (isOnEye(e as OpticalElement) && t.position) {
+          const local = worldToEyeLocal(doc.eye, t.position);
+          const c = (e as LensElement).contact!;
+          return { ...e, contact: { ...c, centration: { x: Number((-local[0]).toFixed(3)), y: Number(local[1].toFixed(3)) } } } as SceneEntity;
+        }
+        return { ...e, transform: { ...e.transform, ...t } } as SceneEntity;
+      }),
     ),
 
   setEntityFlag: (id, flag, value) => get().commit((doc) => mapEntity(doc, id, (e) => ({ ...e, [flag]: value }) as SceneEntity)),
@@ -324,7 +334,8 @@ export const useAppStore = create<AppState>()((set, get) => ({
     get().loadDocument(doc, `Demo-Szene „${doc.name}“ geladen`);
   },
 
-  loadDocument: (doc, message) => {
+  loadDocument: (docIn, message) => {
+    const doc = applyConstraints(docIn);
     set({ doc, baseline: doc, past: [], future: [], dirty: false, selectedId: null, selectedEyePart: null, dialog: null });
     get().sendCameraCommand({ type: 'focus-scene' });
     if (message) get().notify(message, 'success');

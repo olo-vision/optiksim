@@ -11,7 +11,13 @@ import type { Vec3 } from '@/core/math/vec';
 
 export type { Vec3 };
 
-export const SCHEMA_VERSION = 1;
+/**
+ * Schema-Historie:
+ *  1 – Phase 1
+ *  2 – Phase 2: torische Flächen, torische Hornhaut, Refraktionsmodell des Auges,
+ *      erweiterte Kontaktlinse (Sitz, Tränenfilm, Zonen), erweiterte Lichtquellen
+ */
+export const SCHEMA_VERSION = 2;
 
 /* ------------------------------------------------------------------ */
 /* Gemeinsame Bausteine                                                */
@@ -102,14 +108,48 @@ export interface LensParams {
   width: number;
   /** Scheibenhöhe bei ovaler/rechteckiger Form [mm] */
   height: number;
+  /**
+   * Torische Flächen (Phase 2, optional).
+   * frontRadius/backRadius gelten dann im Meridian frontAxis/backAxis (TABO-Grad),
+   * frontRadius2/backRadius2 im Meridian senkrecht dazu. Fehlt R2 → sphärisch.
+   */
+  frontRadius2?: number;
+  frontAxis?: number;
+  backRadius2?: number;
+  backAxis?: number;
 }
 
 export type ContactLensDesign = 'rigid' | 'soft';
 
+export interface PeripheralCurve {
+  /** Radius der Peripheriekurve [mm] */
+  radius: number;
+  /** Breite der Zone [mm] */
+  width: number;
+}
+
 export interface ContactLensParams {
   design: ContactLensDesign;
-  /** Tränenfilmdicke zwischen Linse und Hornhaut [mm] – vorbereitet für die Tränenlinse */
+  /** Zentrale Tränenfilmdicke zwischen Linsenrückfläche und Hornhautscheitel [mm] */
   tearFilmThickness: number;
+  /** Linse sitzt auf dem Auge: Position/Ausrichtung werden aus Auge + Zentrierung abgeleitet */
+  onEye?: boolean;
+  /** Tränenfilm als optisches Medium aktiv */
+  tearFilm?: boolean;
+  /** Brechungsindex des Tränenfilms */
+  nTear?: number;
+  /** Dezentration relativ zum Hornhautscheitel im TABO-Rahmen [mm] (x → 0°, y → 90°) */
+  centration?: { x: number; y: number };
+  /** Neigung um die horizontale (x) bzw. vertikale (y) Achse [°] */
+  tilt?: { x: number; y: number };
+  /** Optische Zone (Rückfläche) [mm] – vorbereitet für Sitz/Fluoreszein */
+  opticZoneDiameter?: number;
+  /** Periphere Kurven – vorbereitet, noch ohne Einfluss auf Geometrie/Raytracing */
+  peripheralCurves?: PeripheralCurve[];
+  /** Nominale Randdicke [mm] – vorbereitet */
+  edgeThicknessNominal?: number;
+  /** Exzentrizität der Rückfläche – vorbereitet */
+  eccentricity?: number;
 }
 
 export interface MagnifierParams {
@@ -209,7 +249,16 @@ export interface EyeAnatomy {
   pupilDiameter: number;
   /** Äquatorradius des Augapfels */
   globeRadius: number;
+  /**
+   * Torische Hornhaut (Phase 2, optional): corneaFrontRadius gilt im Meridian corneaAxis (TABO),
+   * corneaFrontRadius2 im Meridian senkrecht dazu. Fehlt R2 → sphärische Hornhaut.
+   */
+  corneaFrontRadius2?: number;
+  corneaAxis?: number;
 }
+
+/** Art der Fehlsichtigkeit beim Einstellen einer Refraktion. */
+export type AmetropiaMode = 'auto' | 'axial' | 'refractive';
 
 export type EyeViewMode = 'normal' | 'section';
 
@@ -220,6 +269,8 @@ export interface EyeEntity extends EntityBase {
   irisColor: string;
   showLabels: boolean;
   physics: PhysicsExtension;
+  /** Modell für das Einstellen der Refraktion (Phase 2) */
+  ametropiaMode?: AmetropiaMode;
 }
 
 /** Anklickbare Teile des Auges – Grundlage für Info-Karten und späteren Lernmodus. */
@@ -229,7 +280,13 @@ export type EyePartId = 'cornea' | 'sclera' | 'iris' | 'pupil' | 'anterior-chamb
 /* Lichtquellen & Messpunkte                                           */
 /* ------------------------------------------------------------------ */
 
-export type LightSourceKind = 'parallel' | 'point';
+export type LightSourceKind = 'parallel' | 'point' | 'line';
+
+/** Darstellungsart der Strahlenfächer */
+export type RayFanMode = 'principal' | 'vertical' | 'cross';
+
+/** Vorbereitete Geräteklassen (Phase 3+): Lichtquelle mit zusätzlicher Beobachtungsachse. */
+export type LightDeviceRole = 'none' | 'retinoscope' | 'slit-lamp' | 'ophthalmoscope';
 
 export interface LightSourceEntity extends EntityBase {
   entityType: 'light';
@@ -244,6 +301,18 @@ export interface LightSourceEntity extends EntityBase {
     color: string;
     /** Zusätzlich sagittalen Schnitt (senkrecht) zeichnen */
     sagittal: boolean;
+    /** Phase 2: Fächerausrichtung (Hauptschnitte automatisch) */
+    fanMode?: RayFanMode;
+    /** Relative Intensität 0…1 – vorbereitet (Skiaskop-Reflex) */
+    intensity?: number;
+    /** Länge der Lichtlinie bei kind = 'line' [mm] – vorbereitet */
+    lineLength?: number;
+    /** Divergenz/Konvergenz des Bündels [dpt] – vorbereitet (Skiaskop: Plan-/Konkavspiegel) */
+    vergence?: number;
+    /** Gerät, das diese Lichtquelle später steuert */
+    deviceRole?: LightDeviceRole;
+    /** Beobachtungsachse (lokale Richtung), vorbereitet für Skiaskopie/Ophthalmoskopie */
+    observationAxis?: Vec3;
   };
 }
 

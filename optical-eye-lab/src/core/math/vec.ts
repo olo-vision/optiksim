@@ -70,3 +70,28 @@ export const toWorldPoint = (t: RigidTransform, p: Vec3): Vec3 => add(mulMat3Vec
 export const toWorldDir = (t: RigidTransform, d: Vec3): Vec3 => mulMat3Vec(t.rotation, d);
 export const toLocalPoint = (t: RigidTransform, p: Vec3): Vec3 => mulMat3TVec(t.rotation, sub(p, t.position));
 export const toLocalDir = (t: RigidTransform, d: Vec3): Vec3 => mulMat3TVec(t.rotation, d);
+
+/** Matrixprodukt A·B (3×3, zeilenweise). */
+export function mulMat3(A: Mat3, B: Mat3): Mat3 {
+  const r: number[] = [];
+  for (let i = 0; i < 3; i++)
+    for (let j = 0; j < 3; j++) r.push(A[i * 3] * B[j] + A[i * 3 + 1] * B[3 + j] + A[i * 3 + 2] * B[6 + j]);
+  return r as Mat3;
+}
+
+/** Rotationsmatrix → Euler-Winkel in Grad, Reihenfolge XYZ (wie THREE.Euler.setFromRotationMatrix). */
+export function mat3ToEulerDeg(m: Mat3): Vec3 {
+  const R2D = 180 / Math.PI;
+  const m13 = Math.max(-1, Math.min(1, m[2]));
+  const y = Math.asin(m13);
+  let x: number;
+  let z: number;
+  if (Math.abs(m13) < 0.9999999) {
+    x = Math.atan2(-m[5], m[8]);
+    z = Math.atan2(-m[1], m[0]);
+  } else {
+    x = Math.atan2(m[7], m[4]);
+    z = 0;
+  }
+  return [x * R2D, y * R2D, z * R2D];
+}

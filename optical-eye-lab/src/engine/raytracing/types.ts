@@ -32,6 +32,27 @@ export interface RayPath {
   finalDir?: Vec3;
   /** Einfallshöhe des Strahls in der Quelle [mm] (Vorzeichen = Seite) */
   offset: number;
+  /** Fächer-Index (0 = erster Hauptschnitt/Meridionalschnitt, 1 = zweiter) */
+  fan?: number;
+}
+
+export interface FocalLine {
+  /** Meridian (TABO-Grad), dessen Strahlen hier fokussieren */
+  meridianDeg: number;
+  /** Lage relativ zur Retina entlang der Augenachse [mm] (< 0 = vor der Retina) */
+  defocusMm: number;
+  pointWorld: Vec3;
+  /** Richtung der Brennlinie (senkrecht zum fokussierenden Meridian) */
+  lineDirWorld: Vec3;
+  lengthMm: number;
+}
+
+/** Sturmsches Konoid (vereinfacht): zwei Brennlinien und Kreis kleinster Verwirrung (Mittelpunkt). */
+export interface AstigmaticFocus {
+  lines: [FocalLine, FocalLine];
+  sturmIntervalMm: number;
+  leastConfusionWorld: Vec3;
+  leastConfusionDefocusMm: number;
 }
 
 /** Eine CSG-Intervallgrenze: Parameter t und nach außen gerichtete Normale. */
@@ -87,6 +108,8 @@ export interface FocusAnalysis {
   /** RMS-Radius des Zerstreuungsbildes auf der Retina [mm] */
   retinaSpotRms: number;
   raysUsed: number;
+  /** Nur bei astigmatischem System (Phase 2) */
+  astigmatism?: AstigmaticFocus;
 }
 
 export interface TraceResult {

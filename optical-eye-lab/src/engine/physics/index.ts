@@ -14,3 +14,9 @@ export * from './formulas';
 export * from './paraxial';
 export * from './eyeOptics';
 export * from './elementOptics';
+// Phase 2
+export * from './eyeRefraction';
+export * from './lensOptics';
+export * from './contactLens';
+export * from './correction';
+export * from './explain';

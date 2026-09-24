@@ -2,33 +2,49 @@
  * Überführt optische Elemente des Datenmodells in verfolgbare Körper.
  * Neue Elementfamilien benötigen hier genau eine zusätzliche Builder-Funktion.
  */
-import type { LensElement, MediumElement, OpticalElement, PlateElement, PrismElement } from '@/model/types';
+import type { EyeEntity, LensElement, MediumElement, OpticalElement, PlateElement, PrismElement, SceneDocument } from '@/model/types';
+import { effectiveLens, corneaSpec } from '@/model/derived/effectiveLens';
+import { computeEyeGeometry } from '@/model/derived/eyeGeometry';
+import { DEFAULT_TEAR_INDEX, isOnEye } from '@/model/derived/contactSeat';
 import { resolveLensShape } from '@/model/derived/elementShape';
 import { computePrismGeometry } from '@/model/derived/prismGeometry';
-import { isPlano, sag } from '@/core/math/surfaces';
+import { sagXY } from '@/core/math/surfaces';
 import { outlineRadius } from '@/core/math/outline';
-import { makeRigid, toLocalDir, toLocalPoint, toWorldDir, type Vec3 } from '@/core/math/vec';
-import { cylinderZ, halfSpace, intersectPrimitives, sphereInside, sphereOutside } from './csg';
+import { makeRigid, toLocalDir, toLocalPoint, toWorldDir, type RigidTransform, type Vec3 } from '@/core/math/vec';
+import { cylinderZ, halfSpace, inFrame, intersectPrimitives, sphereInside, surfaceRegion } from './csg';
 import type { Primitive, Ray, SolidHit, TraceableSolid } from './types';
 
-function lensPrimitives(el: LensElement): Primitive[] {
+function lensPrimitives(el: LensElement, eye?: EyeEntity): Primitive[] {
   const s = resolveLensShape(el);
-  const { frontRadius: R1, backRadius: R2, outline, diameter, width, height } = el.lens;
+  const { outline, diameter, width, height } = el.lens;
+  const { front, back } = effectiveLens(el, eye);
   const zf = s.frontVertexZ;
   const zb = s.backVertexZ;
   const h = s.semiAperture;
+  // größte/kleinste Pfeilhöhe entlang der Kontur (für Such- und Begrenzungsfenster)
+  let fMin = 0;
+  let bMax = 0;
+  let fMax = 0;
+  let bMin = 0;
+  for (let i = 0; i < 72; i++) {
+    const phi = (i / 72) * Math.PI * 2;
+    const r = Math.min(outlineRadius(outline, diameter, width, height, phi), h);
+    const x = r * Math.cos(phi);
+    const y = r * Math.sin(phi);
+    const sf = sagXY(front, x, y);
+    const sb = sagXY(back, x, y);
+    fMin = Math.min(fMin, sf);
+    fMax = Math.max(fMax, sf);
+    bMin = Math.min(bMin, sb);
+    bMax = Math.max(bMax, sb);
+  }
+  const win = { rLim: h * 1.02, zMin: zf + fMin - 0.5, zMax: zb + bMax + 0.5 };
   const prims: Primitive[] = [];
-  // Vorderfläche
-  if (isPlano(R1)) prims.push(halfSpace([0, 0, zf], [0, 0, -1]));
-  else if (R1 > 0) prims.push(sphereInside([0, 0, zf + R1], R1));
-  else prims.push(sphereOutside([0, 0, zf + R1], -R1));
-  // Rückfläche
-  if (isPlano(R2)) prims.push(halfSpace([0, 0, zb], [0, 0, 1]));
-  else if (R2 < 0) prims.push(sphereInside([0, 0, zb + R2], -R2));
-  else prims.push(sphereOutside([0, 0, zb + R2], R2));
+  prims.push(surfaceRegion(front, zf, true, { ...win, zMin: zf + fMin - 0.5, zMax: zf + fMax + 0.5 }));
+  prims.push(surfaceRegion(back, zb, false, { ...win, zMin: zb + bMin - 0.5, zMax: zb + bMax + 0.5 }));
   // Begrenzungs-Slab gegen Mehrdeutigkeiten der Kugelflächen
-  prims.push(halfSpace([0, 0, zf + Math.min(0, sag(R1, h)) - 1e-6], [0, 0, -1], false));
-  prims.push(halfSpace([0, 0, zb + Math.max(0, sag(R2, h)) + 1e-6], [0, 0, 1], false));
+  prims.push(halfSpace([0, 0, zf + fMin - 1e-6], [0, 0, -1], false));
+  prims.push(halfSpace([0, 0, zb + bMax + 1e-6], [0, 0, 1], false));
   // Rand (Kontur)
   if (outline === 'round') prims.push(cylinderZ(h, false));
   else {
@@ -73,10 +89,10 @@ function mediumPrimitives(el: MediumElement): Primitive[] {
   return [sphereInside([0, 0, 0], (width / 2) * ((sx + sy + sz) / 3))];
 }
 
-export function primitivesForElement(el: OpticalElement): Primitive[] {
+export function primitivesForElement(el: OpticalElement, eye?: EyeEntity): Primitive[] {
   switch (el.family) {
     case 'lens':
-      return lensPrimitives(el);
+      return lensPrimitives(el, eye);
     case 'prism':
       return prismPrimitives(el);
     case 'plate':
@@ -87,12 +103,15 @@ export function primitivesForElement(el: OpticalElement): Primitive[] {
 }
 
 /** Erstellt einen Körper in Weltkoordinaten aus lokalen Primitiven und einer starren Transformation. */
-export function solidFromElement(el: OpticalElement): TraceableSolid {
-  const rigid = makeRigid(el.transform.position, el.transform.rotation);
-  const prims = primitivesForElement(el);
+export function solidFromElement(el: OpticalElement, eye?: EyeEntity): TraceableSolid {
+  return solidFromPrimitives(el.id, el.medium.n, primitivesForElement(el, eye), makeRigid(el.transform.position, el.transform.rotation));
+}
+
+/** Körper aus Primitiven in einem lokalen Rahmen. */
+export function solidFromPrimitives(id: string, n: number, prims: Primitive[], rigid: RigidTransform): TraceableSolid {
   return {
-    id: el.id,
-    n: el.medium.n,
+    id,
+    n,
     intersect(ray: Ray, tMin: number): SolidHit | null {
       const o = toLocalPoint(rigid, ray.origin);
       const d = toLocalDir(rigid, ray.dir);
@@ -112,3 +131,37 @@ export function solidFromElement(el: OpticalElement): TraceableSolid {
     },
   };
 }
+
+/**
+ * Tränenfilm zwischen aufgesetzter Kontaktlinse und Hornhaut (Phase 2).
+ * Körper = hinter der KL-Rückfläche (KL-Rahmen) ∩ vor der Hornhautvorderfläche (Augenrahmen)
+ *          ∩ innerhalb des KL-Durchmessers ∩ vor der Limbusebene.
+ */
+export function tearFilmSolid(el: LensElement, eye: EyeEntity): TraceableSolid {
+  const s = resolveLensShape(el);
+  const back = effectiveLens(el, eye).back;
+  const clRigid = makeRigid(el.transform.position, el.transform.rotation);
+  const eyeRigid = makeRigid(eye.transform.position, eye.transform.rotation);
+  const g = computeEyeGeometry(eye.anatomy);
+  const h = s.semiAperture;
+  const prims: Primitive[] = [
+    inFrame(surfaceRegion(back, s.backVertexZ, true, { rLim: h * 1.02, zMin: s.backVertexZ - 0.5, zMax: s.backVertexZ + h + 1 }), clRigid),
+    inFrame(cylinderZ(h, true), clRigid),
+    inFrame(halfSpace([0, 0, s.frontVertexZ], [0, 0, -1], true), clRigid),
+    inFrame(surfaceRegion(corneaSpec(eye), 0, false, { rLim: g.limbus.h, zMin: -0.5, zMax: g.limbus.z + 1 }), eyeRigid),
+    inFrame(halfSpace([0, 0, g.limbus.z], [0, 0, 1], true), eyeRigid),
+  ];
+  return solidFromPrimitives(`${el.id}__tear`, el.contact?.nTear ?? DEFAULT_TEAR_INDEX, prims, { position: [0, 0, 0], rotation: [1, 0, 0, 0, 1, 0, 0, 0, 1] });
+}
+
+/** Alle verfolgbaren Körper einer Szene (Elemente + Tränenfilme). */
+export function sceneSolids(doc: SceneDocument): TraceableSolid[] {
+  const solids: TraceableSolid[] = [];
+  for (const e of doc.elements) {
+    if (!e.visible) continue;
+    solids.push(solidFromElement(e, doc.eye));
+    if (isOnEye(e) && (e.contact!.tearFilm ?? true) && doc.eye.visible) solids.push(tearFilmSolid(e, doc.eye));
+  }
+  return solids;
+}
+

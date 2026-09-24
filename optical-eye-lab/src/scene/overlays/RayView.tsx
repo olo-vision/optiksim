@@ -40,12 +40,38 @@ export function RayView({ doc }: { doc: SceneDocument }) {
   }, [result]);
 
   const focus = result.focus;
+  const astig = focus?.astigmatism;
   return (
     <group raycast={() => null}>
       {segments.map(([color, pts]) =>
         pts.length >= 2 ? <Line key={color} points={pts} segments color={color} lineWidth={1.3} toneMapped={false} /> : null,
       )}
-      {focus && (
+      {astig &&
+        astig.lines.map((l, k) => {
+          const half = l.lengthMm / 2;
+          const a: [number, number, number] = [l.pointWorld[0] - l.lineDirWorld[0] * half, l.pointWorld[1] - l.lineDirWorld[1] * half, l.pointWorld[2] - l.lineDirWorld[2] * half];
+          const b: [number, number, number] = [l.pointWorld[0] + l.lineDirWorld[0] * half, l.pointWorld[1] + l.lineDirWorld[1] * half, l.pointWorld[2] + l.lineDirWorld[2] * half];
+          const color = k === 0 ? theme3d.focus : '#7fd8ff';
+          return (
+            <group key={k}>
+              <Line points={[a, b]} color={color} lineWidth={3} toneMapped={false} depthTest={false} renderOrder={40} />
+              <group position={l.pointWorld}>
+                <SceneLabel
+                  position={[0, k === 0 ? 4.5 : -4.5, 0]}
+                  variant="focus"
+                  text={`Brennlinie ${k === 0 ? '1' : '2'} (Meridian ${formatNumber(l.meridianDeg, 0)}°): ${formatNumber(Math.abs(l.defocusMm), 2)} mm ${l.defocusMm < 0 ? 'vor' : 'hinter'} Retina`}
+                />
+              </group>
+            </group>
+          );
+        })}
+      {astig && (
+        <mesh position={astig.leastConfusionWorld}>
+          <sphereGeometry args={[0.18, 12, 8]} />
+          <meshBasicMaterial color="#ffffff" toneMapped={false} depthTest={false} />
+        </mesh>
+      )}
+      {focus && !astig && (
         <group position={focus.paraxialFocusWorld}>
           <mesh>
             <sphereGeometry args={[0.28, 16, 12]} />

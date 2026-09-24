@@ -21,6 +21,8 @@ export function LightInspector({ light }: { light: LightSourceEntity }) {
   const result = useTraceResultStore((s) => s.result);
   const src = light.source;
   const set = (patch: Partial<LightSourceEntity['source']>) => updateEntity(light.id, (e) => ({ ...e, source: { ...(e as LightSourceEntity).source, ...patch } }) as LightSourceEntity);
+  const eyeApex = useAppStore((s) => s.doc.eye.transform.position);
+  const workingDistance = Math.hypot(light.transform.position[0] - eyeApex[0], light.transform.position[1] - eyeApex[1], light.transform.position[2] - eyeApex[2]);
   const mine = result?.paths.filter((p) => p.sourceId === light.id) ?? [];
   const count = (t: string) => mine.filter((p) => p.termination === t).length;
 
@@ -37,12 +39,30 @@ export function LightInspector({ light }: { light: LightSourceEntity }) {
             { value: 'point', label: 'Punktquelle (endliche Entfernung)' },
           ]}
         />
+        <SelectField
+          label="Strahlenfächer"
+          value={src.fanMode ?? 'principal'}
+          onChange={(v) => set({ fanMode: v as 'principal' | 'vertical' | 'cross' })}
+          options={[
+            { value: 'principal', label: 'Hauptschnitte (automatisch)' },
+            { value: 'vertical', label: 'Vertikal' },
+            { value: 'cross', label: 'Horizontal + vertikal' },
+          ]}
+          hint="Bei Astigmatismus werden die Fächer automatisch in die Hauptschnitte gelegt (2. Fächer hellblau)."
+        />
         <NumberField label={src.kind === 'parallel' ? 'Bündeldurchmesser' : 'Öffnung am Auge'} unit="mm" step={0.5} decimals={1} min={0.1} max={80} value={src.beamDiameter} onChange={(v) => set({ beamDiameter: v })} />
         <NumberField label="Strahlen je Schnitt" unit="none" step={1} decimals={0} min={1} max={61} value={src.rayCount} onChange={(v) => set({ rayCount: Math.round(v) })} />
         <ToggleField label="Sagittalschnitt zusätzlich" value={src.sagittal} onChange={(v) => set({ sagittal: v })} />
         <ColorField label="Strahlfarbe" value={src.color} onChange={(v) => set({ color: v })} />
         <NumberField label="Wellenlänge" unit="none" step={1} decimals={1} min={380} max={780} value={src.wavelength} hint="Parameter vorbereitet – Dispersion ist noch nicht aktiv (n gilt für die d-Linie)." onChange={(v) => set({ wavelength: v })} />
         <ToggleField label="Strahlengang anzeigen" value={showRays} onChange={(v) => setDocField('display', { showRays: v })} />
+      </Section>
+      <Section title="Gerät & Beleuchtung" defaultOpen={false} badge={<Badge tone="dev">vorbereitet</Badge>}>
+        <ReadoutRow label="Arbeitsabstand zum Hornhautscheitel" value={formatValue(workingDistance, 'mm', 1)} />
+        <NumberField label="Intensität" unit="pct" step={5} decimals={0} min={0} max={100} value={(src.intensity ?? 1) * 100} onChange={(v) => set({ intensity: v / 100 })} />
+        <NumberField label="Vergenz des Bündels" unit="dpt" step={0.25} decimals={2} min={-20} max={20} value={src.vergence ?? 0} hint="Vorbereitet für Skiaskop (Plan-/Konkavspiegel); wirkt noch nicht auf die Strahlen." onChange={(v) => set({ vergence: v })} />
+        <ReadoutRow label="Linienlichtquelle / Skiaskop / Spaltlampe" value="In Entwicklung" />
+        <p className="insp-hint">Datenmodell für Arbeitsabstand, Lichtform, Apertur, Wellenlänge, Intensität und Beobachtungsachse ist angelegt (Phase 3: Skiaskopie).</p>
       </Section>
       <TransformSection entity={light}>
         <p className="insp-hint">Die Strahlen verlassen die Quelle entlang ihrer lokalen +Z-Achse.</p>

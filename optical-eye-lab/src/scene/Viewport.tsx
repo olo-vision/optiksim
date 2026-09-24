@@ -12,6 +12,8 @@ import { LabRoom } from './environment/LabRoom';
 import { OpticalBench } from './environment/OpticalBench';
 import { EyeModel } from './eye/EyeModel';
 import { OpticalElementView } from './elements/OpticalElementView';
+import { TearFilmView } from './elements/TearFilmView';
+import { isOnEye } from '@/model/derived/contactSeat';
 import { LightSourceView, MeasurePointView } from './overlays/SceneMarkers';
 import { OpticalAxis } from './overlays/OpticalAxis';
 import { MeasurementOverlay } from './overlays/MeasurementOverlay';
@@ -44,8 +46,12 @@ function SceneContent() {
 
       <EyeModel eye={doc.eye} />
       {doc.elements.map((el) => (
-        <OpticalElementView key={el.id} el={el} />
+        <OpticalElementView key={el.id} el={el} eye={doc.eye} />
       ))}
+      {doc.eye.visible &&
+        doc.elements.map((el) =>
+          el.visible && isOnEye(el) && (el.contact!.tearFilm ?? true) ? <TearFilmView key={`tear-${el.id}`} el={el} eye={doc.eye} /> : null,
+        )}
       {doc.lights.map((l) => (
         <LightSourceView key={l.id} light={l} />
       ))}

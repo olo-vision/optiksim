@@ -4,7 +4,8 @@
 import { memo, useEffect, useMemo } from 'react';
 import * as THREE from 'three';
 import { Edges } from '@react-three/drei';
-import type { LensElement, OpticalElement } from '@/model/types';
+import type { EyeEntity, LensElement, OpticalElement } from '@/model/types';
+import { effectiveLens, isSoftOnEye } from '@/model/derived/effectiveLens';
 import { resolveLensShape, elementAxialExtent } from '@/model/derived/elementShape';
 import { outlineRadius } from '@/core/math/outline';
 import { DEG2RAD } from '@/core/units';
@@ -17,18 +18,24 @@ import { selectableHandlers, useHoverStore } from '../interaction/hover';
 import { SelectionBracket } from '../interaction/SelectionBracket';
 import { theme3d } from '../theme3d';
 
-function useElementGeometry(el: OpticalElement): THREE.BufferGeometry {
+function useElementGeometry(el: OpticalElement, eye: EyeEntity): THREE.BufferGeometry {
   const key =
     el.family === 'lens' ? el.lens : el.family === 'prism' ? el.prism : el.family === 'plate' ? el.plate : el.body;
+  // Weiche KL auf dem Auge hängt von der Hornhautform ab (Schmiegung)
+  const eyeKey = el.family === 'lens' && isSoftOnEye(el) ? eye.anatomy : null;
+  const contactKey = el.family === 'lens' ? el.contact : null;
   const geometry = useMemo(() => {
     switch (el.family) {
       case 'lens': {
         const s = resolveLensShape(el);
         const p = el.lens;
         const isContact = !!el.contact;
+        const eff = effectiveLens(el, eye);
         return buildLensGeometry({
           R1: p.frontRadius,
           R2: p.backRadius,
+          frontSpec: eff.front,
+          backSpec: eff.back,
           thickness: s.centerThickness,
           outline: (phi) => Math.min(outlineRadius(p.outline, p.diameter, p.width, p.height, phi), s.semiAperture),
           radialSegments: isContact ? 28 : 20,
@@ -46,7 +53,7 @@ function useElementGeometry(el: OpticalElement): THREE.BufferGeometry {
         return buildMediumGeometry(el.body);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [key]);
+  }, [key, eyeKey, contactKey]);
   useEffect(() => () => geometry.dispose(), [geometry]);
   return geometry;
 }
@@ -80,8 +87,8 @@ function MagnifierFittings({ el }: { el: LensElement }) {
   );
 }
 
-export const OpticalElementView = memo(function OpticalElementView({ el }: { el: OpticalElement }) {
-  const geometry = useElementGeometry(el);
+export const OpticalElementView = memo(function OpticalElementView({ el, eye }: { el: OpticalElement; eye: EyeEntity }) {
+  const geometry = useElementGeometry(el, eye);
   const quality = useAppStore((s) => s.prefs.quality);
   const selected = useAppStore((s) => s.selectedId === el.id);
   const hovered = useHoverStore((s) => s.target?.entityId === el.id);

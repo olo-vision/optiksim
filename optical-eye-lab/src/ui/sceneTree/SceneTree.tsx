@@ -156,7 +156,7 @@ export function SceneTree() {
           ))}
         </Group>
 
-        <Group title="Lichtquellen" count={doc.lights.length} onAdd={addLightSource} addTip="Lichtquelle hinzufügen" empty="Keine Lichtquelle – nötig für den Strahlengang.">
+        <Group title="Lichtquellen / Geräte" count={doc.lights.length} onAdd={addLightSource} addTip="Lichtquelle hinzufügen" empty="Keine Lichtquelle – nötig für den Strahlengang.">
           {doc.lights.map((l) => (
             <EntityRow key={l.id} entity={l} icon={<Lightbulb size={15} strokeWidth={1.6} />} />
           ))}

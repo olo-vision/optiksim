@@ -8,6 +8,9 @@ import { formatNumber, formatPower, formatValue } from '@/core/units';
 import { getElementDefinition } from '../elementRegistry';
 import { computeElementOptics } from '@/engine/physics/elementOptics';
 import { surfacePower } from '@/engine/physics/formulas';
+import { lensRx } from '@/engine/physics/lensOptics';
+import { eyeRefractionState } from '@/engine/physics/eyeRefraction';
+import { formatRx } from '@/engine/physics/explain';
 
 export interface InfoRow {
   label: string;
@@ -125,6 +128,7 @@ export function entityInfo(e: SceneEntity, eyePart?: EyePartId | null): InfoCard
         subtitle: 'Modellauge (Le Grand, vereinfacht)',
         topic: 'eye',
         rows: [
+          { label: 'Refraktion (HS)', value: formatRx(eyeRefractionState(e.anatomy).rx) },
           { label: 'Baulänge', value: formatValue(e.anatomy.axialLength, 'mm', 2) },
           { label: 'Pupille', value: formatValue(e.anatomy.pupilDiameter, 'mm', 1) },
         ],
@@ -137,7 +141,8 @@ export function entityInfo(e: SceneEntity, eyePart?: EyePartId | null): InfoCard
         rows.push({ label: 'Radius vorn', value: e.lens.frontRadius === 0 ? '∞ (plan)' : formatValue(e.lens.frontRadius, 'mm', 2) });
         rows.push({ label: 'Radius hinten', value: e.lens.backRadius === 0 ? '∞ (plan)' : formatValue(e.lens.backRadius, 'mm', 2) });
       }
-      const main = computed.find((c) => c.id === 'Sv' || c.id === 'P');
+      if (e.family === 'lens') rows.push({ label: 'Wirkung (S′∞)', value: formatRx(lensRx(e)) });
+      const main = computed.find((c) => c.id === 'P');
       if (main) rows.push({ label: main.label, value: main.unit === 'dpt' ? formatPower(main.value) : formatValue(main.value, main.unit === 'pdpt' ? 'pdpt' : 'deg', 2) });
       return { title: e.name, subtitle: def.label, topic: `element.${e.kind}`, rows };
     }

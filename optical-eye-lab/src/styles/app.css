@@ -1071,14 +1071,17 @@ body.is-scrubbing * {
 
 .readout {
   display: flex;
+  flex-wrap: wrap;
   align-items: baseline;
   justify-content: space-between;
-  gap: 10px;
+  column-gap: 10px;
+  row-gap: 1px;
   min-height: 24px;
   padding: 3px 0;
   border-bottom: 1px dashed rgba(255, 255, 255, 0.04);
 }
 .readout__label {
+  flex: 1 1 auto;
   font-size: var(--fs-sm);
   color: var(--text-3);
   min-width: 0;
@@ -1954,4 +1957,152 @@ body.is-scrubbing * {
   top: 0;
   left: 0;
   will-change: transform;
+}
+
+/* Phase 2: Rezept-Eingabe, Erklärungen, Modusumschalter */
+.rx-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.rx-editor__top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+.rx-editor__hint {
+  font-size: var(--fs-xs);
+  color: var(--text-4);
+}
+.rx-editor__transposed {
+  align-self: flex-end;
+  margin-top: 2px;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--text-3);
+}
+.readout__value {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+  flex: 0 0 auto;
+}
+.readout--ok .readout__value {
+  color: var(--ok);
+}
+.explain-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  border-radius: 50%;
+  border: 1px solid var(--border-strong);
+  background: transparent;
+  color: var(--text-3);
+  cursor: pointer;
+  transition: color var(--t-fast), border-color var(--t-fast), background var(--t-fast);
+}
+.explain-btn:hover,
+.explain-btn.is-open {
+  color: var(--accent);
+  border-color: var(--accent-border);
+  background: var(--accent-bg);
+}
+.explain-pop {
+  position: fixed;
+  z-index: 350;
+  width: 330px;
+  padding: 12px 14px;
+  border-radius: 11px;
+  background: rgba(16, 20, 26, 0.97);
+  border: 1px solid var(--accent-border);
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.55);
+  animation: pop-in 160ms var(--ease);
+}
+.explain-pop__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-weight: 600;
+  margin-bottom: 6px;
+}
+.explain-pop__label {
+  margin-top: 8px;
+  font-size: 9.5px;
+  font-weight: 650;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-4);
+}
+.explain-pop__formula,
+.explain-pop__subst,
+.explain-pop__result {
+  margin-top: 2px;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: var(--text);
+  user-select: text;
+}
+.explain-pop__formula {
+  color: var(--accent-strong);
+}
+.explain-pop__result {
+  font-weight: 600;
+}
+.explain-pop__text {
+  margin: 10px 0 0;
+  font-size: var(--fs-sm);
+  line-height: 1.5;
+  color: var(--text-2);
+}
+.mode-switch {
+  padding: 10px 14px 4px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.mode-switch__label {
+  font-size: var(--fs-xs);
+  font-weight: 650;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+.insp-callout {
+  margin: 6px 0 2px;
+  padding: 7px 9px;
+  border-radius: 7px;
+  background: var(--accent-bg);
+  color: var(--text-2);
+  font-size: var(--fs-sm);
+  line-height: 1.45;
+}
+.subhead {
+  margin: 10px 0 4px;
+  font-size: 10px;
+  font-weight: 650;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-4);
+}
+.measure-bar__rx {
+  flex: none;
+  padding: 3px 8px;
+  border-radius: 6px;
+  background: rgba(255, 181, 71, 0.1);
+  color: var(--warn);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  white-space: nowrap;
+}
+.measure-bar__rx.is-ok {
+  background: rgba(69, 214, 160, 0.12);
+  color: var(--ok);
 }

@@ -6,6 +6,9 @@ import type { EyeEntity } from '@/model/types';
 import { computeEyeGeometry, type Ellipse } from '@/model/derived/eyeGeometry';
 import { dot, madd, makeRigid, normalize, sub, toLocalDir, toLocalPoint, toWorldDir, toWorldPoint, type RigidTransform, type Vec3 } from '@/core/math/vec';
 import { refract } from './refraction';
+import { sagNormal, sagRoots } from './csg';
+import { corneaSpec } from '@/model/derived/effectiveLens';
+import { isToric } from '@/core/math/surfaces';
 import type { Ray, RayTermination } from './types';
 
 interface SphereSurface {
@@ -75,6 +78,22 @@ export function buildEyeTraceModel(eye: EyeEntity): EyeTraceModel {
 
   const local = (ray: Ray) => ({ o: toLocalPoint(rigid, ray.origin), d: toLocalDir(rigid, ray.dir) });
 
+  // Hornhautvorderfläche: sphärisch analytisch, torisch (Bikonik) numerisch – identisch zum Tränenfilm-Körper
+  const cSpec = corneaSpec(eye);
+  const toricCornea = isToric(cSpec);
+  const corneaOpt = { rLim: g.limbus.h, zMin: -0.5, zMax: g.limbus.z + 1 };
+  const corneaHit = (o: Vec3, d: Vec3, tMin: number): { t: number; normal: Vec3 } | null => {
+    if (!toricCornea) {
+      const t = hitSphereCap(o, d, corneaFront, tMin);
+      return t === null ? null : { t, normal: normalize(sub(madd(o, d, t), corneaFront.center)) };
+    }
+    const { roots } = sagRoots(o, d, 0, cSpec, corneaOpt);
+    const t = roots.find((r) => r > tMin);
+    if (t === undefined) return null;
+    const p = madd(o, d, t);
+    return { t, normal: sagNormal(cSpec, p[0], p[1]) };
+  };
+
   return {
     rigid,
     axisWorld: normalize(toWorldDir(rigid, [0, 0, 1])),
@@ -83,7 +102,7 @@ export function buildEyeTraceModel(eye: EyeEntity): EyeTraceModel {
 
     entryDistance(ray) {
       const { o, d } = local(ray);
-      const tc = hitSphereCap(o, d, corneaFront, 1e-6);
+      const tc = corneaHit(o, d, 1e-6)?.t ?? null;
       const ts = hitEllipsoid(o, d, g.sclera, 1e-6, false);
       // Sklera-Treffer nur hinter dem Limbus zählen
       let tsValid: number | null = null;
@@ -102,16 +121,21 @@ export function buildEyeTraceModel(eye: EyeEntity): EyeTraceModel {
       const W = (p: Vec3) => toWorldPoint(rigid, p);
 
       // 1) Hornhautvorderfläche (oder Sklera)
-      const tc = hitSphereCap(o, d, corneaFront, 1e-6);
-      if (tc === null) {
+      const hc = corneaHit(o, d, 1e-7);
+      if (hc === null) {
         const ts = hitEllipsoid(o, d, g.sclera, 1e-6, false);
         if (ts !== null) pts.push(W(madd(o, d, ts)));
         return { points: pts, termination: 'absorbed' };
       }
-      const steps: Array<{ surf: SphereSurface; n1: number; n2: number }> = [
-        { surf: corneaFront, n1: nOutside, n2: a.nCornea },
-        { surf: corneaBack, n1: a.nCornea, n2: a.nAqueous },
-      ];
+      {
+        const p = madd(o, d, hc.t);
+        pts.push(W(p));
+        const r = refract(d, hc.normal, nOutside, a.nCornea);
+        if (r.totalInternalReflection) return { points: pts, termination: 'blocked' };
+        o = p;
+        d = r.dir;
+      }
+      const steps: Array<{ surf: SphereSurface; n1: number; n2: number }> = [{ surf: corneaBack, n1: a.nCornea, n2: a.nAqueous }];
       for (const s of steps) {
         const t = hitSphereCap(o, d, s.surf, 1e-7);
         if (t === null) return { points: pts, termination: 'blocked' };
