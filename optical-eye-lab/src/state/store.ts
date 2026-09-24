@@ -14,7 +14,7 @@
  * sodass ein Undo-Schritt die ganze Geste zurücknimmt.
  */
 import { create } from 'zustand';
-import type { ElementKind, EyePartId, LensElement, OpticalElement, SceneDocument, SceneEntity, Transform, Vec3 } from '@/model/types';
+import type { ElementKind, EyePartId, LensElement, OpticalElement, SceneDocument, SceneEntity, Transform, Vec3, WorkbenchId } from '@/model/types';
 import { EYE_ID, ROOM_ID } from '@/model/types';
 import { cloneElement, createElement, createEmptyScene, createLightSource, createMeasurePoint, worldToEyeLocal } from '@/model/sceneFactory';
 import { applyConstraints, isOnEye } from '@/model/derived/contactSeat';
@@ -121,6 +121,11 @@ interface AppState {
   deleteEntity: (id: string) => void;
   setDocField: <K extends 'environment' | 'display'>(key: K, patch: Partial<SceneDocument[K]>) => void;
   setSceneName: (name: string) => void;
+  /** Arbeitsbereich wechseln (Phase 4) – ohne Undo-Schritt, wird mit der Simulation gespeichert */
+  setWorkbench: (id: WorkbenchId) => void;
+  /** Dock des Arbeitsbereichs eingeklappt */
+  dockCollapsed: boolean;
+  setDockCollapsed: (v: boolean) => void;
 
   /* --- Szenenverwaltung --- */
   newScene: () => void;
@@ -349,6 +354,17 @@ export const useAppStore = create<AppState>()((set, get) => ({
   },
 
   setDocField: (key, patch) => get().commit((doc) => ({ ...doc, [key]: { ...doc[key], ...patch } })),
+
+  dockCollapsed: false,
+  setDockCollapsed: (dockCollapsed) => set({ dockCollapsed }),
+
+  setWorkbench: (id) => {
+    const { doc } = get();
+    if ((doc.display.workbench ?? 'free') === id) return;
+    const next = { ...doc, display: { ...doc.display, workbench: id } };
+    // kein Undo-Schritt; als Änderung markiert, damit der Arbeitsbereich mitgespeichert wird
+    set({ doc: next, dirty: true, dockCollapsed: false });
+  },
 
   setSceneName: (name) => {
     const n = name.trim();

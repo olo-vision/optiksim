@@ -9,8 +9,7 @@
  *   - Berechnungen auf dem Szenendokument
  *   - Lerninhalte (Erklärung, Formel, Herleitung mit aktuellen Werten)
  *
- * In Phase 1 ist KEIN Modul aktiv; die Einträge dienen der Planung und werden in
- * der Oberfläche ausschließlich als „In Entwicklung“ (deaktiviert) angezeigt.
+ * Status: 'active' = nutzbar, 'preview' = nutzbar mit Einschränkungen, 'planned' = „In Entwicklung“ (deaktiviert).
  */
 import type { ComponentType } from 'react';
 import type { SceneDocument, SceneEntity } from '@/model/types';
@@ -35,18 +34,20 @@ export interface OpticalModule {
 }
 
 export const MODULES: OpticalModule[] = [
-  { id: 'raytracing', title: 'Strahlengang', category: 'Optische Simulation', status: 'preview', description: 'Geometrische Strahlverfolgung durch Elemente und Auge (Snellius).' },
-  { id: 'ametropia', title: 'Fehlsichtigkeiten', category: 'Optische Simulation', status: 'planned', description: 'Myopie, Hyperopie, Astigmatismus, Presbyopie.' },
-  { id: 'correction', title: 'Korrektion & HSA', category: 'Optische Simulation', status: 'planned', description: 'Effektive Brechkraft, Hornhautscheitelabstand, Vollkorrektion.' },
-  { id: 'tear-lens', title: 'Tränenlinse', category: 'Kontaktlinsen', status: 'planned', description: 'Tränenfilm zwischen Kontaktlinse und Hornhaut.' },
-  { id: 'fluorescein', title: 'Fluoreszeinbild', category: 'Kontaktlinsen', status: 'planned', description: 'Simulation des Fluoreszeinbildes formstabiler Linsen.' },
-  { id: 'lens-fit', title: 'Linsensitz', category: 'Kontaktlinsen', status: 'planned', description: 'Zentrierung, Bewegung, Randunterspülung.' },
-  { id: 'retinoscope', title: 'Skiaskop', category: 'Untersuchungsgeräte', status: 'planned', description: 'Strichskiaskopie mit Reflexbewegung.' },
-  { id: 'slit-lamp', title: 'Spaltlampe', category: 'Untersuchungsgeräte', status: 'planned', description: 'Beleuchtungsarten und Spaltbild.' },
-  { id: 'keratometer', title: 'Keratometer', category: 'Untersuchungsgeräte', status: 'planned', description: 'Hornhautradien und -brechwerte.' },
-  { id: 'ophthalmoscope', title: 'Ophthalmoskop', category: 'Untersuchungsgeräte', status: 'planned', description: 'Direkte Ophthalmoskopie.' },
-  { id: 'phoropter', title: 'Phoropter', category: 'Untersuchungsgeräte', status: 'planned', description: 'Subjektive Refraktion.' },
-  { id: 'learning', title: 'Lernmodus', category: 'Lernmodus', status: 'planned', description: 'Erklärung, Formel und Herleitung mit aktuellen Simulationswerten.' },
+  { id: 'raytracing', title: 'Strahlengang', category: 'Optische Simulation', status: 'active', description: 'Geometrische Strahlverfolgung (Snellius), torische Flächen, Dispersion (Phase 4).' },
+  { id: 'ametropia', title: 'Fehlsichtigkeiten', category: 'Optische Simulation', status: 'active', description: 'Myopie, Hyperopie, Astigmatismus; Akkommodation (Phase 4). Presbyopie über Alter/Akkommodationsbreite.' },
+  { id: 'correction', title: 'Korrektion & HSA', category: 'Optische Simulation', status: 'active', description: 'Effektive Brechkraft, Hornhautscheitelabstand, Vollkorrektion.' },
+  { id: 'patient-view', title: 'Patientensicht', category: 'Optische Simulation', status: 'active', description: 'Unschärfe aus Defokus, Zylinder und Pupille (PSF-Faltung), Visus-Schätzung.' },
+  { id: 'tear-lens', title: 'Tränenlinse', category: 'Kontaktlinsen', status: 'active', description: 'Tränenfilm zwischen Kontaktlinse und Hornhaut.' },
+  { id: 'fluorescein', title: 'Fluoreszeinbild', category: 'Kontaktlinsen', status: 'active', description: 'Fluoreszeinbild formstabiler Linsen aus der Tränenfilmgeometrie.' },
+  { id: 'lens-fit', title: 'Linsensitz', category: 'Kontaktlinsen', status: 'preview', description: 'Zentrierung, Auflage, Randunterspülung (statisch; Lidschlag-Bewegung geplant).' },
+  { id: 'retinoscope', title: 'Skiaskop', category: 'Untersuchungsgeräte', status: 'active', description: 'Strichskiaskopie mit Reflexbewegung, Neutralisation und Training.' },
+  { id: 'phoropter', title: 'Messbrille / Phoropter', category: 'Untersuchungsgeräte', status: 'active', description: 'Subjektive Refraktion mit Messglas, Kreuzzylinder, Nebeln, Rot-Grün.' },
+  { id: 'keratometer', title: 'Keratometer', category: 'Untersuchungsgeräte', status: 'active', description: 'Hornhautradien und Brechwerte (Inspector → Werkzeuge).' },
+  { id: 'lensmeter', title: 'Scheitelbrechwertmesser', category: 'Untersuchungsgeräte', status: 'active', description: 'Scheitelbrechwert und Prisma eines Glases (Inspector → Werkzeuge).' },
+  { id: 'slit-lamp', title: 'Spaltlampe', category: 'Untersuchungsgeräte', status: 'planned', description: 'Beleuchtungsarten und Spaltbild (Kobaltblau/Fluo bereits im Arbeitsbereich Kontaktlinse).' },
+  { id: 'ophthalmoscope', title: 'Ophthalmoskop', category: 'Untersuchungsgeräte', status: 'planned', description: 'Direkte Ophthalmoskopie – benötigt ein Netzhautmodell.' },
+  { id: 'learning', title: 'Lernmodus', category: 'Lernmodus', status: 'preview', description: 'Formel, eingesetzte Werte und Herleitung (ⓘ), Fachinfo, Trainingsfälle.' },
 ];
 
 export const modulesByCategory = (c: ModuleCategory) => MODULES.filter((m) => m.category === c);

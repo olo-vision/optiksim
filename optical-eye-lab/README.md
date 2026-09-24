@@ -1,8 +1,8 @@
 # Optical Eye Lab
 
-Interaktive 3D-Simulationsumgebung für Augenoptik – **Phase 3: vollwertige Anwendung** mit Anmeldung, Dashboard, Simulationsbibliothek, Vorlagen, Einstellungen und Administration (Details: [docs/PHASE3.md](docs/PHASE3.md), Optik/Physik: [docs/PHASE2.md](docs/PHASE2.md)).
+Interaktive 3D-Simulationsumgebung für Augenoptik – **Phase 4: Untersuchungsmodi** (Skiaskopie, Refraktion, Patientensicht, Fluoreszein, Materialsystem, Dispersion, Training) auf der vollwertigen Anwendung aus Phase 3 (Details: [docs/PHASE4.md](docs/PHASE4.md), Anwendung: [docs/PHASE3.md](docs/PHASE3.md), Optik/Physik: [docs/PHASE2.md](docs/PHASE2.md)).
 
-Ein virtuelles optisches Labor mit parametrischem Modellauge (Le Grand), frei platzierbaren optischen Elementen, CAD-Bedienung, Bemaßung, optischer Achse, Inspector und lokalem Speichern. Die Architektur ist auf spätere Module (Fehlsichtigkeit, Kontaktlinsensitz, Skiaskopie, Lernmodus …) vorbereitet.
+Ein virtuelles optisches Labor mit parametrischem Modellauge (Le Grand), frei platzierbaren optischen Elementen, CAD-Bedienung, Bemaßung, optischer Achse, Inspector und lokalem Speichern. Untersuchungsmodi sind als Arbeitsbereiche über derselben Szene umgesetzt.
 
 ---
 
@@ -74,6 +74,26 @@ Alles läuft lokal – kein Backend, keine externen Dienste. Die Anmeldung ist e
 Funktionen, die noch nicht umgesetzt sind, erscheinen ausschließlich deaktiviert mit dem Hinweis *In Entwicklung* (Untersuchungsgeräte, Lernmodus).
 
 ---
+
+## Neu in Phase 4
+
+Arbeitsbereiche (Reiter über der Szene), jeweils aus der Geometrie berechnet – Details, Formeln und Grenzen in [docs/PHASE4.md](docs/PHASE4.md):
+
+- **Skiaskopie**:
+  - Strichskiaskop als Instrument in der Szene.
+  - Der Pupillenreflex folgt aus der Vergenzrechnung: Mit-/Gegenbewegung, neutral, Geschwindigkeit, Breite, Helligkeit, Break/Skew.
+  - Plan- und Konkavspiegel, Neutralisation mit Messglas, Arbeitsabstandskorrektur.
+  - Training mit unbekanntem Patienten.
+- **Refraktion**:
+  - Messglas Sph/Cyl/Achse, Nebeln, Kreuzzylinder, Lochblende, Rot-Grün, Fächer, Prisma.
+  - Akkommodation nach Alter, Visus-Schätzung, Vorher/Nachher.
+- **Patientensicht**: Netzhautbild durch Faltung mit der Punktbildfunktion (FFT im Web Worker), optional chromatisch.
+- **Kontaktlinse**:
+  - Fluoreszeinbild aus der Tränenfilmdicke (BC, OZ, periphere Kurven, Dezentration, Hornhaut-Q).
+  - Klick zeigt Messwert und Interpretation getrennt.
+  - Sitzanalyse, 3D-Fluo-Ansicht.
+- **Materialsystem**: Brillenglas- und KL-Materialien mit Abbe-Zahl, Dichte, Dk, Dk/t, Wassergehalt; **Dispersion** im Raytracing.
+- **Inspector**: Reiter Fachinfo und Werkzeuge (HSA, Brille→KL, Prentice, Keratometer, Tränenlinse …, mit Rechenweg); Standard-/Expertenmodus.
 
 ## Neu in Phase 2
 
@@ -153,7 +173,8 @@ src/
 
 ## Bekannte Grenzen
 
-- Strahlengang: sphärische, plane und torische (bikonische) Flächen; keine Dispersion, keine Fresnel-Verluste, homogene Augenlinse.
+- Strahlengang: sphärische, plane und torische (bikonische) Flächen; Dispersion per Cauchy-Näherung; keine Fresnel-Verluste, homogene Augenlinse.
 - Siehe [docs/PHASE2.md](docs/PHASE2.md) → „Vereinfachungen“.
-- Skiaskopie, Fluoreszeinbild, KL-Sitzsimulation, Spaltlampe, Lernmodus: vorbereitet, noch nicht umgesetzt (Phase 3).
+- Skiaskopie, Refraktion, Patientensicht und Fluoreszein: paraxiale Modelle ohne Aberrationen höherer Ordnung – siehe [docs/PHASE4.md](docs/PHASE4.md) → „Vereinfachungen“ und „Grenzen“.
+- Spaltlampe, Topograf: in Entwicklung.
 - Die Szene ist für Desktop, Notebook und Tablet im Querformat ausgelegt.

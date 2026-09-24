@@ -36,6 +36,8 @@ export const EyeModel = memo(function EyeModel({ eye }: { eye: EyeEntity }) {
   const a = eye.anatomy;
   const g = useMemo(() => computeEyeGeometry(a), [a]);
   const section = eye.viewMode === 'section';
+  // Fluoreszein-Ansicht (Phase 4): Kobaltblau-Beleuchtung – Auge bläulich abgedunkelt
+  const fluo = eye.viewMode === 'fluorescein';
   const selected = useAppStore((s) => s.selectedId === eye.id);
   const hoverPart = useHoverStore((s) => (s.target?.entityId === eye.id ? s.target.part : undefined));
   const quality = useAppStore((s) => s.prefs.quality);
@@ -144,7 +146,7 @@ export const EyeModel = memo(function EyeModel({ eye }: { eye: EyeEntity }) {
       <mesh geometry={geo.sclera} userData={{ part: 'sclera' }} castShadow receiveShadow>
         <meshPhysicalMaterial
           map={scleraTex}
-          color="#ffffff"
+          color={fluo ? '#33449a' : '#ffffff'}
           roughness={0.42}
           clearcoat={0.9}
           clearcoatRoughness={0.18}

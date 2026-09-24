@@ -1,0 +1,787 @@
+/* ==========================================================================
+   Phase 4 – Arbeitsbereiche (Skiaskopie, Refraktion, Patientensicht, Kontaktlinse),
+   Fachpanel und Werkzeuge
+   ========================================================================== */
+
+.app {
+  --dock-h: min(44vh, 400px);
+}
+.app.has-dock .stage-overlay {
+  bottom: calc(var(--status-h) + var(--gap) * 2 + var(--dock-h));
+}
+/* Dock nutzt die volle Breite links: der Szenenbaum endet über dem Dock */
+.app.has-dock .panel--left {
+  bottom: calc(var(--status-h) + var(--gap) * 2 + var(--dock-h));
+}
+.app.has-dock-collapsed .panel--left {
+  bottom: calc(var(--status-h) + var(--gap) * 2 + 36px);
+}
+.app.has-dock-collapsed .stage-overlay {
+  bottom: calc(var(--status-h) + var(--gap) * 2 + 36px);
+}
+
+/* ---------------------------- Arbeitsbereich-Leiste ---------------------------- */
+
+.workbench-bar {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 3px;
+  border-radius: 11px;
+  background: var(--panel);
+  backdrop-filter: var(--blur);
+  -webkit-backdrop-filter: var(--blur);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-sm);
+  max-width: 100%;
+  overflow-x: auto;
+}
+.workbench-bar__item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 11px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-2);
+  font-size: var(--fs);
+  font-weight: 550;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.workbench-bar__item:hover {
+  color: var(--text);
+  background: var(--surface-hover);
+}
+.workbench-bar__item.is-active {
+  color: var(--accent);
+  background: var(--accent-bg-strong);
+}
+.workbench-bar__sep {
+  width: 1px;
+  height: 18px;
+  margin: 0 4px;
+  background: var(--border-strong);
+}
+.workbench-bar__badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 24px;
+  padding: 0 9px;
+  border-radius: 12px;
+  background: rgba(195, 139, 255, 0.16);
+  color: #c9a2ff;
+  font-size: var(--fs-sm);
+  font-weight: 600;
+}
+.workbench-bar__mode {
+  height: 26px;
+  padding: 0 10px;
+  border-radius: 8px;
+  border: 1px solid var(--border-strong);
+  background: transparent;
+  color: var(--text-2);
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  cursor: pointer;
+}
+.workbench-bar__mode.is-expert {
+  border-color: var(--accent-border);
+  color: var(--accent);
+  background: var(--accent-bg);
+}
+
+/* ------------------------------------ Dock ------------------------------------ */
+
+.wb-dock {
+  position: absolute;
+  left: var(--gap);
+  right: var(--right-inset);
+  bottom: calc(var(--status-h) + var(--gap));
+  height: var(--dock-h);
+  display: flex;
+  flex-direction: column;
+  border-radius: var(--r-lg);
+  background: var(--panel-strong);
+  backdrop-filter: var(--blur);
+  -webkit-backdrop-filter: var(--blur);
+  border: 1px solid var(--border-strong);
+  box-shadow: var(--shadow);
+  z-index: 45;
+  transition: left var(--t) var(--ease), right var(--t) var(--ease), height var(--t) var(--ease);
+  overflow: hidden;
+}
+.wb-dock.is-collapsed {
+  height: 36px;
+}
+.wb-dock__head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 36px;
+  padding: 0 8px 0 12px;
+  border-bottom: 1px solid var(--divider);
+  color: var(--accent);
+  flex: none;
+}
+.wb-dock__title {
+  font-weight: 650;
+  color: var(--text);
+  font-size: var(--fs-md);
+}
+.wb-dock__hint {
+  flex: 1;
+  color: var(--text-3);
+  font-size: var(--fs-sm);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.wb-dock__body {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
+.wb-panel {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(230px, 1fr);
+  gap: 12px;
+  padding: 12px;
+  min-width: min-content;
+  align-items: start;
+}
+/* erste Spalte = Bildansicht: eigene Spurbreite, damit sie nie in die Nachbarspalte ragt */
+.wb-panel {
+  grid-template-columns: minmax(300px, 330px);
+}
+.wb-panel--refraction,
+.wb-panel--patient {
+  grid-template-columns: minmax(330px, 380px);
+}
+.wb-col {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+}
+.wb-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  height: 100%;
+  min-height: 140px;
+  padding: 20px;
+  text-align: center;
+  color: var(--text-2);
+}
+.wb-empty--inline {
+  min-height: 200px;
+  border: 1px dashed var(--border-strong);
+  border-radius: 10px;
+  font-size: var(--fs-sm);
+}
+.wb-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px;
+  border-radius: 10px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+}
+.wb-group--training {
+  border-color: rgba(195, 139, 255, 0.35);
+  background: rgba(195, 139, 255, 0.06);
+}
+.wb-group__title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--fs-xs);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--text-3);
+  margin-bottom: 2px;
+}
+.wb-group__sub {
+  margin-top: 6px;
+  font-size: var(--fs-xs);
+  font-weight: 650;
+  color: var(--text-3);
+}
+.wb-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.wb-row .btn {
+  height: 28px;
+  font-size: var(--fs-sm);
+}
+.btn.is-active {
+  border-color: var(--accent-border);
+  color: var(--accent);
+  background: var(--accent-bg);
+}
+.btn--ghost {
+  border-color: transparent;
+  background: transparent;
+}
+.wb-hint {
+  margin: 0;
+  font-size: var(--fs-xs);
+  line-height: 1.45;
+  color: var(--text-3);
+}
+.wb-quote {
+  margin: 0;
+  font-style: italic;
+  color: var(--text-2);
+  font-size: var(--fs-sm);
+}
+.wb-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.wb-chips .chip {
+  height: 24px;
+  padding: 0 9px;
+  font-size: var(--fs-xs);
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.chip.is-static {
+  cursor: default;
+}
+.wb-range {
+  flex: 1;
+  min-width: 80px;
+  accent-color: var(--accent);
+}
+.wb-field {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: var(--fs-sm);
+  color: var(--text-2);
+}
+.wb-field > span:first-child {
+  width: 78px;
+  flex: none;
+}
+.wb-num {
+  width: 36px;
+  text-align: right;
+  font-family: var(--font-mono);
+  font-size: var(--fs-sm);
+  color: var(--text);
+}
+.wb-check {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: var(--fs-sm);
+  color: var(--text-2);
+  cursor: pointer;
+}
+.wb-check input {
+  accent-color: var(--accent);
+}
+.wb-select {
+  height: 28px;
+  padding: 0 8px;
+  border-radius: 7px;
+  border: 1px solid var(--border-strong);
+  background: var(--field);
+  color: var(--text);
+  font-size: var(--fs-sm);
+  max-width: 100%;
+}
+.wb-select option {
+  background: var(--panel-solid);
+}
+.wb-list {
+  margin: 0;
+  padding-left: 16px;
+  font-size: var(--fs-sm);
+  line-height: 1.5;
+  color: var(--text-2);
+}
+.wb-list--interp {
+  color: var(--text);
+}
+.wb-hidden {
+  color: #c9a2ff;
+  font-style: italic;
+}
+
+/* Stepper */
+.wb-stepper {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
+  container-type: inline-size;
+}
+.wb-stepper__label {
+  font-size: var(--fs-sm);
+  color: var(--text-2);
+  white-space: nowrap;
+}
+.wb-stepper__ctrl {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  min-width: 0;
+  flex-shrink: 1;
+}
+.wb-stepper__btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 24px;
+  height: 24px;
+  padding: 0 4px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--field);
+  color: var(--text-2);
+  cursor: pointer;
+  font-size: 10.5px;
+  font-weight: 600;
+}
+.wb-stepper__btn:hover:not(:disabled) {
+  color: var(--text);
+  border-color: var(--border-strong);
+}
+.wb-stepper__btn:disabled {
+  opacity: 0.4;
+}
+.wb-stepper__btn--big {
+  color: var(--text-3);
+}
+.wb-stepper__value {
+  min-width: 64px;
+  white-space: nowrap;
+  text-align: center;
+  font-family: var(--font-mono);
+  font-size: var(--fs-md);
+  font-weight: 600;
+  color: var(--text);
+}
+.wb-stepper__value small {
+  margin-left: 3px;
+  font-size: 10px;
+  font-weight: 500;
+  color: var(--text-3);
+}
+.wb-pc {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 2px;
+  padding: 4px 0;
+  border-top: 1px dashed var(--divider);
+  position: relative;
+}
+.wb-pc > .icon-btn {
+  position: absolute;
+  right: -4px;
+  top: -2px;
+}
+
+/* Readouts */
+.wb-readout {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: var(--fs-sm);
+  padding: 2px 0;
+}
+.wb-readout__label {
+  color: var(--text-3);
+}
+.wb-readout__value {
+  font-family: var(--font-mono);
+  color: var(--text);
+  text-align: right;
+}
+.wb-readout--accent .wb-readout__value {
+  color: var(--accent);
+  font-family: var(--font);
+  font-weight: 650;
+}
+.wb-readout--ok .wb-readout__value {
+  color: var(--ok);
+  font-family: var(--font);
+  font-weight: 650;
+}
+.wb-readout--warn .wb-readout__value {
+  color: var(--warn);
+}
+
+/* Auswertung */
+.wb-eval {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  font-size: var(--fs-sm);
+  background: var(--surface-active);
+  border-left: 3px solid var(--accent);
+}
+.wb-eval--excellent,
+.wb-eval--good {
+  border-left-color: var(--ok);
+}
+.wb-eval--fair {
+  border-left-color: var(--warn);
+}
+.wb-eval--poor {
+  border-left-color: var(--danger);
+}
+.wb-eval ol {
+  margin: 4px 0 0;
+  padding-left: 16px;
+  color: var(--text-2);
+  line-height: 1.45;
+}
+
+/* ------------------------------ Skiaskopie ------------------------------ */
+
+.reflex-view {
+  width: 100%;
+  max-width: 280px;
+  aspect-ratio: 1;
+  border-radius: 50%;
+  border: 6px solid #0b0d10;
+  box-shadow: 0 0 0 1px var(--border-strong), inset 0 0 30px rgba(0, 0, 0, 0.6);
+  cursor: ew-resize;
+  touch-action: none;
+  align-self: center;
+  image-rendering: auto;
+}
+
+/* ----------------------------- Patientensicht ----------------------------- */
+
+.patient-pair {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 10px;
+}
+.patient-pair--small {
+  grid-template-columns: 1fr 1fr;
+}
+.patient-image {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.patient-image {
+  min-width: 0;
+}
+.patient-image__frame {
+  position: relative;
+  border-radius: 8px;
+  overflow: hidden;
+  border: 1px solid var(--border-strong);
+  background: #fff;
+}
+.patient-image canvas {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  aspect-ratio: 1;
+}
+.patient-image__rows span {
+  position: absolute;
+  left: 4px;
+  transform: translateY(-50%);
+  font-size: 9.5px;
+  font-family: var(--font-mono);
+  color: #9aa3ad;
+  background: rgba(255, 255, 255, 0.8);
+  padding: 0 3px;
+  border-radius: 3px;
+}
+.patient-image__rows span.is-readable {
+  color: #0f7a4a;
+  font-weight: 700;
+}
+.patient-image__busy {
+  position: absolute;
+  right: 6px;
+  top: 6px;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: 2px solid #4cc2ff;
+  border-right-color: transparent;
+  animation: spin 700ms linear infinite;
+}
+.patient-image figcaption {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: var(--fs-xs);
+  color: var(--text-3);
+}
+.patient-image figcaption strong {
+  color: var(--text);
+  font-weight: 600;
+}
+.psf-row {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+}
+.psf-row > div {
+  flex: 1;
+}
+.psf-view {
+  width: 110px;
+  height: 110px;
+  border-radius: 8px;
+  border: 1px solid var(--border-strong);
+  background: #000;
+  flex: none;
+}
+
+/* ------------------------------ Fluoreszein ------------------------------ */
+
+.fluo-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+  max-width: 300px;
+  align-self: center;
+}
+.fluo-view {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 1;
+  border-radius: 50%;
+  overflow: hidden;
+  border: 6px solid #0b0d10;
+  box-shadow: 0 0 0 1px var(--border-strong);
+  cursor: crosshair;
+}
+.fluo-view canvas {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+.fluo-view__overlay {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+.fluo-view__lens {
+  fill: none;
+  stroke: rgba(255, 255, 255, 0.18);
+  stroke-width: 0.3;
+}
+.fluo-view__oz {
+  fill: none;
+  stroke: rgba(255, 255, 255, 0.28);
+  stroke-width: 0.25;
+  stroke-dasharray: 1 1;
+}
+.fluo-view__probe {
+  fill: #fff;
+  stroke: #000;
+  stroke-width: 0.3;
+}
+.fluo-probe {
+  position: relative;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: rgba(12, 15, 20, 0.94);
+  border: 1px solid var(--border-strong);
+  color: #e7ecf2;
+  font-size: 11px;
+  line-height: 1.4;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+  cursor: default;
+}
+.fluo-probe__sec {
+  margin-top: 4px;
+  font-size: 9.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #8b97a6;
+}
+.fluo-probe__sec:first-child {
+  margin-top: 0;
+}
+.fluo-probe__cls {
+  color: #8dff5a;
+}
+.fluo-probe__close {
+  position: absolute;
+  top: 2px;
+  right: 6px;
+  border: 0;
+  background: transparent;
+  color: #8b97a6;
+  cursor: pointer;
+  font-size: 14px;
+}
+.fit-badge {
+  padding: 1px 7px;
+  border-radius: 8px;
+  text-transform: none;
+  letter-spacing: 0;
+  font-size: var(--fs-xs);
+}
+.fit-badge--alignment {
+  background: rgba(69, 214, 160, 0.16);
+  color: var(--ok);
+}
+.fit-badge--steep,
+.fit-badge--flat {
+  background: var(--warn-bg);
+  color: var(--warn);
+}
+.fit-badge--unknown {
+  background: var(--surface-active);
+  color: var(--text-2);
+}
+
+/* ------------------------------ Inspector-Reiter ------------------------------ */
+
+.insp-tabs {
+  display: flex;
+  gap: 2px;
+  padding: 6px 10px 0;
+  border-bottom: 1px solid var(--divider);
+}
+.insp-tab {
+  flex: 1;
+  height: 28px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  color: var(--text-3);
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  cursor: pointer;
+}
+.insp-tab:hover {
+  color: var(--text);
+}
+.insp-tab.is-active {
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+}
+.tool-card {
+  margin: 8px 10px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  overflow: hidden;
+}
+.tool-card__head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 10px;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  font-weight: 600;
+  font-size: var(--fs);
+  cursor: pointer;
+  text-align: left;
+}
+.tool-card__head small {
+  margin-left: auto;
+  color: var(--text-3);
+  font-weight: 500;
+}
+.tool-card__body {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 2px 10px 10px;
+}
+.tool-card__result {
+  margin-top: 4px;
+  padding: 6px 8px;
+  border-radius: 7px;
+  background: var(--accent-bg);
+  color: var(--accent);
+  font-family: var(--font-mono);
+  font-size: var(--fs-sm);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.tool-card .btn {
+  height: 26px;
+  font-size: var(--fs-xs);
+}
+.fach-block {
+  padding: 4px 12px 10px;
+}
+.fach-block h4 {
+  margin: 10px 0 4px;
+  font-size: var(--fs-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--text-3);
+}
+
+@media (max-width: 1280px) {
+  .app {
+    --dock-h: min(46vh, 380px);
+  }
+  .wb-panel {
+    grid-auto-columns: minmax(210px, 1fr);
+  }
+}
+
+.badge--ok {
+  background: rgba(69, 214, 160, 0.14);
+  color: var(--ok);
+}
+
+/* schmale Spalten: Grobschritt-Tasten ausblenden, damit nichts überläuft */
+@container (max-width: 250px) {
+  .wb-stepper__btn--big {
+    display: none;
+  }
+}
+
+.wb-note {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid color-mix(in srgb, var(--warning, #e0a84a) 45%, transparent);
+  background: color-mix(in srgb, var(--warning, #e0a84a) 10%, transparent);
+  color: var(--text-2);
+  font-size: var(--fs-sm);
+  line-height: 1.4;
+}

@@ -39,7 +39,9 @@ export function RayView({ doc }: { doc: SceneDocument }) {
     return [...byColor.entries()];
   }, [result]);
 
-  const focus = result.focus;
+  // Trainingsfall: Fokuslage/Brennlinien würden die Lösung verraten → ausblenden
+  const hidden = !!doc.training?.hidden;
+  const focus = hidden ? null : result.focus;
   const astig = focus?.astigmatism;
   return (
     <group raycast={() => null}>

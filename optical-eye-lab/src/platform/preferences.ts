@@ -62,6 +62,12 @@ export interface UserPreferences extends Preferences {
 
   /* Onboarding */
   onboardingDone: boolean;
+
+  /* Phase 4 */
+  /** Expertenmodus: alle geometrischen/optischen Details, Materialdaten, Raytracing-Kennzahlen */
+  expertMode: boolean;
+  /** Qualität der Patientensicht (Bildauflösung der PSF-Faltung) */
+  visionQuality: 'standard' | 'high';
 }
 
 export const DEFAULT_USER_PREFS: UserPreferences = {
@@ -103,6 +109,9 @@ export const DEFAULT_USER_PREFS: UserPreferences = {
   favoriteElementKinds: [],
 
   onboardingDone: false,
+
+  expertMode: false,
+  visionQuality: 'standard',
 };
 
 const clamp = (v: unknown, lo: number, hi: number, d: number) => (typeof v === 'number' && Number.isFinite(v) ? Math.min(hi, Math.max(lo, v)) : d);
@@ -136,8 +145,9 @@ export function normalizePrefs(raw: unknown): UserPreferences {
   p.gizmoSize = clamp(p.gizmoSize, 0.4, 2, d.gizmoSize);
   p.translationSnap = clamp(p.translationSnap, 0.1, 50, d.translationSnap);
   p.rotationSnap = clamp(p.rotationSnap, 1, 90, d.rotationSnap);
+  p.visionQuality = oneOf(p.visionQuality, ['standard', 'high'] as const, d.visionQuality);
   p.favoriteElementKinds = Array.isArray(p.favoriteElementKinds) ? p.favoriteElementKinds.filter((k) => typeof k === 'string') : [];
-  for (const k of ['confirmDestructive', 'autoSave', 'reducedMotion', 'shadows', 'reflections', 'antialias', 'simulationLiveDefault', 'newSceneOpticalAxis', 'newSceneDimensions', 'newSceneBench', 'leftPanelOpen', 'rightPanelOpen', 'onboardingDone', 'showHoverInfo'] as const) {
+  for (const k of ['confirmDestructive', 'autoSave', 'reducedMotion', 'shadows', 'reflections', 'antialias', 'simulationLiveDefault', 'newSceneOpticalAxis', 'newSceneDimensions', 'newSceneBench', 'leftPanelOpen', 'rightPanelOpen', 'onboardingDone', 'showHoverInfo', 'expertMode'] as const) {
     if (typeof p[k] !== 'boolean') (p as unknown as Record<string, boolean>)[k] = d[k] as boolean;
   }
   return p;

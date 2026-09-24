@@ -66,18 +66,39 @@ export function AddElementDialog() {
       })}
       {!q && (
         <div className="add-cat add-cat--muted">
-          <h3 className="add-cat__title">
-            Untersuchungsgeräte <Badge tone="dev">In Entwicklung</Badge>
-          </h3>
+          <h3 className="add-cat__title">Untersuchungsgeräte</h3>
           <div className="add-grid add-grid--compact">
-            {devices.map((m) => (
-              <div key={m.id} className="add-card is-disabled" aria-disabled>
-                <span className="add-card__text">
-                  <span className="add-card__name">{m.title}</span>
-                  <span className="add-card__desc">{m.description}</span>
-                </span>
-              </div>
-            ))}
+            {devices.map((m) =>
+              m.id === 'retinoscope' || m.id === 'phoropter' ? (
+                <button
+                  key={m.id}
+                  type="button"
+                  className="add-card"
+                  data-testid={`device-${m.id}`}
+                  onClick={() => {
+                    const s = useAppStore.getState();
+                    s.openDialog(null);
+                    s.setWorkbench(m.id === 'retinoscope' ? 'retinoscopy' : 'refraction');
+                  }}
+                >
+                  <span className="add-card__text">
+                    <span className="add-card__name">
+                      {m.title} <Badge tone="accent">Arbeitsbereich</Badge>
+                    </span>
+                    <span className="add-card__desc">{m.description}</span>
+                  </span>
+                </button>
+              ) : (
+                <div key={m.id} className={`add-card${m.status === 'planned' ? ' is-disabled' : ''}`} aria-disabled={m.status === 'planned'}>
+                  <span className="add-card__text">
+                    <span className="add-card__name">
+                      {m.title} {m.status === 'planned' ? <Badge tone="dev">In Entwicklung</Badge> : <Badge tone="ok">Werkzeug</Badge>}
+                    </span>
+                    <span className="add-card__desc">{m.description}</span>
+                  </span>
+                </div>
+              ),
+            )}
           </div>
         </div>
       )}

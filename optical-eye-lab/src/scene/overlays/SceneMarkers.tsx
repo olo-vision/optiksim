@@ -11,6 +11,7 @@ import { registerRef } from '../interaction/objectRegistry';
 import { selectableHandlers, useHoverStore } from '../interaction/hover';
 import { SelectionBracket } from '../interaction/SelectionBracket';
 import { theme3d } from '../theme3d';
+import { RetinoscopeBody } from '../instruments/RetinoscopeView';
 
 export const LightSourceView = memo(function LightSourceView({ light }: { light: LightSourceEntity }) {
   const selected = useAppStore((s) => s.selectedId === light.id);
@@ -22,6 +23,15 @@ export const LightSourceView = memo(function LightSourceView({ light }: { light:
   const box = useMemo(() => new THREE.Box3(new THREE.Vector3(-r, -r, -depth), new THREE.Vector3(r, r, 1)), [r]);
   const t = light.transform;
   const glow = light.source.color;
+  if (light.source.deviceRole === 'retinoscope') {
+    const rbox = new THREE.Box3(new THREE.Vector3(-12, -140, -20), new THREE.Vector3(12, 14, 2));
+    return (
+      <group ref={ref} visible={light.visible} position={t.position} rotation={[t.rotation[0] * DEG2RAD, t.rotation[1] * DEG2RAD, t.rotation[2] * DEG2RAD]} {...handlers}>
+        <RetinoscopeBody light={light} highlight={hovered || selected} />
+        {selected && <SelectionBracket box={rbox} />}
+      </group>
+    );
+  }
   return (
     <group
       ref={ref}

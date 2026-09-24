@@ -18,7 +18,7 @@ import { ColorField, NumberField, ReadoutRow, ToggleField } from '../common/fiel
 import { EyeGlyph } from '../common/ElementGlyph';
 import { InfoCardView, InspectorHeader, TransformSection } from './shared';
 
-type Key = Exclude<keyof EyeAnatomy, 'corneaFrontRadius2' | 'corneaAxis'>;
+type Key = Exclude<keyof EyeAnatomy, 'corneaFrontRadius2' | 'corneaAxis' | 'corneaAsphericity'>;
 interface F {
   key: Key;
   label: string;
@@ -98,6 +98,7 @@ export function EyeInspector({ eye }: { eye: EyeEntity }) {
   const signed = (v: number) => `${v > 0.0005 ? '+' : v < -0.0005 ? '−' : ''}${formatNumber(Math.abs(v), 2)} mm`;
   const setAnat = (k: Key, v: number) => set({ anatomy: { ...a, [k]: v } });
   const locked = eye.locked;
+  const expert = useAppStore((s) => s.prefs.expertMode);
 
   return (
     <>
@@ -108,6 +109,16 @@ export function EyeInspector({ eye }: { eye: EyeEntity }) {
         </div>
       )}
 
+      {doc.training?.hidden ? (
+        <Section title="Trainingsfall">
+          <p className="insp-hint">
+            Refraktion, Anatomie und Korrektionswerte sind verborgen. Bestimme die Refraktion in den Arbeitsbereichen Skiaskopie oder Refraktion.
+          </p>
+          <ReadoutRow label="Patient" value={doc.training.title} />
+          <ReadoutRow label="Beschwerde" value={doc.training.complaint} />
+        </Section>
+      ) : (
+      <>
       <Section title="Refraktionsstatus">
         <div className="field">
           <span className="field__label">Art der Fehlsichtigkeit</span>
@@ -172,6 +183,8 @@ export function EyeInspector({ eye }: { eye: EyeEntity }) {
         </Section>
       )}
 
+      </>
+      )}
       <Section title="Ansicht">
         <div className="field">
           <span className="field__label">Darstellung</span>
@@ -183,6 +196,7 @@ export function EyeInspector({ eye }: { eye: EyeEntity }) {
               options={[
                 { value: 'normal', label: 'Normal' },
                 { value: 'section', label: 'Schnitt' },
+                { value: 'fluorescein', label: 'Fluo' },
               ]}
             />
           </div>
@@ -195,10 +209,16 @@ export function EyeInspector({ eye }: { eye: EyeEntity }) {
         <p className="insp-hint">Ursprung des Auges = Hornhautscheitel. Die Rotation entspricht der Blickrichtung.</p>
       </TransformSection>
 
-      {GROUPS.map((g) => (
+      {!doc.training?.hidden && (
+      <>
+      {!expert && <p className="insp-hint" style={{ padding: '6px 12px 0' }}>Standardansicht: wichtigste Anatomiewerte. Brechungsindizes und Augenlinse im Expertenmodus.</p>}
+      {GROUPS.filter((g) => expert || (g.title !== 'Augenlinse' && g.title !== 'Vorderkammer')).map((g) => (
         <Section key={g.title} title={g.title} defaultOpen={g.open ?? false}>
           {g.title === 'Hornhaut' && (
             <>
+              {expert && (
+                <NumberField label="Asphärizität Q" unit="none" step={0.05} decimals={2} min={-1} max={0.5} value={a.corneaAsphericity ?? 0} disabled={locked} hint="Konische Konstante (typ. −0,26). Wirkt auf KL-Sitz und Fluoreszein; paraxial ohne Einfluss." onChange={(v) => set({ anatomy: { ...a, corneaAsphericity: v } })} />
+              )}
               <ToggleField
                 label="Torische Hornhaut"
                 value={a.corneaFrontRadius2 !== undefined}
@@ -213,7 +233,7 @@ export function EyeInspector({ eye }: { eye: EyeEntity }) {
               )}
             </>
           )}
-          {g.fields.map((f) => (
+          {g.fields.filter((f) => expert || f.unit !== 'n').map((f) => (
             <NumberField
               key={f.key}
               label={f.label}
@@ -255,6 +275,8 @@ export function EyeInspector({ eye }: { eye: EyeEntity }) {
 
       <InfoCardView card={entityInfo(eye, part)} />
       <p className="insp-hint insp-hint--pad">Tipp: Teile des Auges anklicken, um ihre Daten zu sehen. Baulänge: {formatValue(a.axialLength, 'mm', 2)}</p>
+      </>
+      )}
     </>
   );
 }

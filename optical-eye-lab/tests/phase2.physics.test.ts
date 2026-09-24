@@ -175,7 +175,8 @@ describe('Tränenraumprofil', () => {
     const { computeTearProfile } = await import('@/model/derived/contactSeat');
     const doc = createEmptyScene();
     let el = createElement('rigid-contact-lens', doc) as LensElement;
-    el = { ...el, lens: { ...el.lens, backRadius: 7.8 }, contact: { ...el.contact!, onEye: true, tearFilmThickness: 0.01, centration: { x: 1, y: -0.5 } } };
+    // ohne periphere Kurven (Phase 4: Peripherie hebt den Rand ab – separat getestet)
+    el = { ...el, lens: { ...el.lens, backRadius: 7.8 }, contact: { ...el.contact!, peripheralCurves: [], onEye: true, tearFilmThickness: 0.01, centration: { x: 1, y: -0.5 } } };
     const p = computeTearProfile(el, doc.eye, 12);
     expect(p.min).toBeGreaterThan(0.009);
     expect(p.max).toBeLessThan(0.0125); // entlang der Blickachse gemessen: 0,01/cos(Neigung der Hornhaut)

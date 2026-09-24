@@ -51,7 +51,7 @@ function SceneContent() {
       ))}
       {doc.eye.visible &&
         doc.elements.map((el) =>
-          el.visible && isOnEye(el) && (el.contact!.tearFilm ?? true) ? <TearFilmView key={`tear-${el.id}`} el={el} eye={doc.eye} /> : null,
+          el.visible && isOnEye(el) && (el.contact!.tearFilm ?? true) ? <TearFilmView key={`tear-${el.id}`} el={el} eye={doc.eye} fluo={doc.eye.viewMode === 'fluorescein'} /> : null,
         )}
       {doc.lights.map((l) => (
         <LightSourceView key={l.id} light={l} />

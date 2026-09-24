@@ -6,7 +6,8 @@ import { AlertTriangle, Crosshair, LocateFixed } from 'lucide-react';
 import type { LensElement, OpticalElement, SurfaceFinish } from '@/model/types';
 import { getElementDefinition, isContactLens } from '@/model/elementRegistry';
 import { setPath } from '@/model/fieldSchema';
-import { CUSTOM_MEDIUM_ID, MEDIA_PRESETS, matchMediumByIndex } from '@/model/media';
+import { CUSTOM_MEDIUM_ID, matchMediumByIndex } from '@/model/media';
+import { MaterialReadouts, MaterialSelect } from './MaterialFields';
 import { resolveLensShape } from '@/model/derived/elementShape';
 import { computeMeasurements } from '@/model/derived/measurements';
 import { entityInfo } from '@/model/derived/infoCards';
@@ -146,19 +147,7 @@ export function ElementInspector({ el }: { el: OpticalElement }) {
       )}
 
       <Section title="Optisches Medium">
-        <SelectField
-          label="Medium"
-          value={el.medium.presetId}
-          disabled={locked}
-          options={[
-            ...MEDIA_PRESETS.map((m) => ({ value: m.id, label: `${m.name} (${formatNumber(m.n, 3)})`, group: m.group })),
-            { value: CUSTOM_MEDIUM_ID, label: 'Benutzerdefiniert', group: 'Sonstige' },
-          ]}
-          onChange={(id) => {
-            const m = MEDIA_PRESETS.find((x) => x.id === id);
-            update((e) => ({ ...e, medium: m ? { presetId: m.id, n: m.n, abbe: m.abbe } : { ...e.medium, presetId: CUSTOM_MEDIUM_ID } }));
-          }}
-        />
+        <MaterialSelect el={el} disabled={locked} onChange={(m) => update((e) => ({ ...e, medium: m }))} />
         <NumberField
           label="Brechungsindex n"
           unit="n"
@@ -171,7 +160,7 @@ export function ElementInspector({ el }: { el: OpticalElement }) {
           hint="Frei eingebbar. Passt der Wert zu einem Preset, wird dieses ausgewählt."
           onChange={(n) => update((e) => ({ ...e, medium: { presetId: matchMediumByIndex(n)?.id ?? CUSTOM_MEDIUM_ID, n, abbe: matchMediumByIndex(n)?.abbe } }))}
         />
-        <ReadoutRow label="Abbe-Zahl ν" value={el.medium.abbe ? formatNumber(el.medium.abbe, 1) : '–'} formula="Vorbereitet für spätere Dispersionsberechnung" />
+        <MaterialReadouts el={el} />
       </Section>
 
       {optics.length > 0 && (

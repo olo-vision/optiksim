@@ -3,6 +3,8 @@
  * Neue Elementfamilien benötigen hier genau eine zusätzliche Builder-Funktion.
  */
 import type { EyeEntity, LensElement, MediumElement, OpticalElement, PlateElement, PrismElement, SceneDocument } from '@/model/types';
+import { EYE_MEDIA_ABBE, indexAt, isReferenceWavelength, LAMBDA_D } from '@/engine/optics/dispersion';
+import { findMaterial } from '@/model/media';
 import { effectiveLens, corneaSpec } from '@/model/derived/effectiveLens';
 import { computeEyeGeometry } from '@/model/derived/eyeGeometry';
 import { DEFAULT_TEAR_INDEX, isOnEye } from '@/model/derived/contactSeat';
@@ -103,8 +105,14 @@ export function primitivesForElement(el: OpticalElement, eye?: EyeEntity): Primi
 }
 
 /** Erstellt einen Körper in Weltkoordinaten aus lokalen Primitiven und einer starren Transformation. */
-export function solidFromElement(el: OpticalElement, eye?: EyeEntity): TraceableSolid {
-  return solidFromPrimitives(el.id, el.medium.n, primitivesForElement(el, eye), makeRigid(el.transform.position, el.transform.rotation));
+/** Brechungsindex eines Elements bei λ (Phase 4: Dispersion über die Abbe-Zahl des Materials). */
+export function elementIndexAt(el: OpticalElement, lambdaNm = LAMBDA_D): number {
+  if (isReferenceWavelength(lambdaNm)) return el.medium.n;
+  return indexAt(el.medium.n, el.medium.abbe ?? findMaterial(el.medium.presetId)?.abbe, lambdaNm);
+}
+
+export function solidFromElement(el: OpticalElement, eye?: EyeEntity, lambdaNm = LAMBDA_D): TraceableSolid {
+  return solidFromPrimitives(el.id, elementIndexAt(el, lambdaNm), primitivesForElement(el, eye), makeRigid(el.transform.position, el.transform.rotation));
 }
 
 /** Körper aus Primitiven in einem lokalen Rahmen. */
@@ -137,7 +145,7 @@ export function solidFromPrimitives(id: string, n: number, prims: Primitive[], r
  * Körper = hinter der KL-Rückfläche (KL-Rahmen) ∩ vor der Hornhautvorderfläche (Augenrahmen)
  *          ∩ innerhalb des KL-Durchmessers ∩ vor der Limbusebene.
  */
-export function tearFilmSolid(el: LensElement, eye: EyeEntity): TraceableSolid {
+export function tearFilmSolid(el: LensElement, eye: EyeEntity, lambdaNm = LAMBDA_D): TraceableSolid {
   const s = resolveLensShape(el);
   const back = effectiveLens(el, eye).back;
   const clRigid = makeRigid(el.transform.position, el.transform.rotation);
@@ -151,16 +159,16 @@ export function tearFilmSolid(el: LensElement, eye: EyeEntity): TraceableSolid {
     inFrame(surfaceRegion(corneaSpec(eye), 0, false, { rLim: g.limbus.h, zMin: -0.5, zMax: g.limbus.z + 1 }), eyeRigid),
     inFrame(halfSpace([0, 0, g.limbus.z], [0, 0, 1], true), eyeRigid),
   ];
-  return solidFromPrimitives(`${el.id}__tear`, el.contact?.nTear ?? DEFAULT_TEAR_INDEX, prims, { position: [0, 0, 0], rotation: [1, 0, 0, 0, 1, 0, 0, 0, 1] });
+  return solidFromPrimitives(`${el.id}__tear`, indexAt(el.contact?.nTear ?? DEFAULT_TEAR_INDEX, EYE_MEDIA_ABBE, lambdaNm), prims, { position: [0, 0, 0], rotation: [1, 0, 0, 0, 1, 0, 0, 0, 1] });
 }
 
 /** Alle verfolgbaren Körper einer Szene (Elemente + Tränenfilme). */
-export function sceneSolids(doc: SceneDocument): TraceableSolid[] {
+export function sceneSolids(doc: SceneDocument, lambdaNm = LAMBDA_D): TraceableSolid[] {
   const solids: TraceableSolid[] = [];
   for (const e of doc.elements) {
     if (!e.visible) continue;
-    solids.push(solidFromElement(e, doc.eye));
-    if (isOnEye(e) && (e.contact!.tearFilm ?? true) && doc.eye.visible) solids.push(tearFilmSolid(e, doc.eye));
+    solids.push(solidFromElement(e, doc.eye, lambdaNm));
+    if (isOnEye(e) && (e.contact!.tearFilm ?? true) && doc.eye.visible) solids.push(tearFilmSolid(e, doc.eye, lambdaNm));
   }
   return solids;
 }

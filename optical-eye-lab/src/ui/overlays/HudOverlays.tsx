@@ -51,7 +51,8 @@ export function MeasurementBar() {
   const report = useMemo(() => computeMeasurements(doc), [doc]);
   const cylForm = useAppStore((s) => s.prefs.cylForm);
   const correction = useMemo(() => computeCorrection(doc, cylForm), [doc, cylForm]);
-  const focus = doc.display.showRays ? result?.focus : null;
+  const hidden = !!doc.training?.hidden;
+  const focus = doc.display.showRays && !hidden ? result?.focus : null;
   const residualOk = Math.abs(correction.residualRx.sph) < 0.125 && Math.abs(correction.residualRx.cyl) < 0.125;
 
   return (
@@ -86,8 +87,7 @@ export function MeasurementBar() {
         data-tip={correction.hasCorrection ? 'Restrefraktion am Hornhautscheitel (Vergenzrechnung, Matrixform)' : 'Refraktion des Auges am Hornhautscheitel'}
         data-tip-side="top"
       >
-        {correction.hasCorrection ? 'Rest ' : 'Auge '}
-        {formatRx(correction.hasCorrection ? correction.residualRx : correction.eye.rx)}
+        {hidden ? 'Refraktion verborgen (Training)' : `${correction.hasCorrection ? 'Rest ' : 'Auge '}${formatRx(correction.hasCorrection ? correction.residualRx : correction.eye.rx)}`}
       </span>
       {focus?.astigmatism && (
         <span className="measure-bar__focus" data-tip="Abstand der beiden Brennlinien (Raytracing)" data-tip-side="top">

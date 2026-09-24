@@ -72,13 +72,26 @@ export function rollRelativeToEye(el: OpticalElement, eye: EyeEntity): number {
   return (Math.atan2(xEye[1], xEye[0]) * 180) / Math.PI;
 }
 
-export function computeCorrection(doc: SceneDocument, form: CylForm = 'minus'): CorrectionResult {
+export interface CorrectionOptions {
+  /**
+   * Objektpunkt auf der Augenachse (Augen-lokales z in mm, < 0 = vor dem Auge), Phase 4.
+   * Fehlt → Objekt im Unendlichen. Beispiele: Skiaskop-Guckloch (−Arbeitsabstand), Sehprobe (−Prüfentfernung).
+   * Die Restrefraktion ist dann R = A_Auge − L_HS(Objekt): 0 bedeutet, das Objekt wird scharf auf der Retina abgebildet
+   * (Objekt liegt im Fernpunkt des Systems Auge + Gläser).
+   */
+  objectZ?: number;
+}
+
+export function computeCorrection(doc: SceneDocument, form: CylForm = 'minus', opts: CorrectionOptions = {}): CorrectionResult {
+  const objectZ = opts.objectZ !== undefined && Number.isFinite(opts.objectZ) && opts.objectZ < -1e-6 ? opts.objectZ : undefined;
   const eyeState = eyeRefractionState(doc.eye.anatomy, form);
   const notes: string[] = [];
   const lenses = doc.elements
     .filter((e): e is LensElement => e.visible && e.family === 'lens')
     .map((e) => ({ el: e, p: placementOf(doc.eye, e) }))
     .filter(({ el, p }) => isOnEye(el) || p.vertexDistance > -0.05)
+    // Gläser hinter dem Objekt (vom Auge aus gesehen) wirken nicht
+    .filter(({ p }) => objectZ === undefined || p.frontVertexLocal[2] > objectZ + 1e-6)
     .sort((a, b) => a.p.backVertexLocal[2] - b.p.backVertexLocal[2]);
 
   const others = doc.elements.filter((e) => e.visible && e.family !== 'lens');
@@ -86,6 +99,13 @@ export function computeCorrection(doc: SceneDocument, form: CylForm = 'minus'): 
 
   let L: Mat2 = ZERO2;
   let zPrev: number | null = null;
+  if (objectZ !== undefined) {
+    // divergentes Bündel vom Objektpunkt: Vergenz an der ersten Fläche (bzw. am Hornhautscheitel)
+    const z0 = lenses.length ? lenses[0].p.frontVertexLocal[2] : 0;
+    const v = -1000 / (z0 - objectZ);
+    L = { a: v, b: 0, c: v };
+    zPrev = z0;
+  }
   const elements: ElementCorrection[] = [];
 
   for (const { el, p } of lenses) {

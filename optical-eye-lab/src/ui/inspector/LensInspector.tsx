@@ -11,7 +11,8 @@ import { useMemo } from 'react';
 import { AlertTriangle, Crosshair, LocateFixed, Ruler } from 'lucide-react';
 import type { LensElement, LensParams, OpticalElement, SurfaceFinish } from '@/model/types';
 import { getElementDefinition, isContactLens } from '@/model/elementRegistry';
-import { CUSTOM_MEDIUM_ID, MEDIA_PRESETS, matchMediumByIndex } from '@/model/media';
+import { CUSTOM_MEDIUM_ID, matchMediumByIndex } from '@/model/media';
+import { MaterialReadouts, MaterialSelect } from './MaterialFields';
 import { resolveLensShape } from '@/model/derived/elementShape';
 import { computeMeasurements } from '@/model/derived/measurements';
 import { entityInfo } from '@/model/derived/infoCards';
@@ -118,23 +119,9 @@ export function LensInspector({ el }: { el: LensElement }) {
   const backR1 = p.backRadius;
   const F2m1 = 1000 * (1 - el.medium.n) / (Math.abs(backR1) > 1e-9 ? backR1 : Infinity);
 
-  const medOptions = [
-    ...MEDIA_PRESETS.map((m) => ({ value: m.id, label: `${m.name} (${formatNumber(m.n, 3)})`, group: m.group })),
-    { value: CUSTOM_MEDIUM_ID, label: 'Benutzerdefiniert', group: 'Sonstige' },
-  ];
-
   const material = (
     <Section title="Material">
-      <SelectField
-        label="Medium"
-        value={el.medium.presetId}
-        disabled={locked}
-        options={medOptions}
-        onChange={(id) => {
-          const m = MEDIA_PRESETS.find((x) => x.id === id);
-          if (m) setKeepRx({}, { presetId: m.id, n: m.n, abbe: m.abbe });
-        }}
-      />
+      <MaterialSelect el={el} disabled={locked} onChange={(m) => setKeepRx({}, m)} />
       <NumberField
         label="Brechungsindex n"
         unit="n"
@@ -147,6 +134,7 @@ export function LensInspector({ el }: { el: LensElement }) {
         hint={mode === 'optical' ? 'Optik-Modus: Die Wirkung bleibt erhalten, die Geometrie wird neu berechnet.' : 'Geometrie-Modus: Die Wirkung ändert sich mit n.'}
         onChange={(n) => setKeepRx({}, { presetId: matchMediumByIndex(n)?.id ?? CUSTOM_MEDIUM_ID, n, abbe: matchMediumByIndex(n)?.abbe })}
       />
+      <MaterialReadouts el={el} thickness={el.lens.centerThickness} />
     </Section>
   );
 

@@ -97,7 +97,7 @@ export function Section({ title, children, defaultOpen = true, right, badge }: {
   );
 }
 
-export function Badge({ children, tone = 'neutral' }: { children: ReactNode; tone?: 'neutral' | 'accent' | 'warn' | 'dev' }) {
+export function Badge({ children, tone = 'neutral' }: { children: ReactNode; tone?: 'neutral' | 'accent' | 'warn' | 'dev' | 'ok' }) {
   return <span className={`badge badge--${tone}`}>{children}</span>;
 }
 

@@ -6,20 +6,20 @@
 import { memo, useEffect, useMemo } from 'react';
 import * as THREE from 'three';
 import type { EyeEntity, LensElement } from '@/model/types';
-import { corneaSpec } from '@/model/derived/effectiveLens';
-import { tearThicknessAt } from '@/model/derived/contactSeat';
-import { sagXY, taboToLocal } from '@/core/math/surfaces';
+import { corneaSagXY, tearThicknessAt } from '@/model/derived/contactSeat';
+import { fluoIntensity } from '@/engine/optics/fluorescein';
+import { taboToLocal } from '@/core/math/surfaces';
 import { DEG2RAD } from '@/core/units';
 
 const DARK = new THREE.Color('#000000');
 const BRIGHT = new THREE.Color('#5fd0ff');
+const FLUO = new THREE.Color('#8dff5a');
 
-export const TearFilmView = memo(function TearFilmView({ el, eye }: { el: LensElement; eye: EyeEntity }) {
+export const TearFilmView = memo(function TearFilmView({ el, eye, fluo = false }: { el: LensElement; eye: EyeEntity; fluo?: boolean }) {
   const geometry = useMemo(() => {
     const c = el.contact!;
     const R = el.lens.diameter / 2;
     const [cx, cy] = taboToLocal(c.centration?.x ?? 0, c.centration?.y ?? 0);
-    const spec = corneaSpec(eye);
     const NR = 18;
     const NA = 72;
     const pos: number[] = [];
@@ -31,7 +31,7 @@ export const TearFilmView = memo(function TearFilmView({ el, eye }: { el: LensEl
       const [lx, ly] = taboToLocal(xt, yt);
       const x = cx + lx;
       const y = cy + ly;
-      pts.push([x, y, sagXY(spec, x, y) - 0.003]);
+      pts.push([x, y, corneaSagXY(eye, x, y) - 0.003]);
       vals.push(Math.max(0, tearThicknessAt(el, eye, xt, yt)));
     };
     add(0, 0);
@@ -44,7 +44,8 @@ export const TearFilmView = memo(function TearFilmView({ el, eye }: { el: LensEl
     const vmax = Math.max(0.01, ...vals);
     pts.forEach((p, k) => {
       pos.push(...p);
-      const cc = DARK.clone().lerp(BRIGHT, Math.min(1, vals[k] / vmax) * 0.9);
+      // Fluo-Ansicht: Intensität aus der Tränenfilmdicke (gleiches Modell wie die 2D-Fluo-Ansicht)
+      const cc = fluo ? DARK.clone().lerp(FLUO, fluoIntensity(vals[k])) : DARK.clone().lerp(BRIGHT, Math.min(1, vals[k] / vmax) * 0.9);
       col.push(cc.r, cc.g, cc.b);
     });
     const v = (i: number, j: number) => 1 + (i - 1) * NA + (j % NA);
@@ -56,13 +57,13 @@ export const TearFilmView = memo(function TearFilmView({ el, eye }: { el: LensEl
     g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
     g.setIndex(idx);
     return g;
-  }, [el, eye]);
+  }, [el, eye, fluo]);
   useEffect(() => () => geometry.dispose(), [geometry]);
   const t = eye.transform;
   return (
     <group position={t.position} rotation={[t.rotation[0] * DEG2RAD, t.rotation[1] * DEG2RAD, t.rotation[2] * DEG2RAD]} raycast={() => null}>
       <mesh geometry={geometry} renderOrder={4} raycast={() => null}>
-        <meshBasicMaterial vertexColors transparent opacity={0.85} blending={THREE.AdditiveBlending} depthWrite={false} side={THREE.DoubleSide} toneMapped={false} />
+        <meshBasicMaterial vertexColors transparent opacity={fluo ? 1 : 0.85} blending={THREE.AdditiveBlending} depthWrite={false} side={THREE.DoubleSide} toneMapped={false} />
       </mesh>
     </group>
   );

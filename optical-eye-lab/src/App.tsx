@@ -13,23 +13,29 @@ import { Dialogs } from './ui/dialogs/Dialogs';
 import { HoverTooltip, MeasurementBar, StatusBar, Toasts } from './ui/overlays/HudOverlays';
 import { useShortcuts } from './ui/useShortcuts';
 import { useAppStore } from './state/store';
+import { WorkbenchBar, WorkbenchDock } from './workbench/Workbench';
 
 export function SimulatorWorkspace({ leading, trailing, banner }: { leading?: ReactNode; trailing?: ReactNode; banner?: ReactNode }) {
   useShortcuts();
   const left = useAppStore((s) => s.leftPanelOpen);
   const right = useAppStore((s) => s.rightPanelOpen);
+  const workbench = useAppStore((s) => s.doc.display.workbench ?? 'free');
+  const collapsed = useAppStore((s) => s.dockCollapsed);
+  const dock = workbench === 'free' ? '' : collapsed ? ' has-dock-collapsed' : ' has-dock';
   return (
-    <div className={`app${left ? ' has-left' : ''}${right ? ' has-right' : ''}`}>
+    <div className={`app${left ? ' has-left' : ''}${right ? ' has-right' : ''}${dock}`}>
       <Viewport />
       <Toolbar leading={leading} trailing={trailing} />
       <div className="stage-overlay">
         <div className="stage-overlay__top">
           {banner}
+          <WorkbenchBar />
           <ViewBar />
         </div>
         <MeasurementBar />
         <Toasts />
       </div>
+      <WorkbenchDock />
       {left && <SceneTree />}
       {right && <Inspector />}
       <StatusBar />

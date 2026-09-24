@@ -1,7 +1,10 @@
 /**
  * Rechte Seitenleiste: kontextabhängiger Inspector.
  */
+import { useState } from 'react';
 import { MousePointerClick, PanelRightClose } from 'lucide-react';
+import { FachPanel } from './FachPanel';
+import { ToolsPanel } from './ToolsPanel';
 import { useAppStore, findEntity } from '@/state/store';
 import { ROOM_ID } from '@/model/types';
 import { TextField } from '../common/fields';
@@ -42,6 +45,7 @@ export function Inspector() {
   const selectedId = useAppStore((s) => s.selectedId);
   const entity = useAppStore((s) => findEntity(s.doc, s.selectedId));
   const togglePanel = useAppStore((s) => s.togglePanel);
+  const [tab, setTab] = useState<'props' | 'fach' | 'tools'>('props');
 
   let body;
   if (selectedId === ROOM_ID) body = <RoomInspector />;
@@ -60,7 +64,20 @@ export function Inspector() {
           <PanelRightClose size={15} />
         </button>
       </header>
-      <div className="panel__scroll">{body}</div>
+      <div className="insp-tabs" role="tablist" aria-label="Inspector-Ansicht">
+        {(
+          [
+            ['props', 'Eigenschaften'],
+            ['fach', 'Fachinfo'],
+            ['tools', 'Werkzeuge'],
+          ] as const
+        ).map(([id, label]) => (
+          <button key={id} type="button" role="tab" aria-selected={tab === id} className={`insp-tab${tab === id ? ' is-active' : ''}`} onClick={() => setTab(id)} data-testid={`insp-tab-${id}`}>
+            {label}
+          </button>
+        ))}
+      </div>
+      <div className="panel__scroll">{tab === 'props' ? body : tab === 'fach' ? <FachPanel /> : <ToolsPanel />}</div>
     </aside>
   );
 }

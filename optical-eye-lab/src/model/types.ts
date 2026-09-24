@@ -16,8 +16,10 @@ export type { Vec3 };
  *  1 – Phase 1
  *  2 – Phase 2: torische Flächen, torische Hornhaut, Refraktionsmodell des Auges,
  *      erweiterte Kontaktlinse (Sitz, Tränenfilm, Zonen), erweiterte Lichtquellen
+ *  3 – Phase 4: Arbeitsbereiche, Skiaskop, Akkommodation/Patient, Hornhaut-Asphärizität,
+ *      Messglas-Rolle, Fluoreszein-Ansicht, Trainingsfälle (alle Felder optional)
  */
-export const SCHEMA_VERSION = 2;
+export const SCHEMA_VERSION = 3;
 
 /* ------------------------------------------------------------------ */
 /* Gemeinsame Bausteine                                                */
@@ -48,7 +50,7 @@ export interface MediumRef {
   presetId: string;
   /** Brechungsindex n_d */
   n: number;
-  /** Abbe-Zahl ν_d – vorbereitet für Dispersion */
+  /** Abbe-Zahl ν_d – Dispersion (Phase 4): n(λ) aus n_d und ν_d (Cauchy-Näherung) */
   abbe?: number;
 }
 
@@ -172,6 +174,13 @@ export interface LensElement extends ElementBase {
   lens: LensParams;
   contact?: ContactLensParams;
   magnifier?: MagnifierParams;
+  /**
+   * Rolle des Glases (Phase 4): 'trial' = Messglas (Refraktion/Skiaskopie-Neutralisation),
+   * wird von den Arbeitsbereichen gesteuert und kann eine prismatische Wirkung tragen.
+   */
+  role?: 'trial';
+  /** Prismatische Wirkung des Messglases [cm/m] mit Basislage (TABO-Grad) – wirkt in der Patientensicht */
+  trialPrism?: { amount: number; base: number };
 }
 
 export interface PrismParams {
@@ -255,12 +264,28 @@ export interface EyeAnatomy {
    */
   corneaFrontRadius2?: number;
   corneaAxis?: number;
+  /**
+   * Asphärizität der Hornhautvorderfläche Q (Phase 4, konische Konstante; 0 = Kugel, typ. −0,26).
+   * Wirkt auf KL-Sitz und Fluoreszein (Tränenfilmgeometrie). Paraxiale Refraktion und Raytracing
+   * rechnen mit dem Scheitelradius (Q ändert paraxial nichts).
+   */
+  corneaAsphericity?: number;
 }
 
 /** Art der Fehlsichtigkeit beim Einstellen einer Refraktion. */
 export type AmetropiaMode = 'auto' | 'axial' | 'refractive';
 
-export type EyeViewMode = 'normal' | 'section';
+export type EyeViewMode = 'normal' | 'section' | 'fluorescein';
+
+/** Patientendaten für Refraktion/Patientensicht (Phase 4) */
+export interface PatientParams {
+  /** Alter [Jahre] – Richtwert für die Akkommodationsbreite */
+  age: number;
+  /** Akkommodation berücksichtigen (Patient stellt aktiv scharf, soweit möglich) */
+  accommodates: boolean;
+  /** Akkommodationsbreite [dpt]; fehlt → aus dem Alter (Hofstetter, Mittelwert) */
+  amplitude?: number;
+}
 
 export interface EyeEntity extends EntityBase {
   entityType: 'eye';
@@ -271,6 +296,8 @@ export interface EyeEntity extends EntityBase {
   physics: PhysicsExtension;
   /** Modell für das Einstellen der Refraktion (Phase 2) */
   ametropiaMode?: AmetropiaMode;
+  /** Patient (Phase 4) */
+  patient?: PatientParams;
 }
 
 /** Anklickbare Teile des Auges – Grundlage für Info-Karten und späteren Lernmodus. */
@@ -285,8 +312,29 @@ export type LightSourceKind = 'parallel' | 'point' | 'line';
 /** Darstellungsart der Strahlenfächer */
 export type RayFanMode = 'principal' | 'vertical' | 'cross';
 
-/** Vorbereitete Geräteklassen (Phase 3+): Lichtquelle mit zusätzlicher Beobachtungsachse. */
+/** Geräteklassen: Lichtquelle mit zusätzlicher Beobachtungsachse. Aktiv ab Phase 4: 'retinoscope'. */
 export type LightDeviceRole = 'none' | 'retinoscope' | 'slit-lamp' | 'ophthalmoscope';
+
+/**
+ * Strichskiaskop (Phase 4). Position/Ausrichtung = transform der Lichtquelle;
+ * Arbeitsabstand und Beobachtungsachse werden daraus abgeleitet.
+ */
+export interface RetinoscopeParams {
+  /** Strichlage (Richtung des Lichtstrichs, TABO-Grad) */
+  streakAxis: number;
+  /** Strichbreite in der Pupillenebene [mm] */
+  streakWidth: number;
+  /** Hülsenstellung: plan (divergent) oder konkav (konvergent, Bewegungen kehren sich um) */
+  sleeve: 'plane' | 'concave';
+  /** Abstand der (virtuellen) Lichtquelle hinter bzw. vor dem Spiegel [mm] */
+  sourceDistance: number;
+  /** Schwenk: Auslenkung des Lichtbands in der Pupillenebene senkrecht zum Strich [mm] */
+  sweep: number;
+  /** Durchmesser des Gucklochs [mm] */
+  peephole: number;
+  /** Relative Leuchtdichte 0…1 */
+  intensity: number;
+}
 
 export interface LightSourceEntity extends EntityBase {
   entityType: 'light';
@@ -314,6 +362,8 @@ export interface LightSourceEntity extends EntityBase {
     /** Beobachtungsachse (lokale Richtung), vorbereitet für Skiaskopie/Ophthalmoskopie */
     observationAxis?: Vec3;
   };
+  /** Skiaskop-Parameter bei deviceRole = 'retinoscope' (Phase 4) */
+  retinoscope?: RetinoscopeParams;
 }
 
 export interface MeasurePointEntity extends EntityBase {
@@ -342,6 +392,38 @@ export interface DisplaySettings {
   /** Maßkette aller Elemente statt nur des ausgewählten */
   showAllDimensions: boolean;
   showRays: boolean;
+  /** Arbeitsbereich, in dem die Simulation geöffnet wird (Phase 4) */
+  workbench?: WorkbenchId;
+}
+
+/** Arbeitsbereiche des Simulators (Phase 4) */
+export type WorkbenchId = 'free' | 'retinoscopy' | 'refraction' | 'patient-view' | 'contact-lens';
+
+/** Sehprobe / Testaufbau der Refraktion (Phase 4) */
+export interface RefractionSetup {
+  /** Prüfentfernung [mm] (Ferne typ. 5000–6000 mm) */
+  testDistance: number;
+  chart: 'landolt' | 'letters' | 'numbers' | 'fan' | 'duochrome' | 'scene';
+  /** Lochblende vor dem Auge (Pupille → pinholeDiameter) */
+  pinhole: boolean;
+  pinholeDiameter: number;
+  /** Jackson-Kreuzzylinder vorgeschaltet */
+  jcc?: { power: number; axis: number; flipped: boolean };
+}
+
+/** Fallbasiertes Training (Phase 4) */
+export interface TrainingCase {
+  id: string;
+  title: string;
+  age: number;
+  complaint: string;
+  /** Werte des Auges werden in der Oberfläche verborgen */
+  hidden: boolean;
+  /** Arbeitsabstand, mit dem das Ergebnis erwartet wird [mm] */
+  workingDistance: number;
+  startedAt: string;
+  /** Abgegebenes Ergebnis (Refraktion am Brillenglas-Scheitel, HSA des Messglases) */
+  submitted?: { sph: number; cyl: number; axis: number; at: string; grossSph?: number };
 }
 
 export interface SceneDocument {
@@ -356,6 +438,10 @@ export interface SceneDocument {
   measurePoints: MeasurePointEntity[];
   environment: EnvironmentSettings;
   display: DisplaySettings;
+  /** Refraktions-Testaufbau (Phase 4, optional) */
+  refraction?: RefractionSetup;
+  /** Trainingsfall (Phase 4, optional) */
+  training?: TrainingCase;
 }
 
 /** Pseudo-ID für den Raum im Szenenbaum. */

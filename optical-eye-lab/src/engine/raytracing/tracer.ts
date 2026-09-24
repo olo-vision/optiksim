@@ -7,6 +7,7 @@ import { add, dot, madd, makeRigid, normalize, scale, sub, toWorldDir, toWorldPo
 import { sceneSolids } from './solids';
 import { buildEyeTraceModel, type EyeTraceModel } from './eyeTracer';
 import { refract } from './refraction';
+import { isReferenceWavelength, LAMBDA_D } from '@/engine/optics/dispersion';
 import type { AstigmaticFocus, FocusAnalysis, Ray, RayPath, RayTermination, SolidHit, TraceResult, TraceSettings, TraceableSolid } from './types';
 
 export const DEFAULT_TRACE_SETTINGS: TraceSettings = {
@@ -268,13 +269,26 @@ const ASTIG_THRESHOLD_MM = 0.01;
 
 export function traceScene(doc: SceneDocument, settings: TraceSettings = DEFAULT_TRACE_SETTINGS): TraceResult {
   const t0 = performance.now();
-  const solids = sceneSolids(doc);
-  const eye = doc.eye.visible ? buildEyeTraceModel(doc.eye) : null;
+  // Phase 4: Dispersion – Körper und Auge je Wellenlänge (d-Linie = Phase-2-Verhalten)
+  // Geräte (Skiaskop) haben eigene Darstellungen und werden hier nicht als Strahlenbündel verfolgt
+  const traced = doc.lights.filter((l) => l.visible && (l.source.deviceRole ?? 'none') === 'none');
+  const principalLambda = traced[0]?.source.wavelength ?? LAMBDA_D;
+  const byLambda = new Map<number, { solids: TraceableSolid[]; eye: EyeTraceModel | null }>();
+  const forLambda = (lam: number) => {
+    const key = isReferenceWavelength(lam) ? LAMBDA_D : Math.round(lam * 10) / 10;
+    let e = byLambda.get(key);
+    if (!e) {
+      e = { solids: sceneSolids(doc, key), eye: doc.eye.visible ? buildEyeTraceModel(doc.eye, key) : null };
+      byLambda.set(key, e);
+    }
+    return e;
+  };
+  const { solids, eye } = forLambda(principalLambda);
   const apex = eye ? eye.apexWorld : toWorldPoint(makeRigid(doc.eye.transform.position, doc.eye.transform.rotation), [0, 0, 0]);
   const stats: Record<RayTermination, number> = { retina: 0, escaped: 0, blocked: 0, absorbed: 0, 'max-steps': 0 };
   const paths: RayPath[] = [];
   let astig: AstigmaticFocus | null = null;
-  const principalSource = doc.lights.find((l) => l.visible);
+  const principalSource = traced[0];
 
   // 1) Meridian-Abtastung (unsichtbare Analysestrahlen) mit der ersten Lichtquelle
   let principal: [number, number] | null = null;
@@ -285,14 +299,14 @@ export function traceScene(doc: SceneDocument, settings: TraceSettings = DEFAULT
   }
 
   // 2) Sichtbare Strahlen
-  for (const src of doc.lights) {
-    if (!src.visible) continue;
+  for (const src of traced) {
     const mode = src.source.fanMode ?? 'principal';
     const fanDirs =
       eye && principal && mode === 'principal' ? [meridianWorld(eye, principal[0]), meridianWorld(eye, principal[1])] : undefined;
     const rays = generateSourceRays(src, apex, fanDirs ?? (mode === 'cross' && eye ? [meridianWorld(eye, 90), meridianWorld(eye, 180)] : undefined));
+    const media = forLambda(src.source.wavelength ?? LAMBDA_D);
     rays.forEach((r, i) => {
-      const res = traceRay(r, solids, eye, settings);
+      const res = traceRay(r, media.solids, media.eye, settings);
       stats[res.termination]++;
       paths.push({ ...res, index: i, sourceId: src.id, color: r.fan === 1 && fanDirs ? SECOND_FAN_COLOR : src.source.color, offset: r.offset, fan: r.fan });
     });

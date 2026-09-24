@@ -11,16 +11,84 @@
  * Tränenraumprofil (Grundlage für Fluoreszein, Phase 3):
  *   d(x, y) = z_Hornhaut(x, y) − z_KL-Rückfläche(x, y)   (entlang der Augenachse, Augen-lokal)
  *   d < 0 bedeutet rechnerische Durchdringung = Auflage (Berührung).
+ *
+ * Phase 4 (Fluoreszein): Die KL-Rückfläche wird zonal ausgewertet – optische Zone (Basiskurve, ggf. torisch)
+ * bis BOZD/2, danach die peripheren Kurven (Kugelzonen mit stetigem Übergang der Pfeilhöhe, ohne Verrundung).
+ * Die Hornhaut kann asphärisch sein (konische Konstante Q, auch torisch als Bikonik mit gleichem Q).
+ * Ohne periphere Kurven und mit Q = 0 ist die Geometrie identisch zu Phase 2.
  */
 import type { EyeEntity, LensElement, OpticalElement, SceneDocument, Vec3 } from '../types';
 import { elementAxialExtent } from './elementShape';
 import { corneaSpec, effectiveLens } from './effectiveLens';
-import { sagGradXY, sagXY, taboToLocal } from '@/core/math/surfaces';
+import { curvature, isToric, localToTabo, sag, sagXY, taboToLocal, type SurfaceSpec } from '@/core/math/surfaces';
 import { eulerDegToMat3, mat3ToEulerDeg, mulMat3, mulMat3TVec, mulMat3Vec, makeRigid, normalize, toWorldPoint } from '@/core/math/vec';
 
 export const DEFAULT_TEAR_INDEX = 1.336;
 
 export const isOnEye = (el: OpticalElement): el is LensElement => el.family === 'lens' && !!el.contact?.onEye;
+
+/**
+ * Pfeilhöhe einer (bi)konischen Fläche mit konischer Konstante Q an lokalem (x, y):
+ *   z = (c_u·u² + c_v·v²) / (1 + √(1 − (1+Q)·(c_u²·u² + c_v²·v²)))
+ */
+export function conicSagXY(spec: SurfaceSpec, Q: number, x: number, y: number): number {
+  if (!Q) return sagXY(spec, x, y);
+  let cu: number;
+  let cv: number;
+  let u: number;
+  let v: number;
+  if (isToric(spec)) {
+    const [xt, yt] = localToTabo(x, y);
+    const th = ((spec.axis ?? 180) * Math.PI) / 180;
+    u = xt * Math.cos(th) + yt * Math.sin(th);
+    v = -xt * Math.sin(th) + yt * Math.cos(th);
+    cu = curvature(spec.R);
+    cv = curvature(spec.R2!);
+  } else {
+    u = Math.hypot(x, y);
+    v = 0;
+    cu = curvature(spec.R);
+    cv = 0;
+  }
+  const num = cu * u * u + cv * v * v;
+  const root = Math.sqrt(Math.max(0, 1 - (1 + Q) * (cu * cu * u * u + cv * cv * v * v)));
+  return num / (1 + root);
+}
+
+/** Hornhautvorderfläche (inkl. Asphärizität) an lokalem (x, y) */
+export function corneaSagXY(eye: EyeEntity, x: number, y: number): number {
+  return conicSagXY(corneaSpec(eye), eye.anatomy.corneaAsphericity ?? 0, x, y);
+}
+
+function corneaGradXY(eye: EyeEntity, x: number, y: number): [number, number] {
+  const h = 1e-5;
+  return [(corneaSagXY(eye, x + h, y) - corneaSagXY(eye, x - h, y)) / (2 * h), (corneaSagXY(eye, x, y + h) - corneaSagXY(eye, x, y - h)) / (2 * h)];
+}
+
+/**
+ * KL-Rückfläche zonal (Linsenrahmen, lokales u, v): optische Zone, dann periphere Kurven.
+ * Übergang: gleiche Pfeilhöhe an der Zonengrenze (Knick, keine Verrundung – vereinfacht).
+ */
+export function contactBackSagXY(el: LensElement, back: SurfaceSpec, u: number, v: number): number {
+  const c = el.contact;
+  const r = Math.hypot(u, v);
+  const pcs = c?.peripheralCurves ?? [];
+  const oz = (c?.opticZoneDiameter ?? 0) / 2;
+  if (!pcs.length || !oz || r <= oz) return sagXY(back, u, v);
+  const dir: [number, number] = r > 0 ? [u / r, v / r] : [1, 0];
+  let z = sagXY(back, dir[0] * oz, dir[1] * oz);
+  let r0 = oz;
+  for (const pc of pcs) {
+    const r1 = r0 + Math.max(0, pc.width);
+    const rr = Math.min(r, r1);
+    z += sag(pc.radius, rr) - sag(pc.radius, r0);
+    if (r <= r1) return z;
+    r0 = r1;
+  }
+  // jenseits aller Kurven: letzte Kurve fortsetzen
+  const last = pcs[pcs.length - 1];
+  return z + sag(last.radius, r) - sag(last.radius, r0);
+}
 
 /**
  * Lokaler Rahmen der aufgesetzten Linse im Augen-Koordinatensystem:
@@ -30,14 +98,13 @@ export const isOnEye = (el: OpticalElement): el is LensElement => el.family === 
 export function seatFrameLocal(el: LensElement, eye: EyeEntity) {
   const c = el.contact!;
   const [lx, ly] = taboToLocal(c.centration?.x ?? 0, c.centration?.y ?? 0);
-  const spec = corneaSpec(eye);
-  const [gx, gy] = sagGradXY(spec, lx, ly);
+  const [gx, gy] = corneaGradXY(eye, lx, ly);
   const m = normalize([-gx, -gy, 1]);
   const autoTilt = eulerDegToMat3((Math.atan2(-m[1], m[2]) * 180) / Math.PI, (Math.asin(Math.max(-1, Math.min(1, m[0]))) * 180) / Math.PI, 0);
   const userTilt = eulerDegToMat3(c.tilt?.x ?? 0, c.tilt?.y ?? 0, 0);
   const rot = mulMat3(autoTilt, userTilt);
   const axis = mulMat3Vec(rot, [0, 0, 1]);
-  const surface: Vec3 = [lx, ly, sagXY(spec, lx, ly)];
+  const surface: Vec3 = [lx, ly, corneaSagXY(eye, lx, ly)];
   const backVertex: Vec3 = [surface[0] - axis[0] * c.tearFilmThickness, surface[1] - axis[1] * c.tearFilmThickness, surface[2] - axis[2] * c.tearFilmThickness];
   return { rot, axis, backVertex };
 }
@@ -99,7 +166,7 @@ export function tearThicknessAt(el: LensElement, eye: EyeEntity, xt: number, yt:
   let v = dy;
   let p: Vec3 = [0, 0, 0];
   for (let i = 0; i < 6; i++) {
-    const pl: Vec3 = [u, v, sagXY(back, u, v)];
+    const pl: Vec3 = [u, v, contactBackSagXY(el, back, u, v)];
     const r = mulMat3Vec(f.rot, pl);
     p = [f.backVertex[0] + r[0], f.backVertex[1] + r[1], f.backVertex[2] + r[2]];
     const ex = qx - p[0];
@@ -109,7 +176,7 @@ export function tearThicknessAt(el: LensElement, eye: EyeEntity, xt: number, yt:
     u += corr[0];
     v += corr[1];
   }
-  return sagXY(corneaSpec(eye), qx, qy) - p[2];
+  return corneaSagXY(eye, qx, qy) - p[2];
 }
 
 export function computeTearProfile(el: LensElement, eye: EyeEntity, N = 24): TearProfile {

@@ -8,6 +8,7 @@ import { entityInfo } from '@/model/derived/infoCards';
 import { formatNumber, formatValue } from '@/core/units';
 import { useAppStore } from '@/state/store';
 import { useTraceResultStore } from '@/scene/overlays/traceResultStore';
+import { SPECTRAL_LINES, wavelengthToHex } from '@/engine/optics/dispersion';
 import { Badge, Section } from '../common/controls';
 import { ColorField, NumberField, ReadoutRow, SelectField, ToggleField } from '../common/fields';
 import { InfoCardView, InspectorHeader, TransformSection } from './shared';
@@ -19,6 +20,7 @@ export function LightInspector({ light }: { light: LightSourceEntity }) {
   const showRays = useAppStore((s) => s.doc.display.showRays);
   const setDocField = useAppStore((s) => s.setDocField);
   const result = useTraceResultStore((s) => s.result);
+  const expert = useAppStore((s) => s.prefs.expertMode);
   const src = light.source;
   const set = (patch: Partial<LightSourceEntity['source']>) => updateEntity(light.id, (e) => ({ ...e, source: { ...(e as LightSourceEntity).source, ...patch } }) as LightSourceEntity);
   const eyeApex = useAppStore((s) => s.doc.eye.transform.position);
@@ -54,21 +56,41 @@ export function LightInspector({ light }: { light: LightSourceEntity }) {
         <NumberField label="Strahlen je Schnitt" unit="none" step={1} decimals={0} min={1} max={61} value={src.rayCount} onChange={(v) => set({ rayCount: Math.round(v) })} />
         <ToggleField label="Sagittalschnitt zusätzlich" value={src.sagittal} onChange={(v) => set({ sagittal: v })} />
         <ColorField label="Strahlfarbe" value={src.color} onChange={(v) => set({ color: v })} />
-        <NumberField label="Wellenlänge" unit="none" step={1} decimals={1} min={380} max={780} value={src.wavelength} hint="Parameter vorbereitet – Dispersion ist noch nicht aktiv (n gilt für die d-Linie)." onChange={(v) => set({ wavelength: v })} />
+        <NumberField label="Wellenlänge [nm]" unit="none" step={1} decimals={1} min={380} max={780} value={src.wavelength} hint="Dispersion aktiv: Glas- und Augenmedien werden aus der Abbe-Zahl für diese Wellenlänge berechnet (d-Linie 587,6 nm = Referenz)." onChange={(v) => set({ wavelength: v, color: wavelengthToHex(v) })} />
+        <SelectField
+          label="Spektrallinie"
+          value={SPECTRAL_LINES.find((l) => Math.abs(l.nm - src.wavelength) < 0.6)?.id ?? ''}
+          options={[{ value: '', label: '—' }, ...SPECTRAL_LINES.map((l) => ({ value: l.id, label: l.label }))]}
+          onChange={(id) => {
+            const l = SPECTRAL_LINES.find((x) => x.id === id);
+            if (l) set({ wavelength: l.nm, color: id === 'd' ? '#ffd27a' : wavelengthToHex(l.nm) });
+          }}
+        />
         <ToggleField label="Strahlengang anzeigen" value={showRays} onChange={(v) => setDocField('display', { showRays: v })} />
       </Section>
+      {src.deviceRole === 'retinoscope' && (
+        <Section title="Skiaskop" badge={<Badge tone="accent">Gerät</Badge>}>
+          <ReadoutRow label="Arbeitsabstand" value={formatValue(workingDistance, 'mm', 1)} />
+          <ReadoutRow label="Strichlage" value={`${formatNumber(light.retinoscope?.streakAxis ?? 90, 0)}°`} />
+          <ReadoutRow label="Spiegel" value={light.retinoscope?.sleeve === 'concave' ? 'Konkav' : 'Plan'} />
+          <button type="button" className="btn" style={{ margin: '4px 0' }} onClick={() => useAppStore.getState().setWorkbench('retinoscopy')}>
+            Arbeitsbereich Skiaskopie öffnen
+          </button>
+          <p className="insp-hint">Das Skiaskop wird nicht als Strahlenbündel verfolgt; der Reflex wird im Arbeitsbereich aus der Vergenzrechnung bestimmt.</p>
+        </Section>
+      )}
       <Section title="Gerät & Beleuchtung" defaultOpen={false} badge={<Badge tone="dev">vorbereitet</Badge>}>
         <ReadoutRow label="Arbeitsabstand zum Hornhautscheitel" value={formatValue(workingDistance, 'mm', 1)} />
         <NumberField label="Intensität" unit="pct" step={5} decimals={0} min={0} max={100} value={(src.intensity ?? 1) * 100} onChange={(v) => set({ intensity: v / 100 })} />
         <NumberField label="Vergenz des Bündels" unit="dpt" step={0.25} decimals={2} min={-20} max={20} value={src.vergence ?? 0} hint="Vorbereitet für Skiaskop (Plan-/Konkavspiegel); wirkt noch nicht auf die Strahlen." onChange={(v) => set({ vergence: v })} />
-        <ReadoutRow label="Linienlichtquelle / Skiaskop / Spaltlampe" value="In Entwicklung" />
-        <p className="insp-hint">Datenmodell für Arbeitsabstand, Lichtform, Apertur, Wellenlänge, Intensität und Beobachtungsachse ist angelegt (Phase 3: Skiaskopie).</p>
+        <ReadoutRow label="Spaltlampe / Ophthalmoskop" value="In Entwicklung" />
+        <p className="insp-hint">Skiaskop: über „Optisches Element → Untersuchungsgeräte“ oder den Arbeitsbereich Skiaskopie.</p>
       </Section>
       <TransformSection entity={light}>
         <p className="insp-hint">Die Strahlen verlassen die Quelle entlang ihrer lokalen +Z-Achse.</p>
       </TransformSection>
       {showRays && result && (
-        <Section title="Ergebnis">
+        <Section title="Ergebnis" defaultOpen={expert}>
           <ReadoutRow label="Strahlen gesamt" value={String(mine.length)} />
           <ReadoutRow label="Treffen die Retina" value={String(count('retina'))} tone="accent" />
           <ReadoutRow label="Blockiert (Iris/Rand)" value={String(count('blocked'))} />

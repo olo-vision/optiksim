@@ -16,6 +16,7 @@ export function ViewBar() {
   const setDocField = useAppStore((s) => s.setDocField);
   const updateEntity = useAppStore((s) => s.updateEntity);
   const hasSelection = useAppStore((s) => !!s.selectedId);
+  const hasOnEyeLens = useAppStore((s) => s.doc.elements.some((e) => e.family === 'lens' && !!e.contact?.onEye && e.visible));
 
   return (
     <div className="viewbar">
@@ -53,6 +54,7 @@ export function ViewBar() {
         options={[
           { value: 'normal', label: 'Normal', tip: 'Äußere Ansicht des Auges' },
           { value: 'section', label: 'Schnitt', tip: 'Halbschnitt mit Beschriftung  ·  X' },
+          ...(hasOnEyeLens || viewMode === 'fluorescein' ? [{ value: 'fluorescein' as const, label: 'Fluo', tip: 'Fluoreszeinbild auf dem Auge (Kobaltblau)' }] : []),
         ]}
       />
       <div className="viewbar__sep" />

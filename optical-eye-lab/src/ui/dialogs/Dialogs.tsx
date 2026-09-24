@@ -85,7 +85,7 @@ function SettingsDialog() {
                 <strong>{m.title}</strong>
                 <small>{m.description}</small>
               </span>
-              {m.status === 'preview' ? <Badge tone="accent">Vorschau</Badge> : <Badge tone="dev">In Entwicklung</Badge>}
+              {m.status === 'active' ? <Badge tone="ok">Aktiv</Badge> : m.status === 'preview' ? <Badge tone="accent">Vorschau</Badge> : <Badge tone="dev">In Entwicklung</Badge>}
             </li>
           ))}
         </ul>

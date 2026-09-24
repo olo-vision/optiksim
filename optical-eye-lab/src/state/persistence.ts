@@ -50,6 +50,20 @@ export function migrateV1toV2(doc: SceneDocument): SceneDocument {
   };
 }
 
+/**
+ * v2 → v3 (Phase 4): alle neuen Felder sind optional; bestehende Szenen behalten ihr Verhalten.
+ *  - Arbeitsbereich 'free', Augenansicht unverändert
+ *  - Wellenlänge der Lichtquellen bleibt (Dispersion wirkt nur bei Abweichung von der d-Linie
+ *    und bei Medien mit Abbe-Zahl – Phase-2-Szenen verwenden 587,6 nm)
+ */
+export function migrateV2toV3(doc: SceneDocument): SceneDocument {
+  return {
+    ...doc,
+    schemaVersion: SCHEMA_VERSION,
+    display: { ...doc.display, workbench: doc.display.workbench ?? 'free' },
+  };
+}
+
 const KEY_SCENES = 'optical-eye-lab.scenes.v1';
 const KEY_AUTOSAVE = 'optical-eye-lab.autosave.v1';
 const KEY_PREFS = 'optical-eye-lab.prefs.v1';
@@ -100,8 +114,11 @@ export function migrateDocument(raw: unknown): SceneDocument | null {
     environment: { ...base.environment, ...(r.environment ?? {}) },
     display: { ...base.display, ...(r.display ?? {}) },
   };
-  if ((r.schemaVersion ?? 1) < 2) return applyConstraints(migrateV1toV2(doc));
-  return applyConstraints(doc);
+  const v = r.schemaVersion ?? 1;
+  let out = doc;
+  if (v < 2) out = migrateV1toV2(out);
+  if (v < 3) out = migrateV2toV3(out);
+  return applyConstraints(out);
 }
 
 function readRecords(): SavedSceneRecord[] {

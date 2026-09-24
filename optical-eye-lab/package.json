@@ -1,7 +1,7 @@
 {
   "name": "optical-eye-lab",
   "private": true,
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "Optical Eye Lab – interaktive 3D-Simulationsumgebung für Augenoptik (Phase 1: Grundsystem)",
   "type": "module",
   "scripts": {
@@ -10,7 +10,7 @@
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "test:e2e": "node tests/e2e/phase1.e2e.mjs && node tests/e2e/phase2.e2e.mjs && node tests/e2e/smoke.e2e.mjs && node tests/e2e/phase3.e2e.mjs"
+    "test:e2e": "node tests/e2e/phase1.e2e.mjs && node tests/e2e/phase2.e2e.mjs && node tests/e2e/smoke.e2e.mjs && node tests/e2e/phase3.e2e.mjs && node tests/e2e/phase4.e2e.mjs"
   },
   "dependencies": {
     "@react-three/drei": "^10.7.8",
