@@ -1,10 +1,10 @@
 /**
  * Einstellungen, gespeicherte Szenen, Tastenkürzel.
  */
-import { useState } from 'react';
-import { FolderOpen, Trash2 } from 'lucide-react';
+import { useNavigate } from 'react-router';
+import { ArrowRight } from 'lucide-react';
 import { useAppStore } from '@/state/store';
-import { deleteSavedScene, listSavedScenes, type QualityLevel } from '@/state/persistence';
+import { type QualityLevel } from '@/state/persistence';
 import { MODULES } from '@/modules/registry';
 import { Dialog } from '../common/overlays';
 import { Badge, Kbd, Section, Segmented } from '../common/controls';
@@ -17,8 +17,27 @@ function SettingsDialog() {
   const prefs = useAppStore((s) => s.prefs);
   const setPrefs = useAppStore((s) => s.setPrefs);
   const close = () => useAppStore.getState().openDialog(null);
+  const navigate = useNavigate();
   return (
-    <Dialog title="Einstellungen" subtitle="Programmeinstellungen werden lokal im Browser gespeichert." onClose={close} width={560}>
+    <Dialog
+      title="Schnelleinstellungen"
+      subtitle="Gelten für dein Konto und werden lokal gespeichert."
+      onClose={close}
+      width={560}
+      footer={
+        <button
+          type="button"
+          className="btn"
+          onClick={() => {
+            close();
+            navigate('/settings');
+          }}
+        >
+          <span>Alle Einstellungen</span>
+          <ArrowRight size={14} />
+        </button>
+      }
+    >
       <Section title="Darstellung">
         <div className="field">
           <span className="field__label">Qualität</span>
@@ -75,52 +94,6 @@ function SettingsDialog() {
   );
 }
 
-function LoadDialog() {
-  const [items, setItems] = useState(listSavedScenes);
-  const loadSaved = useAppStore((s) => s.loadSaved);
-  const currentId = useAppStore((s) => s.doc.id);
-  const close = () => useAppStore.getState().openDialog(null);
-  const fmt = new Intl.DateTimeFormat('de-DE', { dateStyle: 'medium', timeStyle: 'short' });
-  return (
-    <Dialog title="Gespeicherte Szenen" subtitle="Lokal in diesem Browser gespeichert." onClose={close} width={560}>
-      {items.length === 0 ? (
-        <div className="insp-empty">
-          <FolderOpen size={24} strokeWidth={1.4} />
-          <p className="insp-empty__title">Noch keine gespeicherten Szenen</p>
-          <p className="insp-empty__text">
-            Über das Szenenmenü oder <Kbd>{MOD}</Kbd> + <Kbd>S</Kbd> speichern.
-          </p>
-        </div>
-      ) : (
-        <ul className="saved-list">
-          {items.map((it) => (
-            <li key={it.id} className={it.id === currentId ? 'is-current' : ''}>
-              <button type="button" className="saved-list__main" onClick={() => loadSaved(it.id)}>
-                <span className="saved-list__name">{it.name}</span>
-                <span className="saved-list__meta">
-                  {fmt.format(new Date(it.savedAt))} · {it.elementCount} Element{it.elementCount === 1 ? '' : 'e'}
-                  {it.id === currentId ? ' · aktuell geöffnet' : ''}
-                </span>
-              </button>
-              <button
-                type="button"
-                className="tree-act"
-                data-tip="Gespeicherte Szene löschen"
-                onClick={() => {
-                  deleteSavedScene(it.id);
-                  setItems(listSavedScenes());
-                }}
-              >
-                <Trash2 size={14} />
-              </button>
-            </li>
-          ))}
-        </ul>
-      )}
-    </Dialog>
-  );
-}
-
 const SHORTCUTS: Array<[string, string[]]> = [
   ['Auswahl / Verschieben / Drehen', ['Q', 'W', 'E']],
   ['Einrasten umschalten (halten: invertieren)', ['S', '⇧']],
@@ -130,7 +103,8 @@ const SHORTCUTS: Array<[string, string[]]> = [
   ['Löschen', ['Entf']],
   ['Rückgängig / Wiederholen', [MOD, 'Z', '⇧']],
   ['Speichern', [MOD, 'S']],
-  ['Gespeicherte Szenen', [MOD, 'O']],
+  ['Speichern unter …', [MOD, '⇧', 'S']],
+  ['Meine Simulationen', [MOD, 'O']],
   ['Auswahl fokussieren', ['F']],
   ['Auge fokussieren / Szene fokussieren', ['G', 'H']],
   ['Kamera zurücksetzen', ['Pos1']],
@@ -178,8 +152,6 @@ export function Dialogs() {
       return <AddElementDialog />;
     case 'settings':
       return <SettingsDialog />;
-    case 'load':
-      return <LoadDialog />;
     case 'shortcuts':
       return <ShortcutsDialog />;
     default:

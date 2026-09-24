@@ -11,6 +11,7 @@ import { computeMeasurements } from '@/model/derived/measurements';
 import { computeCorrection, formatRx } from '@/engine/physics';
 import { formatNumber, formatValue } from '@/core/units';
 import { ElementGlyph, EyeGlyph } from '../common/ElementGlyph';
+import { SaveStatus } from '../toolbar/SaveStatus';
 
 export function HoverTooltip() {
   const target = useHoverStore((s) => s.target);
@@ -114,7 +115,6 @@ export function StatusBar() {
   const space = useAppStore((s) => s.transformSpace);
   const projection = useAppStore((s) => s.projection);
   const quality = useAppStore((s) => s.prefs.quality);
-  const dirty = useAppStore((s) => s.dirty);
   const entity = useAppStore((s) => findEntity(s.doc, s.selectedId));
   const leftOpen = useAppStore((s) => s.leftPanelOpen);
   const rightOpen = useAppStore((s) => s.rightPanelOpen);
@@ -152,9 +152,7 @@ export function StatusBar() {
         <span className="statusbar__dot" />
         <span>Qualität: {quality === 'high' ? 'Hoch' : quality === 'balanced' ? 'Ausgewogen' : 'Leistung'}</span>
         <span className="statusbar__dot" />
-        <span className={dirty ? 'is-warn' : 'is-ok'} data-tip="Bezogen auf den zuletzt gespeicherten/geladenen Stand. Der Arbeitsstand wird zusätzlich automatisch im Browser gesichert." data-tip-side="top">
-          {dirty ? 'Ungespeicherte Änderungen' : 'Keine Änderungen'}
-        </span>
+        <SaveStatus compact />
         <span className="statusbar__dot" />
         <span className="statusbar__muted">1 Einheit = 1 mm</span>
         {!rightOpen && (

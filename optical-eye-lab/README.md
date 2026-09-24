@@ -1,6 +1,6 @@
 # Optical Eye Lab
 
-Interaktive 3D-Simulationsumgebung für Augenoptik – **Phase 2: Fehlsichtigkeit, Sph/Cyl/Achse, torische Optik, Tränenlinse** (Details: [docs/PHASE2.md](docs/PHASE2.md)).
+Interaktive 3D-Simulationsumgebung für Augenoptik – **Phase 3: vollwertige Anwendung** mit Anmeldung, Dashboard, Simulationsbibliothek, Vorlagen, Einstellungen und Administration (Details: [docs/PHASE3.md](docs/PHASE3.md), Optik/Physik: [docs/PHASE2.md](docs/PHASE2.md)).
 
 Ein virtuelles optisches Labor mit parametrischem Modellauge (Le Grand), frei platzierbaren optischen Elementen, CAD-Bedienung, Bemaßung, optischer Achse, Inspector und lokalem Speichern. Die Architektur ist auf spätere Module (Fehlsichtigkeit, Kontaktlinsensitz, Skiaskopie, Lernmodus …) vorbereitet.
 
@@ -22,10 +22,14 @@ Weitere Befehle:
 | `npm run build` | Typprüfung + Produktions-Build nach `dist/` |
 | `npm run preview` | Produktions-Build lokal ansehen |
 | `npm run typecheck` | Nur TypeScript prüfen |
-| `npm test` | Unit-Tests der Optik- und Raytracing-Engine |
+| `npm test` | Unit-Tests (Optik, Raytracing, Plattform: Konten, Bibliothek, Migration …) |
 | `npm run test:e2e` | Browser-Tests (Dev-Server muss laufen; einmalig `npx playwright install chromium`) |
 
-Alles läuft lokal – kein Backend, kein Login, keine externen Dienste.
+Alles läuft lokal – kein Backend, keine externen Dienste. Die Anmeldung ist eine **lokale Produkt-Demo ohne echte Kontosicherheit**; Konten und Simulationen liegen nur im Browser.
+
+**Erster Start:** „Konto erstellen“ (das erste Konto wird Administrator/in), „Demo starten“ (Gastzugang) oder Demo-Trainer `demo@opticaleyelab.local` / `demo`. Daten aus Phase 1/2 werden automatisch übernommen (Tag „Übernommen“).
+
+**Netlify:** `public/_redirects` sorgt dafür, dass alle Adressen (`/dashboard`, `/simulations/…`) neu geladen werden können.
 
 ---
 
@@ -43,7 +47,7 @@ Alles läuft lokal – kein Backend, kein Login, keine externen Dienste.
 
 **Wichtige Tasten** (vollständige Liste über das Tastatur-Symbol oben rechts oder `?`)
 
-`Q` Auswahl · `W` Verschieben · `E` Drehen · `S` Einrasten · `L` Welt/Lokal · `A` Element hinzufügen · `F` Auswahl fokussieren · `G` Auge fokussieren · `H` Szene fokussieren · `1`/`3`/`7` Front/Seite/Oben · `5` Perspektive ↔ Ortho · `X` Normal ↔ Schnitt · `M` Bemaßung · `T` Strahlengang · `Leertaste` Strahlengang live/pausiert · `⌘/Strg+Z` Rückgängig · `⌘/Strg+S` Speichern · `Entf` Löschen
+`Q` Auswahl · `W` Verschieben · `E` Drehen · `S` Einrasten · `L` Welt/Lokal · `A` Element hinzufügen · `F` Auswahl fokussieren · `G` Auge fokussieren · `H` Szene fokussieren · `1`/`3`/`7` Front/Seite/Oben · `5` Perspektive ↔ Ortho · `X` Normal ↔ Schnitt · `M` Bemaßung · `T` Strahlengang · `Leertaste` Strahlengang live/pausiert · `⌘/Strg+Z` Rückgängig · `⌘/Strg+S` Speichern · `⌘/Strg+⇧+S` Speichern unter · `⌘/Strg+O` Meine Simulationen · `Entf` Löschen
 
 ---
 

@@ -44,9 +44,24 @@ export interface MenuItem {
   description?: string;
   separator?: boolean;
   heading?: boolean;
+  danger?: boolean;
 }
 
-export function Menu({ trigger, items, align = 'left', width = 260 }: { trigger: (open: boolean) => ReactNode; items: MenuItem[]; align?: 'left' | 'right'; width?: number }) {
+export function Menu({
+  trigger,
+  items,
+  align = 'left',
+  width = 260,
+  direction = 'down',
+  label,
+}: {
+  trigger: (open: boolean) => ReactNode;
+  items: MenuItem[];
+  align?: 'left' | 'right';
+  width?: number;
+  direction?: 'down' | 'up';
+  label?: string;
+}) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -66,7 +81,7 @@ export function Menu({ trigger, items, align = 'left', width = 260 }: { trigger:
     <div className="menu" ref={ref}>
       <div onClick={() => setOpen(!open)}>{trigger(open)}</div>
       {open && (
-        <div className={`menu__popover menu__popover--${align}`} style={{ width }} role="menu">
+        <div className={`menu__popover menu__popover--${align}${direction === 'up' ? ' menu__popover--up' : ''}`} style={{ width }} role="menu" aria-label={label}>
           {items.map((it, i) =>
             it.separator ? (
               <div key={i} className="menu__separator" />
@@ -79,7 +94,7 @@ export function Menu({ trigger, items, align = 'left', width = 260 }: { trigger:
                 key={i}
                 type="button"
                 role="menuitem"
-                className="menu__item"
+                className={`menu__item${it.danger ? ' menu__item--danger' : ''}`}
                 disabled={it.disabled}
                 onClick={() => {
                   setOpen(false);

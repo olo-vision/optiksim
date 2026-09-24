@@ -1,5 +1,6 @@
 import { chromium } from 'playwright-core';
 import { mkdirSync } from 'node:fs';
+import { startFresh } from './helpers.mjs';
 // Aufruf: Dev-Server starten (npm run dev), dann `npm run test:e2e`.
 // Optional: E2E_URL, E2E_OUT (Screenshot-Ordner), CHROMIUM_PATH (eigener Chromium ohne GPU).
 mkdirSync(process.env.E2E_OUT ?? './e2e-screenshots/', { recursive: true });
@@ -8,10 +9,7 @@ const page = await browser.newPage({ viewport: { width: 1440, height: 880 } });
 const logs = [];
 page.on('console', (m) => { if (['error','warning'].includes(m.type()) && !m.text().includes('THREE.Clock')) logs.push(`[${m.type()}] ${m.text().slice(0,300)}`); });
 page.on('pageerror', (e) => logs.push(`[pageerror] ${e.message}`));
-await page.goto(process.env.E2E_URL ?? 'http://127.0.0.1:5173/');
-await page.evaluate(() => { localStorage.clear(); localStorage.setItem('optical-eye-lab.prefs.v1', JSON.stringify({ quality: 'performance' })); });
-await page.reload();
-await page.waitForTimeout(5000);
+await startFresh(page, 'tpl-toric-spectacle');
 const out = [];
 // alle Elementarten hinzufügen und jeweils Inspector rendern
 const kinds = ['converging-lens','diverging-lens','plano-convex','plano-concave','biconvex','biconcave','custom-lens','spectacle-lens','contact-lens','rigid-contact-lens','soft-contact-lens','prism','plane-plate','magnifier','custom-medium'];
@@ -55,7 +53,7 @@ await page.waitForTimeout(400);
 const st = await page.evaluate(() => { const s = window.__oel.getState(); return { n: s.doc.elements.length, first: s.doc.elements[0] }; });
 out.push(`dup/lock/hide: n=${st.n} locked=${st.first.locked} visible=${st.first.visible}`);
 // Dialoge
-for (const d of ['settings', 'shortcuts', 'load', 'add-element']) {
+for (const d of ['settings', 'shortcuts', 'add-element']) {
   await page.evaluate((d) => window.__oel.getState().openDialog(d), d);
   await page.waitForTimeout(300);
   out.push(`dialog ${d}: ${await page.textContent('.dialog__title')}`);
@@ -69,7 +67,7 @@ await page.waitForTimeout(4000);
 const after = await page.evaluate(() => window.__oelProject('eye'));
 out.push(`camera kept after quality switch: ${Math.hypot(before.x-after.x, before.y-after.y) < 5}`);
 // Menü
-await page.click('.toolbar__menu-btn');
+await page.click('.sim-nav .toolbar__menu-btn');
 await page.waitForTimeout(300);
 out.push('menu items: ' + await page.locator('.menu__item').count());
 await page.keyboard.press('Escape');

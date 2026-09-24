@@ -8,7 +8,7 @@ import { applyConstraints, tearThicknessForBearing } from '@/model/derived/conta
 import { solveEyeForRefraction } from '@/engine/physics/eyeRefraction';
 import { designLensForRx } from '@/engine/physics/lensOptics';
 import { computeCorrection } from '@/engine/physics/correction';
-import { effectivityMatrix, matrixToRx, rxToMatrix, type Rx } from '@/core/math/powerMatrix';
+import { effectivityMatrix, madd2, matrixToRx, rxToMatrix, type Rx } from '@/core/math/powerMatrix';
 
 export interface ScenePreset {
   id: string;
@@ -116,6 +116,41 @@ export const SCENE_PRESETS: ScenePreset[] = [
       doc = applyConstraints({ ...doc, elements: [cl] });
       doc.eye.viewMode = 'section';
       return withLight(doc, 60, 5);
+    },
+  },
+  {
+    id: 'toric-contact',
+    name: 'Astigmatismus + torische Kontaktlinse',
+    description: 'Hornhautastigmatismus −2,00 / −1,50 A 180°, korrigiert durch eine weiche torische KL (angeschmiegt, Tränenfilm aktiv).',
+    build: () => {
+      const target: Rx = { sph: -2, cyl: -1.5, axis: 180 };
+      let doc = eyeScene('Astigmatismus + torische Kontaktlinse', target, 'refractive');
+      let cl = createElement('soft-contact-lens', doc) as LensElement;
+      let rx = target;
+      cl = { ...cl, lens: designLensForRx(cl, rx).lens };
+      // Wirkung nachführen, bis KL + Tränenfilm am Hornhautscheitel die Refraktion ausgleichen
+      for (let i = 0; i < 4; i++) {
+        const res = computeCorrection(applyConstraints({ ...doc, elements: [cl] })).residualMatrix;
+        rx = matrixToRx(madd2(rxToMatrix(rx), res), 'minus', target.axis);
+        cl = { ...cl, lens: designLensForRx(cl, rx).lens };
+      }
+      doc = applyConstraints({ ...doc, elements: [cl] });
+      doc.eye.viewMode = 'section';
+      return withLight(doc, 60, 5, 11);
+    },
+  },
+  {
+    id: 'optical-bench',
+    name: 'Freie optische Bank',
+    description: 'Emmetropes Auge auf der optischen Bank mit Lichtquelle und einer Sammellinse – zum freien Experimentieren.',
+    build: () => {
+      let doc = createEmptyScene('Freie optische Bank');
+      doc.environment = { ...doc.environment, showBench: true };
+      doc.elements = [createElement('converging-lens', doc, 120)];
+      doc = withLight(doc, 260, 8, 9);
+      doc.display.showRays = true;
+      doc.display.showAllDimensions = true;
+      return doc;
     },
   },
   {

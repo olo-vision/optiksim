@@ -19,20 +19,40 @@ import { EYE_ID, ROOM_ID } from '@/model/types';
 import { cloneElement, createElement, createEmptyScene, createLightSource, createMeasurePoint, worldToEyeLocal } from '@/model/sceneFactory';
 import { applyConstraints, isOnEye } from '@/model/derived/contactSeat';
 import { buildPreset, DEFAULT_PRESET_ID } from './presets';
-import {
-  DEFAULT_PREFS,
-  readAutosave,
-  readPrefs,
-  saveScene as persistScene,
-  loadScene as readScene,
-  writeAutosave,
-  writePrefs,
-  type Preferences,
-} from './persistence';
+import { DEFAULT_USER_PREFS, type UserPreferences } from '@/platform/preferences';
+
+/**
+ * Anbindung an die Plattform (Phase 3). Der Simulator kennt weder Benutzer noch Bibliothek;
+ * die umgebende App injiziert Speichern, Entwurfssicherung und Einstellungs-Persistenz.
+ */
+export interface StoreHooks {
+  /** Speichert das Dokument in die Bibliothek; true bei Erfolg */
+  save?: (doc: SceneDocument) => Promise<boolean>;
+  /** Absturzsicherung: ungespeicherten Stand zwischenspeichern */
+  writeDraft?: (doc: SceneDocument) => void;
+  persistPrefs?: (prefs: UserPreferences) => void;
+}
+let hooks: StoreHooks = {};
+/** Ergänzt/ersetzt einzelne Hooks (undefined entfernt einen Hook). */
+export function configureStoreHooks(h: Partial<StoreHooks>) {
+  hooks = { ...hooks, ...h };
+}
+
+/** Aktionen der umgebenden Anwendung (Breadcrumb/Menü des Simulators) */
+export interface ShellActions {
+  saveAs: () => void;
+  duplicate: () => void;
+  saveAsTemplate: () => void;
+  exportFile: () => void;
+  importFile: () => void;
+  close: () => void;
+  openLibrary: () => void;
+  rename: () => void;
+}
 
 export type ToolMode = 'select' | 'translate' | 'rotate';
 export type Projection = 'perspective' | 'orthographic';
-export type DialogId = 'add-element' | 'settings' | 'load' | 'shortcuts' | null;
+export type DialogId = 'add-element' | 'settings' | 'shortcuts' | null;
 
 export type CameraCommand =
   | { type: 'reset' }
@@ -73,7 +93,15 @@ interface AppState {
   rightPanelOpen: boolean;
   dialog: DialogId;
   toasts: Toast[];
-  prefs: Preferences;
+  prefs: UserPreferences;
+
+  /* --- Plattform (Phase 3) --- */
+  /** ID der geöffneten Bibliothekssimulation */
+  simId: string | null;
+  /** Zeitpunkt der letzten erfolgreichen Speicherung (ms) */
+  savedAt: number | null;
+  saving: boolean;
+  shell: ShellActions | null;
 
   /* --- Dokument --- */
   commit: (mutate: (doc: SceneDocument) => SceneDocument) => void;
@@ -98,9 +126,11 @@ interface AppState {
   newScene: () => void;
   loadPreset: (id: string) => void;
   loadDocument: (doc: SceneDocument, message?: string) => void;
-  saveCurrent: () => void;
-  loadSaved: (id: string) => void;
+  saveCurrent: (opts?: { silent?: boolean }) => Promise<boolean>;
   resetScene: () => void;
+  /** Öffnet eine Bibliothekssimulation im Simulator (setzt Verlauf und Baseline zurück) */
+  openSimulation: (simId: string, doc: SceneDocument, savedAt: number | null) => void;
+  applyUserPrefs: (prefs: UserPreferences) => void;
 
   /* --- Auswahl & Werkzeuge --- */
   select: (id: string | null, eyePart?: EyePartId | null) => void;
@@ -116,7 +146,7 @@ interface AppState {
   openDialog: (d: DialogId) => void;
   notify: (message: string, tone?: Toast['tone']) => void;
   dismissToast: (id: number) => void;
-  setPrefs: (p: Partial<Preferences>) => void;
+  setPrefs: (p: Partial<UserPreferences>) => void;
 }
 
 /* ------------------------------------------------------------------ */
@@ -137,8 +167,6 @@ export function findEntity(doc: SceneDocument, id: string | null): SceneEntity |
 }
 
 function initialState(): { doc: SceneDocument; baseline: SceneDocument } {
-  const auto = typeof window !== 'undefined' ? readAutosave() : null;
-  if (auto) return { doc: auto.doc, baseline: auto.baseline ?? auto.doc };
   const doc = buildPreset(DEFAULT_PRESET_ID);
   return { doc, baseline: doc };
 }
@@ -170,7 +198,12 @@ export const useAppStore = create<AppState>()((set, get) => ({
   rightPanelOpen: true,
   dialog: null,
   toasts: [],
-  prefs: typeof window !== 'undefined' ? readPrefs() : DEFAULT_PREFS,
+  prefs: DEFAULT_USER_PREFS,
+
+  simId: null,
+  savedAt: null,
+  saving: false,
+  shell: null,
 
   /* ----------------------------- Dokument ----------------------------- */
 
@@ -341,25 +374,58 @@ export const useAppStore = create<AppState>()((set, get) => ({
     if (message) get().notify(message, 'success');
   },
 
-  saveCurrent: () => {
-    const { doc } = get();
-    const stamped = { ...doc, updatedAt: new Date().toISOString() };
-    if (persistScene(stamped)) {
-      set({ doc: stamped, baseline: stamped, dirty: false });
-      get().notify(`Szene „${doc.name}“ lokal gespeichert`, 'success');
-    } else {
-      get().notify('Speichern fehlgeschlagen (LocalStorage nicht verfügbar oder voll).', 'warning');
+  saveCurrent: async (opts) => {
+    const { doc, saving } = get();
+    if (!hooks.save) {
+      get().notify('Speichern ist nur in einer geöffneten Simulation möglich.', 'warning');
+      return false;
     }
+    if (saving) return false;
+    set({ saving: true });
+    let ok = false;
+    try {
+      ok = await hooks.save(doc);
+    } catch {
+      ok = false;
+    }
+    // Nur als gespeichert markieren, wenn während des Speicherns nichts geändert wurde
+    if (ok) set((s) => (s.doc === doc ? { baseline: doc, dirty: false, savedAt: Date.now(), saving: false } : { baseline: doc, savedAt: Date.now(), saving: false }));
+    else set({ saving: false });
+    if (ok && !opts?.silent) get().notify(`„${doc.name}“ gespeichert`, 'success');
+    return ok;
   },
 
-  loadSaved: (id) => {
-    const doc = readScene(id);
-    if (!doc) {
-      get().notify('Szene konnte nicht geladen werden.', 'warning');
-      return;
-    }
-    get().loadDocument(doc, `Szene „${doc.name}“ geladen`);
+  openSimulation: (simId, docIn, savedAt) => {
+    const doc = applyConstraints(docIn);
+    const p = get().prefs;
+    set({
+      simId,
+      doc,
+      baseline: doc,
+      past: [],
+      future: [],
+      dirty: false,
+      savedAt,
+      saving: false,
+      selectedId: null,
+      selectedEyePart: null,
+      dialog: null,
+      tool: p.defaultTool,
+      projection: p.defaultProjection,
+      simulationLive: p.simulationLiveDefault,
+    });
+    get().sendCameraCommand({ type: 'focus-scene' });
   },
+
+  applyUserPrefs: (prefs) =>
+    set({
+      prefs,
+      leftPanelOpen: prefs.leftPanelOpen,
+      rightPanelOpen: prefs.rightPanelOpen,
+      tool: prefs.defaultTool,
+      projection: prefs.defaultProjection,
+      simulationLive: prefs.simulationLiveDefault,
+    }),
 
   resetScene: () => {
     const { baseline, doc, past } = get();
@@ -380,7 +446,16 @@ export const useAppStore = create<AppState>()((set, get) => ({
 
   /* --------------------------------- UI --------------------------------- */
 
-  togglePanel: (side) => set((s) => (side === 'left' ? { leftPanelOpen: !s.leftPanelOpen } : { rightPanelOpen: !s.rightPanelOpen })),
+  togglePanel: (side) => {
+    const s = get();
+    if (side === 'left') {
+      set({ leftPanelOpen: !s.leftPanelOpen });
+      s.setPrefs({ leftPanelOpen: !s.leftPanelOpen });
+    } else {
+      set({ rightPanelOpen: !s.rightPanelOpen });
+      s.setPrefs({ rightPanelOpen: !s.rightPanelOpen });
+    }
+  },
   openDialog: (dialog) => set({ dialog }),
   notify: (message, tone = 'info') => {
     const id = ++toastCounter;
@@ -390,21 +465,24 @@ export const useAppStore = create<AppState>()((set, get) => ({
   dismissToast: (id) => set((s) => ({ toasts: s.toasts.filter((t) => t.id !== id) })),
   setPrefs: (p) => {
     const prefs = { ...get().prefs, ...p };
-    writePrefs(prefs);
-    set({ prefs });
+    hooks.persistPrefs?.(prefs);
+    const patch: Partial<AppState> = { prefs };
+    if (p.leftPanelOpen !== undefined) patch.leftPanelOpen = p.leftPanelOpen;
+    if (p.rightPanelOpen !== undefined) patch.rightPanelOpen = p.rightPanelOpen;
+    set(patch);
   },
 }));
 
-/* --------------------------- Autosave ------------------------------ */
+/* ------------------- Absturzsicherung (Entwurf) -------------------- */
 
 if (typeof window !== 'undefined') {
   let timer: number | undefined;
   useAppStore.subscribe((s, prev) => {
-    if (s.doc === prev.doc && s.baseline === prev.baseline) return;
+    if (s.doc === prev.doc) return;
     window.clearTimeout(timer);
     timer = window.setTimeout(() => {
       const st = useAppStore.getState();
-      writeAutosave(st.doc, st.baseline);
+      if (st.dirty && st.simId) hooks.writeDraft?.(st.doc);
     }, 600);
   });
 }

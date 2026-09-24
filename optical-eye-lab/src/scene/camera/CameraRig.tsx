@@ -130,6 +130,8 @@ const savedPose: { current: { pos: THREE.Vector3; target: THREE.Vector3; zoom: n
 
 export function CameraRig() {
   const projection = useAppStore((s) => s.projection);
+  const rotateSpeed = useAppStore((s) => s.prefs.cameraRotateSpeed);
+  const zoomSpeed = useAppStore((s) => s.prefs.zoomSpeed);
   const command = useAppStore((s) => s.cameraCommand);
   const size = useThree((s) => s.size);
   const invalidate = useThree((s) => s.invalidate);
@@ -152,6 +154,14 @@ export function CameraRig() {
     [projection],
   );
 
+  // Geschwindigkeiten aus den Benutzereinstellungen
+  useEffect(() => {
+    if (!controls) return;
+    controls.dollySpeed = zoomSpeed;
+    controls.azimuthRotateSpeed = rotateSpeed;
+    controls.polarRotateSpeed = rotateSpeed;
+  }, [controls, rotateSpeed, zoomSpeed]);
+
   useEffect(() => {
     if (!controls) return;
     configureButtons(controls, 'none');
@@ -162,9 +172,6 @@ export function CameraRig() {
     controls.maxDistance = 4000;
     controls.minZoom = 0.2;
     controls.maxZoom = 400;
-    controls.dollySpeed = 0.6;
-    controls.azimuthRotateSpeed = 0.9;
-    controls.polarRotateSpeed = 0.9;
 
     const onKey = (e: KeyboardEvent) => configureButtons(controls, e.altKey ? 'alt' : e.shiftKey ? 'shift' : 'none');
     const onBlur = () => configureButtons(controls, 'none');

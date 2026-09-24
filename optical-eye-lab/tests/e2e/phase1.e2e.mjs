@@ -1,5 +1,6 @@
 import { chromium } from 'playwright-core';
 import { mkdirSync } from 'node:fs';
+import { startFresh } from './helpers.mjs';
 // Aufruf: Dev-Server starten (npm run dev), dann `npm run test:e2e`.
 // Optional: E2E_URL, E2E_OUT (Screenshot-Ordner), CHROMIUM_PATH (eigener Chromium ohne GPU).
 mkdirSync(process.env.E2E_OUT ?? './e2e-screenshots/', { recursive: true });
@@ -14,10 +15,8 @@ const results = [];
 const check = (name, ok, info='') => { results.push(`${ok ? 'PASS' : 'FAIL'}  ${name}${info ? '  — ' + info : ''}`); };
 const S = () => page.evaluate(() => { const s = window.__oel.getState(); return JSON.parse(JSON.stringify({ doc: s.doc, sel: s.selectedId, tool: s.tool, past: s.past.length, proj: s.projection, dirty: s.dirty })); });
 
-await page.goto(process.env.E2E_URL ?? 'http://127.0.0.1:5173/');
-await page.evaluate(() => { localStorage.clear(); localStorage.setItem('optical-eye-lab.prefs.v1', JSON.stringify({ quality: 'performance' })); });
-await page.reload();
-await page.waitForTimeout(7000);
+await startFresh(page, 'tpl-toric-spectacle');
+await page.waitForTimeout(3000);
 await page.screenshot({ path: OUT + '01_start.png' });
 let st = await S();
 check('Start: Standard-Demo geladen', st.doc.elements.length === 1 && st.doc.elements[0].kind === 'spectacle-lens');
@@ -160,26 +159,20 @@ await page.keyboard.press('1');
 await page.waitForTimeout(1500);
 await page.screenshot({ path: OUT + '08_front.png' });
 
-// 11) Speichern / Laden / Neu / Reset
+// 11) Speichern / Neuladen / Reset (Phase 3: Bibliothek statt Szenenliste)
 await page.keyboard.press('Control+S');
-await page.waitForTimeout(400);
+await page.waitForTimeout(800);
 st = await S();
 check('Speichern setzt dirty zurück', st.dirty === false);
-const saved = await page.evaluate(() => JSON.parse(localStorage.getItem('optical-eye-lab.scenes.v1') || '[]').length);
-check('Szene in LocalStorage', saved === 1);
+const simId = await page.evaluate(() => window.__oel.getState().simId);
+const stored = await page.evaluate((id) => JSON.parse(localStorage.getItem('oel:v3:sim:' + id) || 'null'), simId);
+check('Simulation in der lokalen Bibliothek', !!stored && stored.elements.length === st.doc.elements.length);
 const savedCount = st.doc.elements.length;
-await page.evaluate(() => window.__oel.getState().newScene());
-await page.waitForTimeout(800);
+await page.reload();
+await page.waitForFunction(() => window.__oel?.getState().simId, null, { timeout: 30000 });
+await page.waitForTimeout(4000);
 st = await S();
-check('Neue Szene leer', st.doc.elements.length === 0 && st.doc.lights.length === 0);
-await page.keyboard.press('Control+O');
-await page.waitForTimeout(400);
-await page.screenshot({ path: OUT + '09_load.png' });
-await page.click('.saved-list__main');
-await page.waitForTimeout(800);
-st = await S();
-check('Gespeicherte Szene geladen', st.doc.elements.length === savedCount);
-await page.keyboard.press('Delete'); // nichts ausgewählt → nichts passiert
+check('Gespeicherte Simulation nach Neuladen geöffnet', st.doc.elements.length === savedCount);
 await page.click('.tree-row:has-text("Prisma 1")');
 await page.keyboard.press('Delete');
 await page.waitForTimeout(300);
@@ -190,13 +183,16 @@ await page.waitForTimeout(400);
 st = await S();
 check('Zurücksetzen stellt gespeicherten Stand her', st.doc.elements.length === savedCount);
 
-// 12) Autosave nach Reload
+// 12) Automatisches Speichern + Neuladen
 await page.evaluate(() => window.__oel.getState().setSceneName('Autosave-Test'));
-await page.waitForTimeout(900);
+await page.waitForFunction(() => !window.__oel.getState().dirty, null, { timeout: 20000 });
+const statusTxt = await page.textContent('.statusbar .save-status');
+check('Statusleiste zeigt „Gespeichert“', /Gespeichert/.test(statusTxt ?? ''), statusTxt);
 await page.reload();
-await page.waitForTimeout(6000);
+await page.waitForFunction(() => window.__oel?.getState().simId, null, { timeout: 30000 });
+await page.waitForTimeout(3000);
 st = await S();
-check('Arbeitsstand nach Neuladen wiederhergestellt', st.doc.name === 'Autosave-Test');
+check('Automatisch gespeicherter Stand nach Neuladen', st.doc.name === 'Autosave-Test');
 
 // 13) Presets
 for (const pid of ['normal-eye', 'eye-contact', 'eye-two-lenses']) {

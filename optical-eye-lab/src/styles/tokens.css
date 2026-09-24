@@ -3,8 +3,15 @@
 
   /* Flächen */
   --bg: #07090c;
-  --panel: rgba(15, 18, 23, 0.78);
-  --panel-strong: rgba(17, 21, 27, 0.94);
+  --panel: rgba(15, 18, 23, var(--panel-alpha, 0.8));
+  --panel-strong: rgba(17, 21, 27, 0.96);
+  --toolbar-bg: linear-gradient(180deg, rgba(14, 17, 22, 0.94), rgba(12, 15, 19, 0.88));
+  --statusbar-bg: rgba(10, 12, 16, 0.88);
+  --scroll-thumb: rgba(255, 255, 255, 0.08);
+  --page-bg: #0a0d11;
+  --card: #10141a;
+  --card-hover: #131820;
+  --on-accent: #04121c;
   --panel-solid: #11151a;
   --surface: rgba(255, 255, 255, 0.035);
   --surface-hover: rgba(255, 255, 255, 0.06);
@@ -39,18 +46,18 @@
   /* Typografie */
   --font: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Inter', 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
   --font-mono: 'SF Mono', 'JetBrains Mono', ui-monospace, Menlo, Consolas, monospace;
-  --fs-xs: 10.5px;
-  --fs-sm: 11.5px;
-  --fs: 12.5px;
-  --fs-md: 13.5px;
-  --fs-lg: 15px;
+  --fs-xs: calc(10.5px * var(--font-scale, 1));
+  --fs-sm: calc(11.5px * var(--font-scale, 1));
+  --fs: calc(12.5px * var(--font-scale, 1));
+  --fs-md: calc(13.5px * var(--font-scale, 1));
+  --fs-lg: calc(15px * var(--font-scale, 1));
 
   /* Maße */
   --toolbar-h: 48px;
   --status-h: 28px;
   --gap: 10px;
-  --left-w: 268px;
-  --right-w: 316px;
+  --left-w: var(--left-w-user, 268px);
+  --right-w: var(--right-w-user, 316px);
   --r-sm: 6px;
   --r: 8px;
   --r-lg: 12px;
@@ -66,8 +73,52 @@
 
 @media (max-width: 1280px) {
   :root {
-    --left-w: 236px;
-    --right-w: 292px;
-    --fs: 12px;
+    --left-w: min(var(--left-w-user, 268px), 236px);
+    --right-w: min(var(--right-w-user, 316px), 292px);
+    --fs: calc(12px * var(--font-scale, 1));
   }
+}
+
+/* ------------------------------------------------------------------
+   Helles Design (Oberfläche). Der 3D-Laborraum bleibt bewusst dunkel.
+   ------------------------------------------------------------------ */
+:root[data-theme='light'] {
+  color-scheme: light;
+  --bg: #eef1f5;
+  --page-bg: #f3f5f8;
+  --card: #ffffff;
+  --card-hover: #fbfcfd;
+  --panel: rgba(250, 251, 253, var(--panel-alpha, 0.86));
+  --panel-strong: rgba(255, 255, 255, 0.97);
+  --panel-solid: #ffffff;
+  --toolbar-bg: linear-gradient(180deg, rgba(252, 253, 255, 0.96), rgba(246, 248, 251, 0.92));
+  --statusbar-bg: rgba(248, 250, 252, 0.92);
+  --scroll-thumb: rgba(0, 0, 0, 0.14);
+  --surface: rgba(10, 30, 60, 0.035);
+  --surface-hover: rgba(10, 30, 60, 0.06);
+  --surface-active: rgba(10, 30, 60, 0.09);
+  --field: rgba(10, 30, 60, 0.045);
+  --field-hover: rgba(10, 30, 60, 0.075);
+  --border: rgba(10, 30, 60, 0.1);
+  --border-strong: rgba(10, 30, 60, 0.16);
+  --divider: rgba(10, 30, 60, 0.07);
+  --text: #16202c;
+  --text-2: #465466;
+  --text-3: #6b7888;
+  --text-4: #97a2b0;
+  --ok: #129a6b;
+  --warn: #b36b00;
+  --warn-bg: rgba(255, 170, 40, 0.14);
+  --danger: #d23c3c;
+  --danger-bg: rgba(210, 60, 60, 0.09);
+  --shadow: 0 10px 40px rgba(20, 40, 70, 0.14), 0 1px 0 rgba(255, 255, 255, 0.6) inset;
+  --shadow-sm: 0 4px 16px rgba(20, 40, 70, 0.1);
+}
+
+:root[data-reduced-motion='true'] *,
+:root[data-reduced-motion='true'] *::before,
+:root[data-reduced-motion='true'] *::after {
+  animation-duration: 1ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 1ms !important;
 }

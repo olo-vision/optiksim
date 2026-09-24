@@ -13,6 +13,7 @@ import { Segmented } from './controls';
 export function RxEditor({ value, onChange, disabled, sphLabel = 'Sphäre', hint }: { value: Rx; onChange: (rx: Rx) => void; disabled?: boolean; sphLabel?: string; hint?: string }) {
   const form = useAppStore((s) => s.prefs.cylForm);
   const setPrefs = useAppStore((s) => s.setPrefs);
+  const step = useAppStore((s) => s.prefs.diopterStep);
   const shown = toCylForm(value, form);
   const other = transposeRx(shown);
   const hasCyl = Math.abs(shown.cyl) > 0.004;
@@ -31,8 +32,8 @@ export function RxEditor({ value, onChange, disabled, sphLabel = 'Sphäre', hint
           ]}
         />
       </div>
-      <NumberField label={sphLabel} unit="dpt" step={0.25} decimals={2} min={-40} max={40} value={shown.sph} disabled={disabled} onChange={(v) => emit({ ...shown, sph: v })} />
-      <NumberField label="Zylinder" unit="dpt" step={0.25} decimals={2} min={-15} max={15} value={shown.cyl} disabled={disabled} onChange={(v) => emit({ ...shown, cyl: v })} />
+      <NumberField label={sphLabel} unit="dpt" step={step} decimals={2} min={-40} max={40} value={shown.sph} disabled={disabled} onChange={(v) => emit({ ...shown, sph: v })} />
+      <NumberField label="Zylinder" unit="dpt" step={step} decimals={2} min={-15} max={15} value={shown.cyl} disabled={disabled} onChange={(v) => emit({ ...shown, cyl: v })} />
       <NumberField label="Achse" unit="deg" step={1} decimals={0} min={0} max={180} value={Math.round(shown.axis)} disabled={disabled} onChange={(v) => emit({ ...shown, axis: v })} />
       {hasCyl && (
         <div className="rx-editor__transposed" data-tip="Transponierte, physikalisch identische Schreibweise" data-tip-side="left">

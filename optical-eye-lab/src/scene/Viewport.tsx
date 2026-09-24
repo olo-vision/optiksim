@@ -22,6 +22,7 @@ import { TransformGizmo, gizmoState } from './interaction/TransformGizmo';
 import { useHoverStore } from './interaction/hover';
 import { LabelLayer, LabelProjector } from './labels/labels';
 import { DevHooks } from './DevHooks';
+import { ThumbnailCapture } from './thumbnail';
 
 function SceneContent() {
   const doc = useAppStore((s) => s.doc);
@@ -40,8 +41,8 @@ function SceneContent() {
   return (
     <>
       <CameraRig />
-      <Lighting target={eyePos} shadows={prefs.quality !== 'performance'} exposure={doc.environment.exposure} />
-      <LabRoom settings={doc.environment} reflections={high && doc.environment.reflections} center={[eyePos[0], eyePos[2] - 60]} />
+      <Lighting target={eyePos} shadows={prefs.quality !== 'performance' && prefs.shadows} exposure={doc.environment.exposure} />
+      <LabRoom settings={doc.environment} reflections={high && prefs.reflections && doc.environment.reflections} center={[eyePos[0], eyePos[2] - 60]} />
       {doc.environment.showBench && <OpticalBench doc={doc} />}
 
       <EyeModel eye={doc.eye} />
@@ -65,6 +66,7 @@ function SceneContent() {
 
       <TransformGizmo />
       <LabelProjector />
+      <ThumbnailCapture />
       {import.meta.env.DEV && <DevHooks />}
     </>
   );
@@ -72,8 +74,12 @@ function SceneContent() {
 
 export function Viewport() {
   const quality = useAppStore((s) => s.prefs.quality);
+  const maxDpr = useAppStore((s) => s.prefs.maxPixelRatio);
+  const antialias = useAppStore((s) => s.prefs.antialias);
+  const shadowsPref = useAppStore((s) => s.prefs.shadows);
   const down = useRef<{ x: number; y: number } | null>(null);
-  const dpr: [number, number] = quality === 'high' ? [1, 2] : quality === 'balanced' ? [1, 1.5] : [1, 1];
+  const dpr: [number, number] = [1, Math.min(maxDpr, quality === 'high' ? 2 : quality === 'balanced' ? 1.5 : 1)];
+  const shadows = quality !== 'performance' && shadowsPref;
 
   return (
     <div
@@ -83,11 +89,11 @@ export function Viewport() {
       onPointerLeave={() => useHoverStore.getState().setTarget(null)}
     >
       <Canvas
-        key={quality === 'performance' ? 'perf' : 'hq'}
+        key={`${shadows ? 'sh' : 'nosh'}-${antialias ? 'aa' : 'noaa'}`}
         frameloop="demand"
-        shadows={quality !== 'performance' ? { type: THREE.PCFShadowMap } : false}
+        shadows={shadows ? { type: THREE.PCFShadowMap } : false}
         dpr={dpr}
-        gl={{ antialias: true, powerPreference: 'high-performance', localClippingEnabled: true } as THREE.WebGLRendererParameters & { localClippingEnabled: boolean }}
+        gl={{ antialias, powerPreference: 'high-performance', localClippingEnabled: true } as THREE.WebGLRendererParameters & { localClippingEnabled: boolean }}
         onCreated={({ gl }) => {
           gl.localClippingEnabled = true;
           gl.toneMapping = THREE.ACESFilmicToneMapping;

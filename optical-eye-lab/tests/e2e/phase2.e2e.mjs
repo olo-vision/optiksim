@@ -1,5 +1,6 @@
 import { chromium } from 'playwright-core';
 import { mkdirSync } from 'node:fs';
+import { startFresh } from './helpers.mjs';
 // Aufruf: Dev-Server starten (npm run dev), dann `npm run test:e2e`.
 // Optional: E2E_URL, E2E_OUT (Screenshot-Ordner), CHROMIUM_PATH (eigener Chromium ohne GPU).
 mkdirSync(process.env.E2E_OUT ?? './e2e-screenshots/', { recursive: true });
@@ -23,10 +24,7 @@ const setNum = async (label, value, scope = '.panel--right') => {
 };
 const near = (a, b, t = 0.01) => Math.abs(a - b) < t;
 
-await page.goto(process.env.E2E_URL ?? 'http://127.0.0.1:5173/');
-await page.evaluate(() => { localStorage.clear(); localStorage.setItem('optical-eye-lab.prefs.v1', JSON.stringify({ quality: 'performance' })); });
-await page.reload();
-await page.waitForTimeout(5000);
+await startFresh(page, 'tpl-toric-spectacle');
 await page.evaluate(() => { const s = window.__oel.getState(); s.newScene(); s.addLightSource(); s.select('eye'); });
 await page.waitForTimeout(1200);
 
@@ -137,13 +135,10 @@ await page.screenshot({ path: OUT + 'p2_04_contact.png' });
 // 9) Speichern und neu laden
 const before = await doc();
 await page.keyboard.press('Control+S');
-await page.waitForTimeout(400);
+await page.waitForFunction(() => !window.__oel.getState().dirty, null, { timeout: 10000 });
 await page.reload();
-await page.waitForTimeout(5000);
-await page.evaluate(() => { const s = window.__oel.getState(); s.newScene(); });
-await page.waitForTimeout(500);
-await page.evaluate((id) => window.__oel.getState().loadSaved(id), before.id);
-await page.waitForTimeout(1500);
+await page.waitForFunction(() => window.__oel?.getState().simId, null, { timeout: 30000 });
+await page.waitForTimeout(2500);
 const after = await doc();
 check('Speichern/Laden: torische Hornhaut erhalten', near(after.eye.anatomy.corneaFrontRadius2, before.eye.anatomy.corneaFrontRadius2, 1e-9));
 check('Speichern/Laden: KL mit Tränenfilm/Zentrierung erhalten', after.elements[0].contact.onEye && after.elements[0].contact.centration.x === 1);
@@ -151,7 +146,7 @@ const rxAfter = await eyeRx();
 check('Speichern/Laden: Refraktion identisch', near(rxAfter.sph, -3) && near(rxAfter.cyl, -1.75));
 
 // 10) Alle Demos laden
-const ids = await page.evaluate(() => ['normal-eye','myopia','hyperopia','astigmatism','eye-spectacle','eye-contact','rgp-tear-lens','hsa-change','astig-correction','eye-two-lenses']);
+const ids = await page.evaluate(() => ['normal-eye','myopia','hyperopia','astigmatism','eye-spectacle','eye-contact','rgp-tear-lens','hsa-change','astig-correction','eye-two-lenses','toric-contact','optical-bench']);
 for (const id of ids) {
   await page.evaluate((id) => window.__oel.getState().loadPreset(id), id);
   await page.waitForTimeout(1500);

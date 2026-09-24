@@ -19,12 +19,13 @@ export function useShortcuts() {
 
       if (mod && key === 's') {
         e.preventDefault();
-        s.saveCurrent();
+        if (e.shiftKey) s.shell?.saveAs();
+        else void s.saveCurrent();
         return;
       }
       if (mod && key === 'o') {
         e.preventDefault();
-        s.openDialog('load');
+        s.shell?.openLibrary();
         return;
       }
       if (isTyping(e) || s.dialog) return;
