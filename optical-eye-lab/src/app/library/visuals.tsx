@@ -10,6 +10,7 @@ import {
   CircleDot,
   Copy,
   Download,
+  Maximize2,
   Droplet,
   Eye,
   Glasses,
@@ -25,6 +26,7 @@ import {
   UserRound,
 } from 'lucide-react';
 import { CATEGORY_LABELS, type SimulationCategory, type SimulationMetadata } from '@/platform/models';
+import { findModule } from '@/modules/registry';
 import { platform } from '../platformInstance';
 import { currentUser, useSession } from '../session';
 import { can } from '@/platform/permissions';
@@ -98,8 +100,15 @@ export const SimThumbnail = memo(function SimThumbnail({ meta }: { meta: Simulat
   );
 });
 
+/** Modul-Sitzungen öffnen im Modul, alle anderen im vollständigen Simulator (Phase 5) */
+export const openPath = (meta: SimulationMetadata) => {
+  const mod = findModule(meta.moduleId);
+  return mod && mod.status !== 'planned' ? `/modules/${mod.id}/${meta.id}` : `/simulations/${meta.id}`;
+};
+
 export function SimulationActionsMenu({ meta, onChanged }: { meta: SimulationMetadata; onChanged?: () => void }) {
   const navigate = useNavigate();
+  const mod = findModule(meta.moduleId);
   const canTemplate = can(useSession((s) => s.user), 'templates.create');
   return (
     <Menu
@@ -112,7 +121,8 @@ export function SimulationActionsMenu({ meta, onChanged }: { meta: SimulationMet
         </button>
       )}
       items={[
-        { label: 'Öffnen', icon: Eye, onSelect: () => navigate(`/simulations/${meta.id}`) },
+        { label: mod ? 'Im Modul öffnen' : 'Öffnen', icon: Eye, onSelect: () => navigate(openPath(meta)) },
+        ...(mod ? [{ label: 'Im vollständigen Simulator öffnen', icon: Maximize2, onSelect: () => navigate(`/simulations/${meta.id}`) }] : []),
         { label: 'Duplizieren', icon: Copy, onSelect: () => void duplicateSimulation(meta).then(onChanged) },
         { label: 'Umbenennen', icon: Pencil, onSelect: () => void renameSimulation(meta).then(onChanged) },
         { label: 'Exportieren', icon: Download, description: 'Als .opticsim-Datei', onSelect: () => void exportSimulation(meta) },
@@ -137,7 +147,8 @@ export function SimulationActionsMenu({ meta, onChanged }: { meta: SimulationMet
 
 export function SimulationCard({ meta, ownerName }: { meta: SimulationMetadata; ownerName?: string }) {
   const navigate = useNavigate();
-  const open = () => navigate(`/simulations/${meta.id}`);
+  const open = () => navigate(openPath(meta));
+  const mod = findModule(meta.moduleId);
   return (
     <article
       className={`sim-card${meta.archived ? ' is-archived' : ''}`}
@@ -164,6 +175,11 @@ export function SimulationCard({ meta, ownerName }: { meta: SimulationMetadata; 
           <Star size={15} strokeWidth={1.9} />
         </button>
         <span className="sim-card__cat">{CATEGORY_LABELS[meta.category]}</span>
+        {mod && (
+          <span className="sim-card__module" data-tip="Sitzung eines Moduls – öffnet sich im Modul">
+            <mod.icon size={12} /> Modul {mod.short}
+          </span>
+        )}
       </div>
       <div className="sim-card__body">
         <div className="sim-card__title-row">

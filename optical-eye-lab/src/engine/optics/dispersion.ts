@@ -8,15 +8,32 @@
  * Genauigkeit: für Brillenglas-/Kontaktlinsenmaterialien im sichtbaren Bereich typisch besser als ±0,002
  * (keine Sellmeier-Koeffizienten verfügbar → bewusst einfache, dokumentierte Näherung).
  *
- * Augenmedien: „chromatisches Auge“ – alle Augenmedien erhalten die Dispersion von Wasser (ν ≈ 55,8).
- * Damit beträgt die chromatische Längsaberration des Modellauges zwischen F und C ≈ 1 dpt, in guter
- * Übereinstimmung mit Messwerten am menschlichen Auge (vgl. Thibos et al. 1992, Modell „Chromatic Eye“).
+ * Augenmedien (Phase 5, überarbeitet): je Medium eine eigene Abbe-Zahl (Richtwerte nach Literatur zum
+ * Modellauge): Hornhaut 56, Kammerwasser 53, Augenlinse 49, Glaskörper 53, Tränenfilm 55,8 (Wasser).
+ * Das Le-Grand-Modellauge erhält damit eine chromatische Längsaberration F→C von ≈ 0,91 dpt
+ * (F −0,63 / C +0,27 dpt gegenüber d; 620 nm +0,14, 535 nm −0,28 dpt) – in guter Übereinstimmung mit
+ * Messwerten am menschlichen Auge (Thibos et al. 1992, „Chromatic Eye“: ≈ 0,90 dpt, 620 nm +0,12, 535 nm −0,29).
+ * (Phase 4 verwendete für alle Medien ν = 55,8 → nur ≈ 0,75 dpt.)
  */
 export const LAMBDA_D = 587.56;
 export const LAMBDA_F = 486.13;
 export const LAMBDA_C = 656.27;
-/** Abbe-Zahl, mit der alle Augenmedien gerechnet werden (Wasser) */
+/** Abbe-Zahl von Wasser – Tränenfilm */
 export const EYE_MEDIA_ABBE = 55.8;
+/** Abbe-Zahlen der Augenmedien (Richtwerte, s. o.) */
+export const EYE_ABBE = { cornea: 56, aqueous: 53, lens: 49, vitreous: 53, tear: 55.8 } as const;
+
+/** Brechungsindizes der Augenmedien bei λ (d-Linie → unverändert). */
+export function eyeIndicesAt<T extends { nCornea: number; nAqueous: number; nLens: number; nVitreous: number }>(a: T, lambdaNm: number): T {
+  if (Math.abs(lambdaNm - LAMBDA_D) < 0.05) return a;
+  return {
+    ...a,
+    nCornea: indexAt(a.nCornea, EYE_ABBE.cornea, lambdaNm),
+    nAqueous: indexAt(a.nAqueous, EYE_ABBE.aqueous, lambdaNm),
+    nLens: indexAt(a.nLens, EYE_ABBE.lens, lambdaNm),
+    nVitreous: indexAt(a.nVitreous, EYE_ABBE.vitreous, lambdaNm),
+  };
+}
 
 const DF = 1 / (LAMBDA_F * LAMBDA_F) - 1 / (LAMBDA_C * LAMBDA_C);
 

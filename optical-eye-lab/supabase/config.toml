@@ -1,0 +1,13 @@
+# Supabase CLI – Projektkonfiguration (nur die für OLO-LAB3D relevanten Einstellungen).
+# Verknüpfen: npx supabase link --project-ref mqbxzilcdeuhiapyozny
+project_id = "optical-eye-lab"
+
+[functions.create-checkout-session]
+verify_jwt = true
+
+[functions.create-customer-portal]
+verify_jwt = true
+
+# Stripe sendet kein Supabase-JWT. Die Funktion prüft stattdessen zwingend die Stripe-Signatur.
+[functions.stripe-webhook]
+verify_jwt = false

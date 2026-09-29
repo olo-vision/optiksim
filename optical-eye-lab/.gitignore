@@ -4,3 +4,19 @@ dist
 *.log
 .vite
 e2e-screenshots
+
+# Umgebungsvariablen mit echten Werten – NIE einchecken
+.env
+.env.local
+.env.*.local
+.env.production
+.env.development
+# Test-/Beispieldateien ohne Geheimnisse dürfen ins Repository
+!.env.example
+!.env.e2e
+!.env.e2e-cloud
+
+# Supabase CLI (lokale Stacks, Secrets)
+supabase/.temp
+supabase/.branches
+supabase/functions/.env

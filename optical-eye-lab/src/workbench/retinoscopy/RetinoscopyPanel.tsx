@@ -187,7 +187,7 @@ export function RetinoscopyPanel() {
                 formula: 'Refraktion = Neutralisationswert − 1/(w − HSA)',
                 substitution: `1/(${formatNumber((w - TRIAL_VERTEX_DISTANCE) / 1000, 3)} m) = ${formatPower(wd.workingLens)}`,
                 result: formatRx(wd.net),
-                text: 'Bei Neutralisation liegt der Fernpunkt im Guckloch, nicht im Unendlichen. Das Glas enthält deshalb zusätzlich +1/w. Diesen Anteil zieht man ab (z. B. +1,50 dpt bei 66,7 cm) – gemessen ab Brillenglasebene.',
+                text: 'Bei Neutralisation liegt der Fernpunkt im Guckloch, nicht im Unendlichen. Das Glas enthält deshalb zusätzlich die Vergenz des Gucklochs in der Glasebene. Exakt ist das 1/(w − HSA), weil das Glas im HSA vor dem Auge steht (66,7 cm → 1/0,655 m = +1,53 dpt); die Faustregel „1/w“ (+1,50 dpt) ist die Näherung für den Abstand ab Auge.',
               }}
             />
           </div>

@@ -18,13 +18,14 @@ import { placementOf } from '@/model/derived/measurements';
 import { corneaSpec, effectiveLens } from '@/model/derived/effectiveLens';
 import { DEFAULT_TEAR_INDEX, isOnEye } from '@/model/derived/contactSeat';
 import { mulMat3TVec, eulerDegToMat3, mulMat3Vec } from '@/core/math/vec';
+import { resolveLensShape } from '@/model/derived/elementShape';
 import {
+  backVertexMatrix,
   effectivityMatrix,
   madd2,
   matrixToRx,
   msub2,
   propagateVergence,
-  rotateMatrix,
   ZERO2,
   type CylForm,
   type Mat2,
@@ -72,6 +73,37 @@ export function rollRelativeToEye(el: OpticalElement, eye: EyeEntity): number {
   return (Math.atan2(xEye[1], xEye[0]) * 180) / Math.PI;
 }
 
+/**
+ * Abbildung des TABO-Rahmens eines Elements in den TABO-Rahmen des Auges (Phase 5).
+ * Spalten = lokale x-/y-Achse des Elements, projiziert auf die Augen-xy-Ebene und normiert; TABO x = −lokal x.
+ * Für ein nur verdrehtes Element ist das eine Drehung (entspricht rotateMatrix(M, −ψ)); für ein
+ * gewendetes Glas (Rückfläche zeigt vom Auge weg) eine Spiegelung – die Achse A wird dann zu 180° − A.
+ * Liefert außerdem, ob die Elementachse vom Auge weg zeigt (Flächen werden in umgekehrter Reihenfolge getroffen).
+ */
+export function elementFrameInEye(el: OpticalElement, eye: EyeEntity): { T: [number, number, number, number]; flipped: boolean } {
+  const eyeRot = eulerDegToMat3(...eye.transform.rotation);
+  const elRot = eulerDegToMat3(...el.transform.rotation);
+  const ax = mulMat3TVec(eyeRot, mulMat3Vec(elRot, [1, 0, 0]));
+  const ay = mulMat3TVec(eyeRot, mulMat3Vec(elRot, [0, 1, 0]));
+  const az = mulMat3TVec(eyeRot, mulMat3Vec(elRot, [0, 0, 1]));
+  const nx = Math.hypot(ax[0], ax[1]) || 1;
+  const ny = Math.hypot(ay[0], ay[1]) || 1;
+  // lokal: Spalten (ax, ay); TABO: D·J·D mit D = diag(−1, 1)
+  const j00 = ax[0] / nx, j10 = ax[1] / nx, j01 = ay[0] / ny, j11 = ay[1] / ny;
+  return { T: [j00, -j01, -j10, j11], flipped: az[2] < 0 };
+}
+
+/** M' = T·M·Tᵀ für eine symmetrische Wirkungsmatrix */
+export function transformMatrix(m: Mat2, T: [number, number, number, number]): Mat2 {
+  const [t00, t01, t10, t11] = T;
+  // T·M
+  const a0 = t00 * m.a + t01 * m.b;
+  const b0 = t00 * m.b + t01 * m.c;
+  const a1 = t10 * m.a + t11 * m.b;
+  const b1 = t10 * m.b + t11 * m.c;
+  return { a: a0 * t00 + b0 * t01, b: a0 * t10 + b0 * t11, c: a1 * t10 + b1 * t11 };
+}
+
 export interface CorrectionOptions {
   /**
    * Objektpunkt auf der Augenachse (Augen-lokales z in mm, < 0 = vor dem Auge), Phase 4.
@@ -111,18 +143,24 @@ export function computeCorrection(doc: SceneDocument, form: CylForm = 'minus', o
   for (const { el, p } of lenses) {
     if (p.decentration.r > 0.3 || p.tiltDeg > 1) notes.push(`${el.name}: Dezentration/Neigung in der Rezeptrechnung vernachlässigt (Raytracing berücksichtigt sie).`);
     const roll = rollRelativeToEye(el, doc.eye);
-    const rot = (m: Mat2) => rotateMatrix(m, -roll);
+    const frame = elementFrameInEye(el, doc.eye);
+    const rot = (m: Mat2) => transformMatrix(m, frame.T);
     const optics = lensOptics(el, doc.eye);
     const n = el.medium.n;
     const zf = p.frontVertexLocal[2];
     const zb = p.backVertexLocal[2];
+    // Gewendetes Glas: Licht trifft zuerst die (lokale) Rückfläche; Flächenbrechwerte bleiben gleich
+    // ((n₂ − n₁)/r ändert bei Umkehr von Richtung und Radius-Vorzeichen nichts).
+    const Fa = frame.flipped ? optics.F2 : optics.F1;
+    const Fb = frame.flipped ? optics.F1 : optics.F2;
+    if (frame.flipped) notes.push(`${el.name}: Glas ist gewendet (Rückfläche zeigt vom Auge weg) – gerechnet mit Vorderscheitel-Wirkung und gespiegelter Achse.`);
     if (zPrev !== null) L = propagateVergence(L, zf - zPrev, 1);
-    L = madd2(L, rot(optics.F1));
+    L = madd2(L, rot(Fa));
     L = propagateVergence(L, zb - zf, n);
-    L = madd2(L, rot(optics.F2));
+    L = madd2(L, rot(Fb));
     zPrev = zb;
 
-    const ownMatrix = rot(optics.matrix);
+    const ownMatrix = rot(frame.flipped ? backVertexMatrix(optics.F2, optics.F1, resolveLensShape(el).centerThickness, n) : optics.matrix);
     let effectiveMatrix = effectivityMatrix(ownMatrix, p.vertexDistance);
     let tl: TearLensResult | undefined;
     if (isOnEye(el) && (el.contact!.tearFilm ?? true)) {

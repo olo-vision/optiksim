@@ -10,7 +10,7 @@ import { sagNormal, sagRoots } from './csg';
 import { corneaSpec } from '@/model/derived/effectiveLens';
 import { isToric } from '@/core/math/surfaces';
 import type { Ray, RayTermination } from './types';
-import { EYE_MEDIA_ABBE, indexAt, isReferenceWavelength, LAMBDA_D } from '@/engine/optics/dispersion';
+import { eyeIndicesAt, isReferenceWavelength, LAMBDA_D } from '@/engine/optics/dispersion';
 
 interface SphereSurface {
   center: Vec3;
@@ -68,13 +68,12 @@ export interface EyeTraceModel {
 }
 
 /**
- * @param lambdaNm Wellenlänge (Phase 4): Augenmedien dispersiv mit ν = 55,8 („chromatisches Auge“);
+ * @param lambdaNm Wellenlänge (Phase 4/5): Augenmedien dispersiv (Abbe-Zahlen je Medium, dispersion.ts → EYE_ABBE);
  *                 bei der d-Linie identisch zu Phase 2.
  */
 export function buildEyeTraceModel(eye: EyeEntity, lambdaNm = LAMBDA_D): EyeTraceModel {
   const a0 = eye.anatomy;
-  const disp = (n: number) => indexAt(n, EYE_MEDIA_ABBE, lambdaNm);
-  const a = isReferenceWavelength(lambdaNm) ? a0 : { ...a0, nCornea: disp(a0.nCornea), nAqueous: disp(a0.nAqueous), nLens: disp(a0.nLens), nVitreous: disp(a0.nVitreous) };
+  const a = isReferenceWavelength(lambdaNm) ? a0 : eyeIndicesAt(a0, lambdaNm);
   const g = computeEyeGeometry(a);
   const rigid = makeRigid(eye.transform.position, eye.transform.rotation);
 

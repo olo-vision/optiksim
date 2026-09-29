@@ -147,20 +147,16 @@
 }
 .wb-panel {
   display: grid;
-  grid-auto-flow: column;
-  grid-auto-columns: minmax(230px, 1fr);
+  /* Spalten brechen bei schmalem Dock in neue Zeilen um (nur vertikales Scrollen) */
+  grid-template-columns: minmax(300px, 330px) repeat(auto-fit, minmax(230px, 1fr));
   gap: 12px;
   padding: 12px;
-  min-width: min-content;
   align-items: start;
 }
 /* erste Spalte = Bildansicht: eigene Spurbreite, damit sie nie in die Nachbarspalte ragt */
-.wb-panel {
-  grid-template-columns: minmax(300px, 330px);
-}
 .wb-panel--refraction,
 .wb-panel--patient {
-  grid-template-columns: minmax(330px, 380px);
+  grid-template-columns: minmax(330px, 380px) repeat(auto-fit, minmax(230px, 1fr));
 }
 .wb-col {
   display: flex;
@@ -265,13 +261,15 @@
 }
 .wb-range {
   flex: 1;
-  min-width: 80px;
+  min-width: 0;
+  width: 0;
   accent-color: var(--accent);
 }
 .wb-field {
   display: flex;
   align-items: center;
   gap: 8px;
+  min-width: 0;
   font-size: var(--fs-sm);
   color: var(--text-2);
 }
@@ -281,6 +279,7 @@
 }
 .wb-num {
   width: 36px;
+  flex: none;
   text-align: right;
   font-family: var(--font-mono);
   font-size: var(--fs-sm);
@@ -394,10 +393,12 @@
   border-top: 1px dashed var(--divider);
   position: relative;
 }
-.wb-pc > .icon-btn {
-  position: absolute;
-  right: -4px;
-  top: -2px;
+.wb-pc__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: var(--fs-sm);
+  color: var(--text-3);
 }
 
 /* Readouts */
@@ -784,4 +785,143 @@
   color: var(--text-2);
   font-size: var(--fs-sm);
   line-height: 1.4;
+}
+
+/* ---------------- schmale Bühne (Tablet / kleine Notebooks) ----------------
+   Die Leisten über der Szene dürfen nie unter die Seitenpanels ragen. */
+.stage-overlay {
+  container-type: inline-size;
+  container-name: stage;
+}
+.stage-overlay__top {
+  max-width: 100%;
+}
+.workbench-bar {
+  max-width: 100%;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+@container stage (max-width: 700px) {
+  /* nur Symbole – Bezeichnung des aktiven Bereichs bleibt sichtbar, alle haben Tooltips */
+  .workbench-bar__item:not(.is-active) > span {
+    display: none;
+  }
+  .workbench-bar__item {
+    padding: 0 9px;
+  }
+}
+@container stage (max-width: 520px) {
+  .workbench-bar__item > span,
+  .workbench-bar__badge > span {
+    display: none;
+  }
+}
+.wb-row .wb-range {
+  min-width: 100px;
+}
+
+/* Chip-Reihe im Inspector (Phase 5) */
+.chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin: 2px 0 8px;
+}
+
+/* ------------------------------ Brillenglas (Phase 5) ------------------------------ */
+.btn--xs {
+  height: 24px;
+  padding: 0 8px;
+  gap: 4px;
+  font-size: var(--fs-sm);
+}
+.lens-profiles {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.lens-profile {
+  margin: 0;
+  padding: 8px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+}
+.lens-profile svg {
+  display: block;
+  width: 100%;
+  height: 150px;
+}
+.lens-profile figcaption {
+  margin-top: 4px;
+  font-size: var(--fs-sm);
+  color: var(--text-2);
+}
+.lens-profile figcaption span {
+  color: var(--text-3);
+}
+.lens-profile__glass {
+  fill: color-mix(in srgb, var(--accent) 22%, transparent);
+  stroke: var(--accent);
+  stroke-width: 0.25;
+  vector-effect: non-scaling-stroke;
+}
+.lens-profile__cmp {
+  fill: none;
+  stroke: var(--text-3);
+  stroke-width: 1;
+  stroke-dasharray: 4 3;
+  vector-effect: non-scaling-stroke;
+}
+.lens-profile__axis {
+  stroke: var(--border-strong);
+  stroke-width: 1;
+  stroke-dasharray: 2 3;
+  vector-effect: non-scaling-stroke;
+}
+.lens-profile__scale {
+  stroke: var(--text-2);
+  stroke-width: 2;
+  vector-effect: non-scaling-stroke;
+}
+.mat-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--fs-sm);
+}
+.mat-table th {
+  text-align: left;
+  font-weight: 600;
+  color: var(--text-3);
+  padding: 3px 4px;
+  border-bottom: 1px solid var(--border);
+}
+.mat-table td {
+  padding: 3px 4px;
+  font-family: var(--font-mono);
+  color: var(--text-2);
+  border-bottom: 1px solid var(--divider, var(--border));
+}
+.mat-table td:first-child {
+  font-family: inherit;
+}
+.mat-table tbody tr {
+  cursor: pointer;
+}
+.mat-table tbody tr:hover td {
+  background: var(--surface-hover);
+  color: var(--text);
+}
+.mat-table tr.is-current td {
+  color: var(--accent);
+  font-weight: 600;
+}
+.mat-table-wrap {
+  overflow-x: auto;
+}
+.mat-table__name {
+  max-width: 130px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }

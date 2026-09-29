@@ -3,7 +3,9 @@
  * die im Inspector als „berechnet“ gekennzeichnet angezeigt werden.
  */
 import type { OpticalElement } from '@/model/types';
-import { resolveLensShape } from '@/model/derived/elementShape';
+import { lensSurfaces, resolveLensShape } from '@/model/derived/elementShape';
+import { isToric } from '@/core/math/surfaces';
+import { lensOptics } from './lensOptics';
 import {
   deviationToPrismDiopters,
   magnifierPower,
@@ -31,6 +33,17 @@ export function computeElementOptics(el: OpticalElement, tiltDeg = 0): ComputedV
   switch (el.family) {
     case 'lens': {
       const shape = resolveLensShape(el);
+      const { front, back } = lensSurfaces(el);
+      if (isToric(front) || isToric(back)) {
+        // Torische Linse: skalare Formeln gelten nur je Hauptschnitt → Wirkung aus der Matrixrechnung (lensOptics)
+        const o = lensOptics(el);
+        const out: ComputedValue[] = [
+          { id: 'Sv', label: "Scheitelbrechwert S'∞ Hauptschnitt 1", value: o.rx.sph, unit: 'dpt', decimals: 2, signed: true, formula: `Matrixform S' = (I − δF₁)⁻¹F₁ + F₂ – Achse ${Math.round(o.rx.axis)}°` },
+          { id: 'Sv2', label: "Scheitelbrechwert S'∞ Hauptschnitt 2", value: o.rx.sph + o.rx.cyl, unit: 'dpt', decimals: 2, signed: true },
+          { id: 'edge', label: 'Randdicke (min.)', value: shape.edgeThickness, unit: 'mm', decimals: 2 },
+        ];
+        return out;
+      }
       const r = thickLens(n, el.lens.frontRadius, el.lens.backRadius, shape.centerThickness);
       const out: ComputedValue[] = [
         { id: 'F1', label: 'Flächenbrechwert F₁', value: r.F1, unit: 'dpt', decimals: 2, signed: true, formula: "F₁ = (n − 1) / r₁" },
@@ -38,7 +51,7 @@ export function computeElementOptics(el: OpticalElement, tiltDeg = 0): ComputedV
         { id: 'F', label: 'Brechwert F (äquivalent)', value: r.F, unit: 'dpt', decimals: 2, signed: true, formula: 'F = F₁ + F₂ − (d/n)·F₁·F₂' },
         { id: 'Sv', label: "Scheitelbrechwert S'∞", value: r.backVertexPower, unit: 'dpt', decimals: 2, signed: true, formula: "S'∞ = F₁/(1 − (d/n)·F₁) + F₂" },
         { id: 'f', label: "Brennweite f'", value: r.focalLength, unit: 'mm', decimals: 1, formula: "f' = 1 / F" },
-        { id: 'edge', label: 'Randdicke', value: shape.edgeThickness, unit: 'mm', decimals: 2 },
+        { id: 'edge', label: 'Randdicke (min.)', value: shape.edgeThickness, unit: 'mm', decimals: 2 },
       ];
       if (el.kind === 'magnifier') {
         out.push({ id: 'gamma', label: 'Normalvergrößerung Γ', value: magnifierPower(r.F), unit: 'none', decimals: 2, formula: 'Γ = F / 4 dpt' });

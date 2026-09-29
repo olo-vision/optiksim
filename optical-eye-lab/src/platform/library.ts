@@ -82,6 +82,7 @@ export interface CreateInput {
   category?: SimulationCategory;
   tags?: string[];
   templateId?: string;
+  moduleId?: string;
   doc: SceneDocument;
 }
 
@@ -132,6 +133,7 @@ export class LibraryService {
       favorite: false,
       archived: false,
       templateId: input.templateId,
+      ...(input.moduleId ? { moduleId: input.moduleId } : {}),
       summary: summarizeDocument(doc),
       hasThumbnail: false,
       schemaVersion: SCHEMA_VERSION,

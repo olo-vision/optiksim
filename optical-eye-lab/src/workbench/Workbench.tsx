@@ -2,22 +2,36 @@
  * Arbeitsbereiche des Simulators (Phase 4): Umschalter und Dock.
  * Die Simulation (SceneDocument) bleibt beim Wechsel erhalten; jeder Bereich zeigt passende Werkzeuge.
  */
-import { lazy, Suspense } from 'react';
-import { Box, ChevronDown, ChevronUp, CircleDot, Eye, Glasses, GraduationCap, Sparkles } from 'lucide-react';
+import { lazy, Suspense, type ComponentType, type LazyExoticComponent } from 'react';
+import { Box, ChevronDown, ChevronUp, GraduationCap, Maximize2 } from 'lucide-react';
+import { useNavigate } from 'react-router';
 import type { WorkbenchId } from '@/model/types';
 import { useAppStore } from '@/state/store';
+import { activeModules, moduleForWorkbench } from '@/modules/registry';
 
-const RetinoscopyPanel = lazy(() => import('./retinoscopy/RetinoscopyPanel').then((m) => ({ default: m.RetinoscopyPanel })));
-const RefractionPanel = lazy(() => import('./refraction/RefractionPanel').then((m) => ({ default: m.RefractionPanel })));
-const PatientViewPanel = lazy(() => import('./patient/PatientViewPanel').then((m) => ({ default: m.PatientViewPanel })));
-const ContactLensPanel = lazy(() => import('./contact/ContactLensPanel').then((m) => ({ default: m.ContactLensPanel })));
+/** Panels der Arbeitsbereiche – im Simulator als Dock, im Modul als Hauptinhalt (dieselbe Komponente). */
+export const WORKBENCH_PANELS: Record<Exclude<WorkbenchId, 'free'>, LazyExoticComponent<ComponentType>> = {
+  retinoscopy: lazy(() => import('./retinoscopy/RetinoscopyPanel').then((m) => ({ default: m.RetinoscopyPanel }))),
+  refraction: lazy(() => import('./refraction/RefractionPanel').then((m) => ({ default: m.RefractionPanel }))),
+  'patient-view': lazy(() => import('./patient/PatientViewPanel').then((m) => ({ default: m.PatientViewPanel }))),
+  'contact-lens': lazy(() => import('./contact/ContactLensPanel').then((m) => ({ default: m.ContactLensPanel }))),
+  'spectacle-lens': lazy(() => import('./spectacle/SpectacleLensPanel').then((m) => ({ default: m.SpectacleLensPanel }))),
+};
 
+export function WorkbenchPanel({ id }: { id: WorkbenchId }) {
+  if (id === 'free') return null;
+  const Panel = WORKBENCH_PANELS[id];
+  return (
+    <Suspense fallback={<div className="wb-empty">Lade …</div>}>
+      <Panel />
+    </Suspense>
+  );
+}
+
+/** Reiter des Simulators: „Frei“ + alle aktiven Module mit Arbeitsbereich (aus der Modul-Registry). */
 export const WORKBENCHES: Array<{ id: WorkbenchId; label: string; icon: typeof Box; hint: string }> = [
   { id: 'free', label: 'Frei', icon: Box, hint: 'Freie Simulation / optische Bank' },
-  { id: 'retinoscopy', label: 'Skiaskopie', icon: Sparkles, hint: 'Strichskiaskopie mit Reflexbeobachtung und Neutralisation' },
-  { id: 'refraction', label: 'Refraktion', icon: Glasses, hint: 'Subjektive Refraktion: Messglas, Nebeln, Kreuzzylinder, Rot-Grün' },
-  { id: 'patient-view', label: 'Patientensicht', icon: Eye, hint: 'Wie sieht der Patient? Unschärfe aus Defokus, Zylinder und Pupille' },
-  { id: 'contact-lens', label: 'Kontaktlinse', icon: CircleDot, hint: 'Fluoreszeinbild, Sitz, Material und Tränenlinse' },
+  ...activeModules().map((m) => ({ id: m.workbench as WorkbenchId, label: m.short, icon: m.icon, hint: m.tagline })),
 ];
 
 export function WorkbenchBar() {
@@ -37,6 +51,7 @@ export function WorkbenchBar() {
           className={`workbench-bar__item${current === w.id ? ' is-active' : ''}`}
           onClick={() => setWorkbench(w.id)}
           data-tip={w.hint}
+          aria-label={w.label}
           data-testid={`workbench-${w.id}`}
         >
           <w.icon size={14} strokeWidth={1.9} />
@@ -74,20 +89,40 @@ export function WorkbenchDock() {
         <meta.icon size={14} />
         <span className="wb-dock__title">{meta.label}</span>
         <span className="wb-dock__hint">{meta.hint}</span>
+        <FocusModuleButton workbench={current} />
         <button type="button" className="icon-btn icon-btn--ghost icon-btn--sm" onClick={() => setCollapsed(!collapsed)} aria-label={collapsed ? 'Dock ausklappen' : 'Dock einklappen'}>
           {collapsed ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
         </button>
       </header>
       {!collapsed && (
         <div className="wb-dock__body">
-          <Suspense fallback={<div className="wb-empty">Lade …</div>}>
-            {current === 'retinoscopy' && <RetinoscopyPanel />}
-            {current === 'refraction' && <RefractionPanel />}
-            {current === 'patient-view' && <PatientViewPanel />}
-            {current === 'contact-lens' && <ContactLensPanel />}
-          </Suspense>
+          <WorkbenchPanel id={current} />
         </div>
       )}
     </section>
+  );
+}
+
+/** Im Simulator: aktuellen Arbeitsbereich als fokussiertes Modul öffnen (gleiche Simulation). */
+function FocusModuleButton({ workbench }: { workbench: WorkbenchId }) {
+  const navigate = useNavigate();
+  const simId = useAppStore((s) => s.simId);
+  const mod = moduleForWorkbench(workbench);
+  if (!mod || !simId) return null;
+  return (
+    <button
+      type="button"
+      className="btn btn--ghost btn--xs"
+      data-testid="open-as-module"
+      data-tip={`„${mod.title}“ als eigenständiges Modul öffnen – nur dieser Bereich, gleiche Simulation`}
+      onClick={async () => {
+        const st = useAppStore.getState();
+        if (st.dirty) await st.saveCurrent({ silent: true });
+        navigate(`/modules/${mod.id}/${simId}`);
+      }}
+    >
+      <Maximize2 size={13} />
+      <span>Als Modul öffnen</span>
+    </button>
   );
 }

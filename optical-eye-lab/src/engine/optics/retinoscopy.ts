@@ -113,10 +113,14 @@ export interface ReflexModel {
   notes: string[];
 }
 
-/** Eigenwerte/-richtungen von E als Hauptschnitte mit Bewegungsrichtung (Planspiegel). */
-function principalMotions(E: Mat2, sleeve: RetinoscopeParams['sleeve'], tol: number): [MeridianMotion, MeridianMotion] {
+/**
+ * Eigenwerte/-richtungen von E als Hauptschnitte mit Bewegungsrichtung.
+ * Vorzeichen wie die Reflexgeschwindigkeit k ∝ λ·(s − w)/(w·s): Planspiegel immer +, Konkavspiegel nur dann −,
+ * wenn die virtuelle Quelle zwischen Auge und Skiaskop liegt (s = w − d > 0).
+ */
+function principalMotions(E: Mat2, geomSign: number, tol: number): [MeridianMotion, MeridianMotion] {
   const e = eigen2(E);
-  const sign = sleeve === 'concave' ? -1 : 1;
+  const sign = geomSign;
   const mk = (meridian: number, error: number): MeridianMotion => ({
     meridian,
     error,
@@ -188,7 +192,7 @@ export function buildReflexModel(inp: ReflexInput): ReflexModel {
     skew: gLen < 1e-9 ? 0 : skew,
     brightness,
     offset,
-    principal: principalMotions(E, p.sleeve, tol),
+    principal: principalMotions(E, Math.sign((s - w) / s) || 1, tol),
     sweepMeridianError: sweepErr,
     notes,
   };

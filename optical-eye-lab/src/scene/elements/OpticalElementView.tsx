@@ -6,8 +6,7 @@ import * as THREE from 'three';
 import { Edges } from '@react-three/drei';
 import type { EyeEntity, LensElement, OpticalElement } from '@/model/types';
 import { effectiveLens, isSoftOnEye } from '@/model/derived/effectiveLens';
-import { resolveLensShape, elementAxialExtent } from '@/model/derived/elementShape';
-import { outlineRadius } from '@/core/math/outline';
+import { resolveLensShape, elementAxialExtent, lensOutlineFn } from '@/model/derived/elementShape';
 import { DEG2RAD } from '@/core/units';
 import { useAppStore } from '@/state/store';
 import { buildLensGeometry } from './geometry/lensGeometry';
@@ -24,6 +23,8 @@ function useElementGeometry(el: OpticalElement, eye: EyeEntity): THREE.BufferGeo
   // Weiche KL auf dem Auge hängt von der Hornhautform ab (Schmiegung)
   const eyeKey = el.family === 'lens' && isSoftOnEye(el) ? eye.anatomy : null;
   const contactKey = el.family === 'lens' ? el.contact : null;
+  // angeschmiegte Vorderfläche weicher KL hängt vom Brechungsindex ab
+  const mediumKey = el.family === 'lens' && eyeKey ? el.medium : null;
   const geometry = useMemo(() => {
     switch (el.family) {
       case 'lens': {
@@ -31,13 +32,14 @@ function useElementGeometry(el: OpticalElement, eye: EyeEntity): THREE.BufferGeo
         const p = el.lens;
         const isContact = !!el.contact;
         const eff = effectiveLens(el, eye);
+        const outlineFn = lensOutlineFn(el);
         return buildLensGeometry({
           R1: p.frontRadius,
           R2: p.backRadius,
           frontSpec: eff.front,
           backSpec: eff.back,
           thickness: s.centerThickness,
-          outline: (phi) => Math.min(outlineRadius(p.outline, p.diameter, p.width, p.height, phi), s.semiAperture),
+          outline: (phi) => Math.min(outlineFn(phi), s.semiAperture),
           radialSegments: isContact ? 28 : 20,
           angularSegments: p.outline === 'round' ? 96 : 128,
         });
@@ -53,7 +55,7 @@ function useElementGeometry(el: OpticalElement, eye: EyeEntity): THREE.BufferGeo
         return buildMediumGeometry(el.body);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [key, eyeKey, contactKey]);
+  }, [key, eyeKey, contactKey, mediumKey]);
   useEffect(() => () => geometry.dispose(), [geometry]);
   return geometry;
 }

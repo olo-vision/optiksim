@@ -1,8 +1,8 @@
 {
   "name": "optical-eye-lab",
   "private": true,
-  "version": "0.4.0",
-  "description": "Optical Eye Lab – interaktive 3D-Simulationsumgebung für Augenoptik (Phase 1: Grundsystem)",
+  "version": "0.8.0",
+  "description": "OLO-LAB3D – interaktive 3D-Simulationsumgebung für Augenoptik (Phase 7: SaaS mit Supabase und Stripe-Abos)",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -10,11 +10,21 @@
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "test:e2e": "node tests/e2e/phase1.e2e.mjs && node tests/e2e/phase2.e2e.mjs && node tests/e2e/smoke.e2e.mjs && node tests/e2e/phase3.e2e.mjs && node tests/e2e/phase4.e2e.mjs"
+    "test:e2e": "node tests/e2e/phase1.e2e.mjs && node tests/e2e/phase2.e2e.mjs && node tests/e2e/smoke.e2e.mjs && node tests/e2e/phase3.e2e.mjs && node tests/e2e/phase4.e2e.mjs && node tests/e2e/phase5.e2e.mjs",
+    "dev:local": "vite --mode e2e",
+    "dev:e2e": "vite --mode e2e --port 5173 --host 127.0.0.1 --open false",
+    "dev:e2e-cloud": "vite --mode e2e-cloud --port 5174 --host 127.0.0.1 --open false",
+    "test:db": "vitest run tests/db",
+    "test:e2e:saas": "node tests/e2e/saas.e2e.mjs && node tests/e2e/stripe.e2e.mjs && node tests/e2e/phase8.e2e.mjs",
+    "test:stripe": "vitest run tests/stripe.handlers.test.ts tests/billing.unit.test.ts tests/phase8.unit.test.ts tests/db/stripe.test.ts tests/db/phase8.test.ts tests/db/grants.test.ts",
+    "supabase:db-push": "npx supabase db push",
+    "supabase:deploy-functions": "npx supabase functions deploy create-checkout-session && npx supabase functions deploy create-customer-portal && npx supabase functions deploy stripe-webhook --no-verify-jwt",
+    "test:edge": "node tests/edge/edge-auth.smoke.mjs"
   },
   "dependencies": {
     "@react-three/drei": "^10.7.8",
     "@react-three/fiber": "^9.8.0",
+    "@supabase/supabase-js": "^2.117.2",
     "lucide-react": "^1.47.0",
     "react": "^19.3.0",
     "react-dom": "^19.3.0",
@@ -23,6 +33,8 @@
     "zustand": "^5.0.15"
   },
   "devDependencies": {
+    "@electric-sql/pglite": "^0.5.8",
+    "@types/node": "^26.6.3",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
     "@types/three": "^0.186.0",

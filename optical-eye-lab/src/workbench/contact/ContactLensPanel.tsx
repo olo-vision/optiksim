@@ -150,11 +150,14 @@ export function ContactLensPanel() {
           {pcs.length === 0 && <p className="wb-hint">Keine – Rückfläche sphärisch bis zum Rand.</p>}
           {pcs.map((pc, i) => (
             <div key={i} className="wb-pc">
-              <Stepper label={`PK${i + 1} r`} value={pc.radius} step={0.1} min={6} max={16} decimals={2} unit="mm" signed={false} onChange={(v) => setC({ peripheralCurves: pcs.map((p, k) => (k === i ? { ...p, radius: v } : p)) })} />
+              <div className="wb-pc__head">
+                <span>Periphere Kurve {i + 1}</span>
+                <button type="button" className="icon-btn icon-btn--ghost icon-btn--sm" onClick={() => setC({ peripheralCurves: pcs.filter((_, k) => k !== i) })} aria-label={`Kurve ${i + 1} entfernen`} data-tip="Kurve entfernen">
+                  <Trash2 size={13} />
+                </button>
+              </div>
+              <Stepper label="Radius r" value={pc.radius} step={0.1} min={6} max={16} decimals={2} unit="mm" signed={false} onChange={(v) => setC({ peripheralCurves: pcs.map((p, k) => (k === i ? { ...p, radius: v } : p)) })} />
               <Stepper label="Breite" value={pc.width} step={0.05} min={0.05} max={2} decimals={2} unit="mm" signed={false} onChange={(v) => setC({ peripheralCurves: pcs.map((p, k) => (k === i ? { ...p, width: v } : p)) })} />
-              <button type="button" className="icon-btn icon-btn--ghost icon-btn--sm" onClick={() => setC({ peripheralCurves: pcs.filter((_, k) => k !== i) })} aria-label="Kurve entfernen">
-                <Trash2 size={13} />
-              </button>
             </div>
           ))}
           <button type="button" className="btn btn--ghost" onClick={() => setC({ peripheralCurves: [...pcs, { radius: (pcs.at(-1)?.radius ?? el.lens.backRadius) + 1, width: 0.3 } as PeripheralCurve] })}>

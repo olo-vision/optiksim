@@ -7,7 +7,7 @@
  */
 import type { LensElement, OpticalElement } from '../types';
 import { checkLensShapeGeneral, type SurfaceSpec } from '@/core/math/surfaces';
-import { outlineRadius } from '@/core/math/outline';
+import { outlineRadiusFrom, type OutlineSpec } from '@/core/math/outline';
 
 /** Flächenbeschreibungen einer Linse aus dem Datenmodell (freier Zustand). */
 export function lensSurfaces(el: LensElement): { front: SurfaceSpec; back: SurfaceSpec } {
@@ -17,10 +17,21 @@ export function lensSurfaces(el: LensElement): { front: SurfaceSpec; back: Surfa
   return { front, back };
 }
 
-/** Konturfunktion r(φ) in lokalen Polarkoordinaten. */
-export function lensOutlineFn(el: LensElement): (phi: number) => number {
+/**
+ * Kontur einer Linse in lokalen Elementkoordinaten, Ursprung = optischer Mittelpunkt.
+ * opticalCenterOffset (TABO: OZ relativ zur Kastenmitte) → Kastenmitte relativ zum OZ = −offset,
+ * TABO → lokal: (x_t, y_t) ↦ (−x_t, y_t)  ⇒  Kastenmitte lokal = (+off.x, −off.y).
+ */
+export function lensOutlineSpec(el: LensElement): OutlineSpec {
   const p = el.lens;
-  return (phi) => outlineRadius(p.outline, p.diameter, p.width, p.height, phi);
+  const off = el.contact ? undefined : p.opticalCenterOffset;
+  return { outline: p.outline, diameter: p.diameter, width: p.width, height: p.height, cx: off ? off.x : 0, cy: off ? -off.y : 0 };
+}
+
+/** Konturfunktion r(φ) in lokalen Polarkoordinaten (vom optischen Mittelpunkt aus). */
+export function lensOutlineFn(el: LensElement): (phi: number) => number {
+  const o = lensOutlineSpec(el);
+  return (phi) => outlineRadiusFrom(o, phi);
 }
 
 export interface LensShape {

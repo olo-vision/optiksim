@@ -43,9 +43,10 @@ export function effectiveLens(el: LensElement, eye?: EyeEntity): EffectiveLens {
     inner = new WeakMap();
     cache.set(el.lens, inner);
   }
+  // Die angeschmiegte Vorderfläche hängt auch vom Brechungsindex ab → Medium gehört zum Cache-Schlüssel
   const key = el.contact as object;
-  const hit = inner.get(eye.anatomy) ;
-  if (hit && (hit as EffectiveLens & { _k?: object })._k === key) return hit;
+  const hit = inner.get(eye.anatomy) as (EffectiveLens & { _k?: object; _m?: object }) | undefined;
+  if (hit && hit._k === key && hit._m === el.medium) return hit;
 
   const n = el.medium.n;
   const t = el.lens.centerThickness;
@@ -61,7 +62,7 @@ export function effectiveLens(el: LensElement, eye?: EyeEntity): EffectiveLens {
   const F1 = frontMatrixForBackVertex(nominal, F2, t, n);
   const K1 = mscale2(F1, 1 / (1000 * (n - 1)));
   const front = specFromCurvatureMatrix(K1, c.axis ?? 180);
-  const res = { front, back, conformed: true, _k: key } as EffectiveLens & { _k: object };
+  const res = { front, back, conformed: true, _k: key, _m: el.medium } as EffectiveLens & { _k: object; _m: object };
   inner.set(eye.anatomy, res);
   return res;
 }

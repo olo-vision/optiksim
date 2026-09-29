@@ -11,7 +11,8 @@
  */
 import type { EyeEntity, LensElement, LensParams } from '@/model/types';
 import { effectiveLens } from '@/model/derived/effectiveLens';
-import { lensOutlineFn } from '@/model/derived/elementShape';
+import { lensOutlineFn, resolveLensShape } from '@/model/derived/elementShape';
+import { minCenterOf, minEdgeOf, requiredCenterThickness, thicknessModeOf } from './lensThickness';
 import {
   backMatrixForBackVertex,
   backVertexMatrix,
@@ -44,7 +45,8 @@ export function lensOptics(el: LensElement, eye?: EyeEntity, form: CylForm = 'mi
   const n = el.medium.n;
   const F1 = surfacePowerMatrix(front, 1, n);
   const F2 = surfacePowerMatrix(back, n, 1);
-  const matrix = backVertexMatrix(F1, F2, el.lens.centerThickness, n);
+  // dieselbe Mittendicke wie Darstellung und Raytracing (resolveLensShape erhöht sie ggf. bei negativer Randdicke)
+  const matrix = backVertexMatrix(F1, F2, resolveLensShape(el).centerThickness, n);
   const fallbackAxis = back.axis ?? front.axis ?? 180;
   return { matrix, rx: matrixToRx(matrix, form, fallbackAxis), front, back, F1, F2, conformed };
 }
@@ -76,21 +78,26 @@ function specToParams(spec: SurfaceSpec, which: 'front' | 'back'): Partial<LensP
 
 /**
  * Löst die Linsengeometrie für ein gewünschtes Rezept (Scheitelbrechwert in Luft).
- * Die Gegenfläche bleibt erhalten. Ergibt sich eine negative Randdicke, wird die Mittendicke
- * iterativ erhöht und neu gelöst (Mindest-Randdicke 0,5 mm Glas / 0,05 mm KL).
+ * Die Gegenfläche (Basiskurve) bleibt erhalten.
+ *  - Dickenmodus 'auto' (Brillengläser): Mittendicke = max(t_min, e_min + max(s₁ − s₂)) – iterativ, da der
+ *    Scheitelbrechwert von der Dicke abhängt (Fixpunkt, konvergiert in wenigen Schritten; auch Verringerung).
+ *  - 'manual': Mittendicke bleibt; nur wenn die Randdicke unter das Minimum fiele, wird sie erhöht
+ *    (Mindest-Randdicke 0,5 mm Glas / 0,05 mm KL).
  */
 export function designLensForRx(el: LensElement, rx: Rx): LensDesignResult {
   const notes: string[] = [];
   const n = el.medium.n;
   const which = solvedSurface(el);
   const T = rxToMatrix(rx);
-  const minEdge = isContactLens(el) ? 0.05 : el.kind === 'spectacle-lens' ? 0.5 : 0.3;
+  const auto = thicknessModeOf(el) === 'auto';
+  const minEdge = auto ? minEdgeOf(el) : isContactLens(el) ? 0.05 : el.kind === 'spectacle-lens' ? 0.5 : 0.3;
+  const minCenter = auto ? minCenterOf(el) : 0;
   let lens: LensParams = { ...el.lens };
   const fixed = which === 'back'
     ? (lens.frontRadius2 === undefined ? { R: lens.frontRadius } : { R: lens.frontRadius, R2: lens.frontRadius2, axis: lens.frontAxis })
     : (lens.backRadius2 === undefined ? { R: lens.backRadius } : { R: lens.backRadius, R2: lens.backRadius2, axis: lens.backAxis });
 
-  for (let iter = 0; iter < 8; iter++) {
+  for (let iter = 0; iter < (auto ? 24 : 8); iter++) {
     const t = lens.centerThickness;
     let solved: Mat2;
     let K: Mat2;
@@ -108,6 +115,14 @@ export function designLensForRx(el: LensElement, rx: Rx): LensDesignResult {
     const check = checkLensShapeGeneral(front, back, t, lensOutlineFn({ ...el, lens }), minEdge);
     if (check.warnings.some((w) => w.startsWith('Durchmesser'))) {
       return { ok: false, lens: el.lens, notes: ['Mit dieser Basiskurve und diesem Durchmesser nicht realisierbar (Radius kleiner als halber Durchmesser).'] };
+    }
+    if (auto) {
+      const tReq = requiredCenterThickness(front, back, lensOutlineFn({ ...el, lens }), minEdge, minCenter);
+      if (Math.abs(tReq - t) > 1e-4) {
+        lens = { ...lens, centerThickness: Number(tReq.toFixed(4)) };
+        continue;
+      }
+      return { ok: true, lens, notes };
     }
     if (check.centerThickness > t + 1e-4) {
       lens = { ...lens, centerThickness: Number(check.centerThickness.toFixed(3)) };

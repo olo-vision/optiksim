@@ -1,6 +1,8 @@
-# Optical Eye Lab
+# OLO-LAB3D (Optical Eye Lab)
 
-Interaktive 3D-Simulationsumgebung für Augenoptik – **Phase 4: Untersuchungsmodi** (Skiaskopie, Refraktion, Patientensicht, Fluoreszein, Materialsystem, Dispersion, Training) auf der vollwertigen Anwendung aus Phase 3 (Details: [docs/PHASE4.md](docs/PHASE4.md), Anwendung: [docs/PHASE3.md](docs/PHASE3.md), Optik/Physik: [docs/PHASE2.md](docs/PHASE2.md)).
+Interaktive 3D-Simulationsumgebung für Augenoptik – **Phase 8: Demo, Jahrespreise, B2C/B2B, Rechtstexte & Vertragscenter**. Details: [docs/PHASE8_DEMO_LEGAL.md](docs/PHASE8_DEMO_LEGAL.md) · Stripe-Abos (Phase 7): [docs/STRIPE_SUBSCRIPTIONS.md](docs/STRIPE_SUBSCRIPTIONS.md) · SaaS-Grundstruktur (Phase 6): [docs/SAAS_AUTH_FOUNDATION.md](docs/SAAS_AUTH_FOUNDATION.md).
+
+Davor: **Phase 5: modulares Dashboard** (Skiaskopie, Refraktion, Patientensicht, Kontaktlinse und Brillenglas als eigenständige Module) und **fachlicher Physik-Review** (u. a. Glasdicke aus der Geometrie). Details: [docs/PHASE5.md](docs/PHASE5.md) · Untersuchungsmodi: [docs/PHASE4.md](docs/PHASE4.md) · Anwendung: [docs/PHASE3.md](docs/PHASE3.md) · Optik/Physik: [docs/PHASE2.md](docs/PHASE2.md).
 
 Ein virtuelles optisches Labor mit parametrischem Modellauge (Le Grand), frei platzierbaren optischen Elementen, CAD-Bedienung, Bemaßung, optischer Achse, Inspector und lokalem Speichern. Untersuchungsmodi sind als Arbeitsbereiche über derselben Szene umgesetzt.
 
@@ -23,11 +25,26 @@ Weitere Befehle:
 | `npm run preview` | Produktions-Build lokal ansehen |
 | `npm run typecheck` | Nur TypeScript prüfen |
 | `npm test` | Unit-Tests (Optik, Raytracing, Plattform: Konten, Bibliothek, Migration …) |
-| `npm run test:e2e` | Browser-Tests (Dev-Server muss laufen; einmalig `npx playwright install chromium`) |
+| `npm run test:e2e` | Browser-Tests Phase 1–5 (vorher `npm run dev:e2e` = lokaler Modus auf Port 5173; einmalig `npx playwright install chromium`) |
 
-Alles läuft lokal – kein Backend, keine externen Dienste. Die Anmeldung ist eine **lokale Produkt-Demo ohne echte Kontosicherheit**; Konten und Simulationen liegen nur im Browser.
+**Supabase (Standard ab Phase 6):** `.env.example` nach `.env.local` kopieren und `VITE_SUPABASE_URL` + `VITE_SUPABASE_PUBLISHABLE_KEY` eintragen (nur der *publishable*/anon-Schlüssel – niemals Service-Role- oder Secret-Keys). Die Datenbank wird mit `supabase/migrations/20260928120000_saas_foundation.sql` eingerichtet. Simulator, Dashboard und Module sind nur mit **aktiver Lizenz** erreichbar. Vollständige Anleitung: [docs/SAAS_AUTH_FOUNDATION.md](docs/SAAS_AUTH_FOUNDATION.md).
 
-**Erster Start:** „Konto erstellen“ (das erste Konto wird Administrator/in), „Demo starten“ (Gastzugang) oder Demo-Trainer `demo@opticaleyelab.local` / `demo`. Daten aus Phase 1/2 werden automatisch übernommen (Tag „Übernommen“).
+| Befehl | Modus |
+|---|---|
+| `npm run dev` | Supabase (aus `.env.local`) |
+| `npm run dev:local` | lokale Demo wie Phase 3–5, ohne Backend und ohne Lizenzprüfung |
+| `npm run dev:e2e-cloud` | Mock-Backend im Browser (für SaaS-E2E, Port 5174) |
+| `npm run test:db` | RLS-/Trigger-Tests der Migration gegen echtes Postgres (PGlite) |
+| `npm run test:e2e:saas` | Browser-Tests Registrierung → Tarif → Checkout → Freischaltung → Frist/Kündigung, Demo, Jahrespreise, Rechtstexte (Mock-Modus) |
+| `npm run test:stripe` | Stripe-Handler, Abo-Logik, Demo, Zustimmungen, Rechte und Webhook Ende-zu-Ende gegen PostgreSQL |
+| `npm run test:edge` | echte Edge Functions unter Deno gegen einen Supabase-Nachbau (JWT-Prüfung, Admin-Client) – benötigt Deno |
+| `npm run supabase:deploy-functions` | Edge Functions deployen (Webhook ohne JWT-Prüfung) |
+
+Simulationen werden weiterhin lokal im Browser gespeichert (je Konto getrennt).
+
+**Lokaler Demo-Modus** (`npm run dev:local`): kein Backend, keine externen Dienste. Die Anmeldung ist eine **lokale Produkt-Demo ohne echte Kontosicherheit**; Konten und Simulationen liegen nur im Browser.
+
+**Erster Start (lokaler Demo-Modus):** „Konto erstellen“ (das erste Konto wird Administrator/in), „Demo starten“ (Gastzugang) oder Demo-Trainer `demo@opticaleyelab.local` / `demo`. Daten aus Phase 1/2 werden automatisch übernommen (Tag „Übernommen“).
 
 **Netlify:** `public/_redirects` sorgt dafür, dass alle Adressen (`/dashboard`, `/simulations/…`) neu geladen werden können.
 
@@ -74,6 +91,57 @@ Alles läuft lokal – kein Backend, keine externen Dienste. Die Anmeldung ist e
 Funktionen, die noch nicht umgesetzt sind, erscheinen ausschließlich deaktiviert mit dem Hinweis *In Entwicklung* (Untersuchungsgeräte, Lernmodus).
 
 ---
+
+## Neu in Phase 8
+
+- **Demo:** 2 Stunden kostenlos mit vollem Funktionsumfang, ohne Zahlungsdaten, einmal je Kundenkonto – serverseitig geprüft (`start_demo`, `demo_grants`). Timer „Demo – verbleibende Zeit“, nach Ablauf Seite „Deine OLO-LAB Demo ist beendet.“ Danach beginnt nie automatisch ein Abo.
+- **Jahrespreise:** 199 € / 399 € / 999 € pro Jahr mit Umschalter *Monatlich | Jährlich*. Die Price ID wählt der Server aus einer Whitelist (`private_monthly … education_yearly`).
+- **B2C/B2B:** Privatperson vs. Unternehmen/Bildungseinrichtung; B2B mit Rechnungsanschrift, USt-IdNr. und Position.
+- **Rechtstexte & Zustimmungen:** Vertragscenter unter *Admin → Rechtstexte* (versioniert, genau eine aktive Version je Typ/Zielgruppe). Registrierung, Demo und Kauf fragen die aktiven Versionen ab; jede Zustimmung wird unveränderlich mit Version, Hash und Checkout-Session protokolliert.
+- **Ablauf:** Paket → Konto → Zustimmungen → Stripe oder Demo → Bestätigung → Kurz-Onboarding.
+- Neue Migration `20260929120000_demo_billing_legal.sql`. Details, manuelle Schritte und Tests: [`docs/PHASE8_DEMO_LEGAL.md`](docs/PHASE8_DEMO_LEGAL.md).
+
+## Neu in Phase 7
+
+- **Echter Kaufprozess:** Tarif wählen → Stripe Checkout → Webhook → Abo in Supabase → Lizenz automatisch aktiv → Simulator frei. Das Frontend übergibt nur den Tarif; die Price ID wählt der Server.
+- **Tarifregel:** Buchbar ist nur der Tarif passend zum Kontotyp aus der Registrierung.
+- **Webhook** (`stripe-webhook`): Signaturprüfung, idempotent (`stripe_events`), lädt Abo und Rechnung frisch von Stripe (API `2026-08-26.dahlia`). Verarbeitet `checkout.session.completed`, `customer.subscription.*`, `invoice.paid`, `invoice.payment_failed`.
+- **Zahlungsausfall:** `past_due` mit 7 Tagen Frist und klarem Hinweis; danach `suspended` (pg_cron); nach Zahlung wieder `active`.
+- **Kündigung:** Zugriff bis zum Periodenende („Gekündigt – Zugriff bis …“), danach `cancelled`.
+- **Abonnement verwalten:** Stripe Customer Portal (nur eigener Kunde).
+- **Konto und Lizenz:** Tarif, Lizenz-/Abostatus, nächste Abrechnung, Kündigungs- und Fristhinweis.
+- **Admin:** Tarif, Status, Quelle (Stripe/Manuell), Abostatus, Customer-/Subscription-ID, Periodenende, Kündigung. Manuelle Sonderlizenzen bleiben von Stripe unberührt.
+- Neue Migration `20260928200000_stripe_subscriptions.sql`; die Phase-6-Migration ist unverändert.
+- **7.1:** Edge Functions prüfen den Benutzer-JWT und greifen über einen separaten Admin-Client (`@supabase/server`, `SUPABASE_SECRET_KEYS`) auf die Datenbank zu. Die Migration `20260929090000_service_role_grants.sql` vergibt die seit der Supabase-Umstellung nötigen Tabellenrechte für `service_role`; das behebt „permission denied for table profiles“.
+
+## Neu in Phase 6
+
+- **Kundengruppen und Tarife:** Private (19,90 €), Business (39,90 €, 1 Betriebsstandort), Education (99,90 €, 1 Bildungsstandort) – Seite `/pricing`.
+- **Konten über Supabase Auth:** Registrierung mit Kontotyp und Organisationsdaten, Anmeldung, Abmeldung, Passwort vergessen/zurücksetzen, Sitzungswiederherstellung, verständliche deutsche Fehlermeldungen.
+- **Datenbank:** `profiles`, `institutions`, `licenses` (Status standardmäßig `pending`), `subscriptions` (Stripe-Felder vorbereitet), `audit_logs`, `plan_catalog` – mit Row Level Security, Spaltenrechten und Schutz-Triggern (keine Selbst-Freischaltung, keine Rollen-Eskalation, keine Stripe-Manipulation).
+- **Lizenzprüfung:** Dashboard, Simulator, Module und Simulationen nur mit aktiver Lizenz; sonst Weiterleitung auf `/license`.
+- **Konto-Seite** (`/account`) mit Lizenzart und Status, **Admin-Übersicht** (`/admin`, nur `super_admin`) mit Lizenzstatus-Änderung per geprüfter Datenbankfunktion.
+- **Stripe vorbereitet:** Edge Functions `create-checkout-session`, `stripe-webhook`, `create-customer-portal` (ohne Secrets inaktiv; Buttons zeigen „Online-Zahlung folgt“).
+- Produktname **OLO-LAB3D**.
+
+## Neu in Phase 5
+
+- **Module direkt vom Dashboard:** Skiaskopie, Refraktion, Patientensicht, Kontaktlinse und das neue Modul **Brillenglas** öffnen sich als eigenständige, fokussierte Bereiche.
+  - Sie teilen Panels, Physik und Datenmodell mit dem vollständigen Simulator.
+  - Die Modulseite hat eine eigene Kopfzeile: Dashboard · Module · Modulwechsel · Sitzung · „Vollständiger Simulator“.
+  - Sitzungen werden fortgesetzt und in „Meine Simulationen“ gespeichert.
+  - Spaltlampe, Topograf, Binokulartests und Ophthalmoskop sind vorbereitet („In Entwicklung“).
+- **Glasdicke aus der Geometrie:** t = max(t_min, e_min + max(s₁ − s₂)) entlang der echten Kontur.
+  - Bei höherem Index werden Plusgläser in der Mitte dünner und Minusgläser am Rand.
+  - Weitere Einflussgrößen: Formscheibe, Zentrierung, Mindestdicken.
+  - Das Gewicht folgt aus Volumen und Dichte.
+- **Physik-Review:**
+  - gewendete Gläser
+  - Dispersion des Auges (≈ 0,9 dpt F→C)
+  - Rot-Grün-Test bei Akkommodation
+  - Konkavspiegel-Hauptschnitte
+  - Konsistenz Wirkung ↔ Darstellung
+  - Details und Befundliste in [docs/PHASE5.md](docs/PHASE5.md).
 
 ## Neu in Phase 4
 
@@ -156,7 +224,7 @@ src/
 │  ├─ interaction/       Auswahl, Hover, Transform-Gizmo, Objekt-Registry
 │  ├─ labels/            Performantes HTML-Label-System
 │  └─ overlays/          Achse, Bemaßung, Strahlengang, Lichtquellen, Messpunkte
-├─ modules/registry.ts   Erweiterungspunkt für Fachmodule (derzeit nur geplant)
+├─ modules/registry.ts   Modul-Registry (Phase 5): Module für Dashboard, Modulseiten und Arbeitsbereiche
 └─ ui/                   Oberfläche: Toolbar, Szenenbaum, Inspector, Dialoge, HUD
 ```
 

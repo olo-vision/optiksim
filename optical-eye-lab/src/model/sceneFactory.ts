@@ -4,14 +4,16 @@
 import { createId } from '@/core/ids';
 import { makeRigid, toLocalPoint, toWorldPoint, type Vec3 } from '@/core/math/vec';
 import { getElementDefinition } from './elementRegistry';
+import { withAutoThickness } from '@/engine/physics/lensThickness';
 import { DEFAULT_EYE_ANATOMY } from './derived/eyeGeometry';
-import { elementAxialExtent } from './derived/elementShape';
+import { elementAxialExtent, resolveLensShape } from './derived/elementShape';
 import { isOnEye, seatTransform } from './derived/contactSeat';
 import {
   SCHEMA_VERSION,
   type ElementKind,
   type EyeEntity,
   type LensElement,
+  type LensParams,
   type LightSourceEntity,
   type MeasurePointEntity,
   type OpticalElement,
@@ -97,6 +99,8 @@ export function createElement(kind: ElementKind, doc: SceneDocument, distance?: 
     locked: false,
     transform: identityTransform(),
   } as OpticalElement;
+  // Dickenmodus 'auto': Mittendicke sofort aus Geometrie und Mindestdicken bestimmen
+  if (el.family === 'lens') el.lens = withAutoThickness(el);
 
   const ext = elementAxialExtent(el);
   let centerZ: number;
@@ -196,4 +200,22 @@ export function centerOnAxis<T extends OpticalElement>(el: T, doc: SceneDocument
     ...el,
     transform: { ...el.transform, position: eyeLocalToWorld(doc.eye, [0, 0, local[2]]), rotation: [...doc.eye.transform.rotation] as Vec3 },
   };
+}
+
+/**
+ * Neue Linsenparameter übernehmen und dabei den augenseitigen Scheitel ortsfest halten (Phase 5):
+ * Ändert sich die Mittendicke (z. B. automatische Dickenberechnung), bleibt der HSA unverändert.
+ * Rückscheitel lokal bei +t/2 → neue Mitte = alte Mitte + R·(0, 0, (t_alt − t_neu)/2).
+ */
+export function replaceLensKeepingBackVertex(el: LensElement, lens: LensParams): LensElement {
+  const tOld = resolveLensShape(el).centerThickness;
+  const next: LensElement = { ...el, lens };
+  const tNew = resolveLensShape(next).centerThickness;
+  const dt = (tOld - tNew) / 2;
+  const onEye = !!el.contact?.onEye;
+  if (Math.abs(dt) < 1e-7 || onEye) return next;
+  const tr: Transform = el.transform;
+  const dir = toWorldPoint(makeRigid([0, 0, 0], tr.rotation), [0, 0, 1]);
+  const p = tr.position;
+  return { ...next, transform: { ...tr, position: [p[0] + dir[0] * dt, p[1] + dir[1] * dt, p[2] + dir[2] * dt] } };
 }

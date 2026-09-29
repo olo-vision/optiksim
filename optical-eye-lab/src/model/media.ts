@@ -37,6 +37,11 @@ export interface OpticalMaterial {
   modulus?: number;
   /** Benetzungswinkel [°] (formstabil, Richtwert) */
   wettingAngle?: number;
+  /**
+   * Brillenglas: typische Fertigungs-Mindestmittendicke für Minusgläser [mm] (Richtwert, herstellerabhängig).
+   * Zähe Materialien (Polycarbonat, Urethan) erlauben dünnere Mitten als ADC-Kunststoff oder Mineralglas.
+   */
+  minCenterThickness?: number;
   note?: string;
 }
 
@@ -65,19 +70,19 @@ export const MATERIALS: OpticalMaterial[] = [
   { id: 'vitreous', name: 'Glaskörper', category: 'eye', subgroup: 'Auge', n: 1.336, abbe: 55.8 },
 
   // ---------------------------- Brillenglas: Kunststoff ----------------------------
-  { id: 'cr39', name: 'Standard-Kunststoff (ADC) 1,50', category: 'spectacle', subgroup: 'Kunststoff', n: 1.5, abbe: 58, density: 1.32, uvCutoff: 355 },
-  { id: 'urethane153', name: 'Urethan-Kunststoff 1,53', category: 'spectacle', subgroup: 'Kunststoff', n: 1.53, abbe: 45, density: 1.11, uvCutoff: 394 },
-  { id: 'polycarbonate', name: 'Polycarbonat 1,59', category: 'spectacle', subgroup: 'Kunststoff', n: 1.586, abbe: 30, density: 1.2, uvCutoff: 385 },
-  { id: 'hi160', name: 'Kunststoff 1,60', category: 'spectacle', subgroup: 'Kunststoff', n: 1.6, abbe: 42, density: 1.3, uvCutoff: 395 },
-  { id: 'hi167', name: 'Kunststoff 1,67', category: 'spectacle', subgroup: 'Kunststoff', n: 1.67, abbe: 32, density: 1.35, uvCutoff: 398 },
-  { id: 'hi174', name: 'Kunststoff 1,74', category: 'spectacle', subgroup: 'Kunststoff', n: 1.74, abbe: 33, density: 1.46, uvCutoff: 398 },
+  { id: 'cr39', name: 'Standard-Kunststoff (ADC) 1,50', category: 'spectacle', subgroup: 'Kunststoff', n: 1.5, abbe: 58, density: 1.32, uvCutoff: 355, minCenterThickness: 2.0 },
+  { id: 'urethane153', name: 'Urethan-Kunststoff 1,53', category: 'spectacle', subgroup: 'Kunststoff', n: 1.53, abbe: 45, density: 1.11, uvCutoff: 394, minCenterThickness: 1.2 },
+  { id: 'polycarbonate', name: 'Polycarbonat 1,59', category: 'spectacle', subgroup: 'Kunststoff', n: 1.586, abbe: 30, density: 1.2, uvCutoff: 385, minCenterThickness: 1.1 },
+  { id: 'hi160', name: 'Kunststoff 1,60', category: 'spectacle', subgroup: 'Kunststoff', n: 1.6, abbe: 42, density: 1.3, uvCutoff: 395, minCenterThickness: 1.5 },
+  { id: 'hi167', name: 'Kunststoff 1,67', category: 'spectacle', subgroup: 'Kunststoff', n: 1.67, abbe: 32, density: 1.35, uvCutoff: 398, minCenterThickness: 1.3 },
+  { id: 'hi174', name: 'Kunststoff 1,74', category: 'spectacle', subgroup: 'Kunststoff', n: 1.74, abbe: 33, density: 1.46, uvCutoff: 398, minCenterThickness: 1.2 },
   // ---------------------------- Brillenglas: Mineral ----------------------------
-  { id: 'crown', name: 'Kronglas 1,523 (Mineral Standard)', category: 'spectacle', subgroup: 'Mineral', n: 1.523, abbe: 58.5, density: 2.54, uvCutoff: 320 },
-  { id: 'glass', name: 'Mineralglas 1,52', category: 'spectacle', subgroup: 'Mineral', n: 1.52, abbe: 58, density: 2.5, uvCutoff: 320 },
-  { id: 'min160', name: 'Mineral hochbrechend 1,60', category: 'spectacle', subgroup: 'Mineral', n: 1.6, abbe: 42, density: 2.6, uvCutoff: 335 },
-  { id: 'min170', name: 'Mineral hochbrechend 1,70', category: 'spectacle', subgroup: 'Mineral', n: 1.7, abbe: 41, density: 3.2, uvCutoff: 340 },
-  { id: 'min180', name: 'Mineral hochbrechend 1,80', category: 'spectacle', subgroup: 'Mineral', n: 1.8, abbe: 35, density: 3.6, uvCutoff: 345 },
-  { id: 'min190', name: 'Mineral hochbrechend 1,90', category: 'spectacle', subgroup: 'Mineral', n: 1.9, abbe: 31, density: 4.0, uvCutoff: 350 },
+  { id: 'crown', name: 'Kronglas 1,523 (Mineral Standard)', category: 'spectacle', subgroup: 'Mineral', n: 1.523, abbe: 58.5, density: 2.54, uvCutoff: 320, minCenterThickness: 1.8 },
+  { id: 'glass', name: 'Mineralglas 1,52', category: 'spectacle', subgroup: 'Mineral', n: 1.52, abbe: 58, density: 2.5, uvCutoff: 320, minCenterThickness: 1.8 },
+  { id: 'min160', name: 'Mineral hochbrechend 1,60', category: 'spectacle', subgroup: 'Mineral', n: 1.6, abbe: 42, density: 2.6, uvCutoff: 335, minCenterThickness: 1.5 },
+  { id: 'min170', name: 'Mineral hochbrechend 1,70', category: 'spectacle', subgroup: 'Mineral', n: 1.7, abbe: 41, density: 3.2, uvCutoff: 340, minCenterThickness: 1.4 },
+  { id: 'min180', name: 'Mineral hochbrechend 1,80', category: 'spectacle', subgroup: 'Mineral', n: 1.8, abbe: 35, density: 3.6, uvCutoff: 345, minCenterThickness: 1.3 },
+  { id: 'min190', name: 'Mineral hochbrechend 1,90', category: 'spectacle', subgroup: 'Mineral', n: 1.9, abbe: 31, density: 4.0, uvCutoff: 350, minCenterThickness: 1.3 },
 
   // ---------------------------- Kontaktlinse formstabil ----------------------------
   { id: 'pmma', name: 'PMMA', category: 'contact-rigid', subgroup: 'formstabil', n: 1.49, abbe: 57, density: 1.19, dk: 0.5, wettingAngle: 60, note: 'praktisch sauerstoffundurchlässig' },

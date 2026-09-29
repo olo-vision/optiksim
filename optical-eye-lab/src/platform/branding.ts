@@ -4,7 +4,7 @@
  */
 import type { Branding } from './models';
 
-export const PRODUCT_NAME = 'Optical Eye Lab';
+export const PRODUCT_NAME = 'OLO-LAB3D';
 export const DEFAULT_ACCENT = '#4cc2ff';
 
 export const DEFAULT_BRANDING: Branding = { productName: PRODUCT_NAME, accentColor: DEFAULT_ACCENT };

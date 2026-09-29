@@ -128,14 +128,14 @@ export function Stepper({
 }
 
 /** Sph / Cyl / Achse eines Messglases */
-export function TrialLensControls({ rx, onChange, disabled, title = 'Messglas (HSA 12 mm)' }: { rx: Rx; onChange: (rx: Rx) => void; disabled?: boolean; title?: string }) {
+export function TrialLensControls({ rx, onChange, disabled, title = 'Messglas (HSA 12 mm)', testPrefix = 'trial' }: { rx: Rx; onChange: (rx: Rx) => void; disabled?: boolean; title?: string; testPrefix?: string }) {
   const step = useAppStore((s) => s.prefs.diopterStep);
   return (
-    <div className="wb-group" data-testid="trial-lens">
+    <div className="wb-group" data-testid={`${testPrefix}-lens`}>
       <div className="wb-group__title">{title}</div>
-      <Stepper label="Sph" value={rx.sph} step={step} bigStep={1} min={-20} max={20} onChange={(v) => onChange({ ...rx, sph: v })} disabled={disabled} testId="trial-sph" />
-      <Stepper label="Cyl" value={rx.cyl} step={step} bigStep={1} min={-8} max={0} onChange={(v) => onChange({ ...rx, cyl: v })} disabled={disabled} testId="trial-cyl" />
-      <Stepper label="Achse" value={rx.axis} step={5} bigStep={45} unit="°" decimals={0} signed={false} onChange={(v) => onChange({ ...rx, axis: normalizeAxis(v) })} disabled={disabled} testId="trial-axis" />
+      <Stepper label="Sph" value={rx.sph} step={step} bigStep={1} min={-20} max={20} onChange={(v) => onChange({ ...rx, sph: v })} disabled={disabled} testId={`${testPrefix}-sph`} />
+      <Stepper label="Cyl" value={rx.cyl} step={step} bigStep={1} min={-8} max={0} onChange={(v) => onChange({ ...rx, cyl: v })} disabled={disabled} testId={`${testPrefix}-cyl`} />
+      <Stepper label="Achse" value={rx.axis} step={5} bigStep={45} unit="°" decimals={0} signed={false} onChange={(v) => onChange({ ...rx, axis: normalizeAxis(v) })} disabled={disabled} testId={`${testPrefix}-axis`} />
     </div>
   );
 }

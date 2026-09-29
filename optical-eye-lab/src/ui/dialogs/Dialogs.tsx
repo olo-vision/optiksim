@@ -5,7 +5,7 @@ import { useNavigate } from 'react-router';
 import { ArrowRight } from 'lucide-react';
 import { useAppStore } from '@/state/store';
 import { type QualityLevel } from '@/state/persistence';
-import { MODULES } from '@/modules/registry';
+import { CAPABILITIES } from '@/modules/registry';
 import { Dialog } from '../common/overlays';
 import { Badge, Kbd, Section, Segmented } from '../common/controls';
 import { NumberField, ToggleField } from '../common/fields';
@@ -79,7 +79,7 @@ function SettingsDialog() {
       </Section>
       <Section title="Module" defaultOpen={false}>
         <ul className="module-list">
-          {MODULES.map((m) => (
+          {CAPABILITIES.map((m) => (
             <li key={m.id}>
               <span>
                 <strong>{m.title}</strong>

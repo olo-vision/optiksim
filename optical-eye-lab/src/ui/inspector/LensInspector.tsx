@@ -18,9 +18,11 @@ import { computeMeasurements } from '@/model/derived/measurements';
 import { entityInfo } from '@/model/derived/infoCards';
 import { computeTearProfile, DEFAULT_TEAR_INDEX, tearThicknessForBearing } from '@/model/derived/contactSeat';
 import { centerOnAxis, moveToVertexDistance, seatOnCornea } from '@/model/sceneFactory';
+import { thicknessModeOf } from '@/engine/physics/lensThickness';
+import { editLens } from '@/engine/physics/lensEdit';
+import { LensThicknessFields } from './LensThicknessFields';
 import {
   computeCorrection,
-  designLensForRx,
   explainBackVertex,
   explainEffectivePower,
   explainPrincipalMeridians,
@@ -88,23 +90,23 @@ export function LensInspector({ el }: { el: LensElement }) {
   const update = (fn: (e: LensElement) => LensElement) =>
     commit((d) => ({ ...d, elements: d.elements.map((e) => (e.id === el.id ? (fn(e as LensElement) as OpticalElement) : e)) }));
 
-  /** Rezept → Geometrie */
+  /** Rezept → Geometrie (zentral: engine/physics/lensEdit.ts – HSA bleibt, Dicke ggf. automatisch) */
   const applyRx = (rx: Rx, base: LensElement = el) => {
-    const r = designLensForRx(base, rx);
+    const r = editLens(el, { rx, medium: base.medium, patch: base.lens }, 'optical');
     if (!r.ok) {
       notify(r.notes[0], 'warning');
       return;
     }
-    update((e) => ({ ...e, medium: base.medium, lens: r.lens }));
+    update(() => r.el);
     r.notes.forEach((n) => notify(n, 'info'));
   };
-  /** Im Optik-Modus: Parameter ändern, Wirkung beibehalten */
+  /** Im Optik-Modus: Parameter ändern, Wirkung beibehalten; im Geometrie-Modus: Geometrie übernehmen */
   const setKeepRx = (patch: Partial<LensParams>, medium = el.medium) => {
-    const tmp: LensElement = { ...el, medium, lens: { ...el.lens, ...patch } };
-    if (mode === 'optical') applyRx(free.rx, tmp);
-    else update((e) => ({ ...e, medium, lens: { ...e.lens, ...patch } }));
+    if (mode === 'optical') applyRx(free.rx, { ...el, medium, lens: { ...el.lens, ...patch } });
+    else update(() => editLens(el, { medium, patch }, 'geometry').el);
   };
-  const setLens = (patch: Partial<LensParams>) => update((e) => ({ ...e, lens: { ...e.lens, ...patch } }));
+  const setLens = (patch: Partial<LensParams>) => update(() => editLens(el, { patch }, 'geometry').el);
+  const autoThickness = !cl && thicknessModeOf(el) === 'auto';
   const setContact = (patch: Partial<NonNullable<LensElement['contact']>>) => update((e) => ({ ...e, contact: { ...e.contact!, ...patch } }));
 
   const [pm1, pm2] = principalMeridians(free.rx);
@@ -151,8 +153,17 @@ export function LensInspector({ el }: { el: LensElement }) {
           <NumberField label="Scheibenhöhe" unit="mm" step={0.5} decimals={1} min={5} max={120} value={p.height} disabled={locked} onChange={(v) => setKeepRx({ height: v })} />
         </>
       )}
-      <NumberField label="Mittendicke" unit="mm" step={cl ? 0.01 : 0.1} decimals={2} min={0.02} max={60} value={p.centerThickness} disabled={locked} onChange={(v) => setKeepRx({ centerThickness: v })} />
+      {autoThickness ? (
+        <ReadoutRow label="Mittendicke" value={fmtMm(shape.centerThickness)} formula="automatisch aus Mindest-Mitten-/Randdicke (siehe „Glasdicke“)" />
+      ) : (
+        <NumberField label="Mittendicke" unit="mm" step={cl ? 0.01 : 0.1} decimals={2} min={0.02} max={60} value={p.centerThickness} disabled={locked} onChange={(v) => setKeepRx({ centerThickness: v })} />
+      )}
     </>
+  );
+  const thicknessSection = !cl && (
+    <Section title="Glasdicke & Zentrierung" defaultOpen={spectacle}>
+      <LensThicknessFields el={el} disabled={locked} onPatch={(patch) => setKeepRx(patch)} onBaseCurve={mode === 'optical' ? (r) => setKeepRx({ frontRadius: r, frontRadius2: undefined, frontAxis: undefined }) : undefined} compact={!spectacle && el.kind !== 'custom-lens'} />
+    </Section>
   );
 
   const surfaceEditor = (which: 'front' | 'back') => {
@@ -229,6 +240,7 @@ export function LensInspector({ el }: { el: LensElement }) {
             {dimensionFields}
           </Section>
           {material}
+          {thicknessSection}
         </>
       ) : (
         <>
@@ -239,6 +251,7 @@ export function LensInspector({ el }: { el: LensElement }) {
           </Section>
           <Section title="Abmessungen">{dimensionFields}</Section>
           {material}
+          {thicknessSection}
         </>
       )}
 
@@ -376,7 +389,7 @@ export function LensInspector({ el }: { el: LensElement }) {
           label="Scheitelbrechwert S'∞"
           value={formatRx(free.rx)}
           tone="accent"
-          explain={explainBackVertex(F1m1, F2m1, p.centerThickness, el.medium.n, free.rx.sph)}
+          explain={explainBackVertex(F1m1, F2m1, shape.centerThickness, el.medium.n, free.rx.sph)}
         />
         {Math.abs(free.rx.cyl) > 0.004 && <ReadoutRow label="Transponiert" value={formatRx({ sph: free.rx.sph + free.rx.cyl, cyl: -free.rx.cyl, axis: (free.rx.axis + 90) % 180 || 180 })} explain={explainTransposition(free.rx)} />}
         {onEye.conformed && <ReadoutRow label="Auf dem Auge (angeschmiegt)" value={formatRx(onEye.rx)} formula="Weiche Linse: Rückfläche übernimmt die Hornhautform, Nennwirkung bleibt erhalten (vereinfacht)" />}

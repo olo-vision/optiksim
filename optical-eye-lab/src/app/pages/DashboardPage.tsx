@@ -3,7 +3,7 @@
  */
 import { useMemo } from 'react';
 import { useNavigate } from 'react-router';
-import { ArrowRight, Clock, FilePlus2, FolderOpen, LayoutTemplate, Settings, Star, Upload } from 'lucide-react';
+import { ArrowRight, Boxes, Clock, FilePlus2, FolderOpen, LayoutTemplate, Settings, Star, Upload } from 'lucide-react';
 import { useSession } from '../session';
 import { Button, EmptyState, PageHeader } from '@/ui/ds';
 import { openAppDialog, pickImportFiles } from '../library/actions';
@@ -12,6 +12,8 @@ import { querySimulations } from '@/platform/library';
 import { CATEGORY_LABELS } from '@/platform/models';
 import { roleLabel } from '@/platform/permissions';
 import { usePageTitle } from '../usePageTitle';
+import { MODULES } from '@/modules/registry';
+import { ModuleGrid, SimulatorTile } from '../modules/ModuleTiles';
 
 function greeting(d = new Date()) {
   const h = d.getHours();
@@ -36,6 +38,7 @@ export function DashboardPage() {
     return [...f, ...rest].slice(0, 6);
   }, [templates, org]);
   const active = sims.filter((m) => !m.archived);
+  const lastSim = useMemo(() => querySimulations(sims, { scope: 'recent' }).find((m) => !m.moduleId), [sims]);
 
   const quick = [
     { icon: FilePlus2, label: 'Neue Simulation', desc: 'Leer oder aus Vorlage', onClick: () => openAppDialog({ kind: 'new-simulation' }), primary: true },
@@ -77,6 +80,26 @@ export function DashboardPage() {
             <span className="quick-card__desc">{q.desc}</span>
           </button>
         ))}
+      </section>
+
+      <section className="page-section" aria-label="Module">
+        <div className="page-section__head">
+          <h2 className="page-section__title">
+            <Boxes size={16} /> Simulator & Module
+          </h2>
+          <Button size="sm" variant="ghost" iconRight={ArrowRight} onClick={() => navigate('/modules')}>
+            Alle Module
+          </Button>
+        </div>
+        <div className="module-overview">
+          <SimulatorTile onNew={() => openAppDialog({ kind: 'new-simulation' })} lastId={lastSim?.id} lastName={lastSim?.name} />
+          <div className="module-overview__list">
+            <ModuleGrid modules={MODULES.filter((m) => m.status !== 'planned')} compact />
+            <button type="button" className="module-overview__more" onClick={() => navigate('/modules')}>
+              In Entwicklung: {MODULES.filter((m) => m.status === 'planned').map((m) => m.title).join(', ')} <ArrowRight size={13} />
+            </button>
+          </div>
+        </div>
       </section>
 
       <section className="page-section">

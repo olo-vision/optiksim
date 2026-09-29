@@ -8,17 +8,18 @@ import { findMaterial } from '@/model/media';
 import { effectiveLens, corneaSpec } from '@/model/derived/effectiveLens';
 import { computeEyeGeometry } from '@/model/derived/eyeGeometry';
 import { DEFAULT_TEAR_INDEX, isOnEye } from '@/model/derived/contactSeat';
-import { resolveLensShape } from '@/model/derived/elementShape';
+import { lensOutlineFn, lensOutlineSpec, resolveLensShape } from '@/model/derived/elementShape';
 import { computePrismGeometry } from '@/model/derived/prismGeometry';
 import { sagXY } from '@/core/math/surfaces';
-import { outlineRadius } from '@/core/math/outline';
+import { outlinePoints, outlineSupport } from '@/core/math/outline';
 import { makeRigid, toLocalDir, toLocalPoint, toWorldDir, type RigidTransform, type Vec3 } from '@/core/math/vec';
 import { cylinderZ, halfSpace, inFrame, intersectPrimitives, sphereInside, surfaceRegion } from './csg';
 import type { Primitive, Ray, SolidHit, TraceableSolid } from './types';
 
 function lensPrimitives(el: LensElement, eye?: EyeEntity): Primitive[] {
   const s = resolveLensShape(el);
-  const { outline, diameter, width, height } = el.lens;
+  const outlineFn = lensOutlineFn(el);
+  const spec = lensOutlineSpec(el);
   const { front, back } = effectiveLens(el, eye);
   const zf = s.frontVertexZ;
   const zb = s.backVertexZ;
@@ -30,7 +31,7 @@ function lensPrimitives(el: LensElement, eye?: EyeEntity): Primitive[] {
   let bMin = 0;
   for (let i = 0; i < 72; i++) {
     const phi = (i / 72) * Math.PI * 2;
-    const r = Math.min(outlineRadius(outline, diameter, width, height, phi), h);
+    const r = Math.min(outlineFn(phi), h);
     const x = r * Math.cos(phi);
     const y = r * Math.sin(phi);
     const sf = sagXY(front, x, y);
@@ -48,13 +49,17 @@ function lensPrimitives(el: LensElement, eye?: EyeEntity): Primitive[] {
   prims.push(halfSpace([0, 0, zf + fMin - 1e-6], [0, 0, -1], false));
   prims.push(halfSpace([0, 0, zb + bMax + 1e-6], [0, 0, 1], false));
   // Rand (Kontur)
-  if (outline === 'round') prims.push(cylinderZ(h, false));
+  const centered = Math.abs(spec.cx ?? 0) < 1e-9 && Math.abs(spec.cy ?? 0) < 1e-9;
+  if (spec.outline === 'round' && centered) prims.push(cylinderZ(h, false));
   else {
+    // Konvexe Kontur als Schnitt von Halbräumen: Abstand = Stützfunktion h(φ) (Tangente), nicht der Konturradius r(φ);
+    // ist die Apertur durch die Radien begrenzt, zusätzlich der Kreis mit Radius h.
+    const pts = outlinePoints(spec, 256);
     const N = 64;
     for (let i = 0; i < N; i++) {
       const phi = ((i + 0.5) / N) * Math.PI * 2;
-      const r = Math.min(outlineRadius(outline, diameter, width, height, phi), h);
-      prims.push(halfSpace([r * Math.cos(phi), r * Math.sin(phi), 0], [Math.cos(phi), Math.sin(phi), 0], false));
+      const d = Math.min(outlineSupport(pts, phi), h);
+      prims.push(halfSpace([d * Math.cos(phi), d * Math.sin(phi), 0], [Math.cos(phi), Math.sin(phi), 0], false));
     }
   }
   return prims;

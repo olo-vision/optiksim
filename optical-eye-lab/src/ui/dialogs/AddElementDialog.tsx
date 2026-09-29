@@ -4,7 +4,7 @@
 import { useMemo, useState } from 'react';
 import { Search, Star } from 'lucide-react';
 import { ELEMENT_CATEGORIES, ELEMENT_DEFINITIONS } from '@/model/elementRegistry';
-import { modulesByCategory } from '@/modules/registry';
+import { capabilitiesByCategory } from '@/modules/registry';
 import { useAppStore } from '@/state/store';
 import { Dialog } from '../common/overlays';
 import { ElementGlyph } from '../common/ElementGlyph';
@@ -16,7 +16,7 @@ export function AddElementDialog() {
   const [query, setQuery] = useState('');
   const q = query.trim().toLowerCase();
   const defs = useMemo(() => ELEMENT_DEFINITIONS.filter((d) => !q || d.label.toLowerCase().includes(q) || d.description.toLowerCase().includes(q)), [q]);
-  const devices = modulesByCategory('Untersuchungsgeräte');
+  const devices = capabilitiesByCategory('Untersuchungsgeräte');
   const favorites = useAppStore((s) => s.prefs.favoriteElementKinds);
   const setPrefs = useAppStore((s) => s.setPrefs);
   const favDefs = defs.filter((d) => favorites.includes(d.kind));

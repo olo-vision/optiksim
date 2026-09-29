@@ -6,6 +6,8 @@ import './styles/tokens.css';
 import './styles/app.css';
 import './styles/platform.css';
 import './styles/workbench.css';
+import './styles/modules.css';
+import './styles/saas.css';
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

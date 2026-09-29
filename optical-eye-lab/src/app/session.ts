@@ -12,6 +12,7 @@ import type { MigrationReport } from '@/platform/migration';
 import { applyAccent } from '@/platform/branding';
 import { DEFAULT_USER_PREFS, type UserPreferences } from '@/platform/preferences';
 import { StorageQuotaError } from '@/platform/storage';
+import { CLOUD_ENABLED } from '@/cloud/config';
 
 interface SessionState {
   status: 'booting' | 'ready' | 'error';
@@ -30,6 +31,8 @@ interface SessionState {
   signIn: (email: string, password: string) => Promise<User>;
   signUp: (input: SignUpInput) => Promise<User>;
   signInAsGuest: () => Promise<User>;
+  /** Arbeitsbereich für einen extern (Supabase) angemeldeten Benutzer aktivieren – ohne lokale Anmeldung */
+  activateExternal: (user: User) => Promise<User>;
   signOut: () => Promise<void>;
   refreshLibrary: () => Promise<void>;
   refreshUser: () => Promise<void>;
@@ -92,8 +95,11 @@ export const useSession = create<SessionState>()((set, get) => ({
       const res = await platform.init();
       const volatile = (platform.storage as { volatile?: boolean }).volatile === true;
       set({ migration: res.migration, volatile });
-      const user = await platform.auth.restore();
-      if (user) await activate(user);
+      // SaaS-Modus: Die Anmeldung stammt aus Supabase (cloudSession) – keine lokale Sitzung wiederherstellen
+      if (!CLOUD_ENABLED) {
+        const user = await platform.auth.restore();
+        if (user) await activate(user);
+      }
       set({ status: 'ready' });
     } catch (e) {
       set({ status: 'error', bootError: errorMessage(e) });
@@ -103,10 +109,11 @@ export const useSession = create<SessionState>()((set, get) => ({
   signIn: async (email, password) => activate(await platform.auth.signIn(email, password)),
   signUp: async (input) => activate(await platform.auth.signUp(input)),
   signInAsGuest: async () => activate(await platform.auth.signInAsGuest()),
+  activateExternal: async (user) => activate(user),
 
   signOut: async () => {
     flushPrefs();
-    await platform.auth.signOut();
+    if (!CLOUD_ENABLED) await platform.auth.signOut();
     configureStoreHooks({ persistPrefs: undefined, save: undefined, writeDraft: undefined });
     useAppStore.getState().applyUserPrefs(DEFAULT_USER_PREFS);
     useAppStore.setState({ simId: null, shell: null });

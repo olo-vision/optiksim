@@ -87,7 +87,7 @@ E = A_Auge − L_HS(Objekt)        (computeCorrection(doc, form, { objectZ }))
 
 **Patientensicht / Refraktion** (`vision.ts`)
 
-- **Akkommodation:** AB = 18,5 − 0,3·Alter (Hofstetter). Der Patient akkommodiert α = clamp(M, 0, AB); E' = E − α·I.
+- **Akkommodation:** AB = 18,5 − 0,3·Alter (Hofstetter). Der Patient akkommodiert α = clamp(M, 0, AB); E' = E − α·I. *(Phase 5: ersetzt durch Rot-Grün-Schwerpunkt + Lag, siehe [PHASE5.md](PHASE5.md).)*
 - **Geometrische PSF:** Δθ = E·x über der Pupillenscheibe (Spot-Diagramm). Beugung wird als Gauß mit σ = 0,42·λ/D ergänzt.
 - **Bild:** Faltung des Sehzeichens mit der PSF per FFT (N = 512, Feld 128′), getrennt für R/G/B.
 - **Visus-Schätzung (Smith 1991):** MAR = √(MAR₀² + (0,65·p·B)²) mit MAR₀ = √(1 + (1,2/p)²) und B = √(M² + J²).
@@ -101,7 +101,7 @@ E = A_Auge − L_HS(Objekt)        (computeCorrection(doc, form, { objectZ }))
 n(λ) = A + B/λ²,  B = (n_d − 1)/ν_d / (1/λ_F² − 1/λ_C²),  A = n_d − B/λ_d²
 ```
 
-Augenmedien rechnen mit ν = 55,8 (Wasser). Die chromatische Längsaberration F–C beträgt dann ≈ 1 dpt.
+Augenmedien rechneten in Phase 4 einheitlich mit ν = 55,8 (Wasser) – das ergab nur ≈ 0,75 dpt F–C. *(Phase 5: Abbe-Zahl je Medium → ≈ 0,91 dpt, siehe [PHASE5.md](PHASE5.md).)*
 
 **Fluoreszein** (`fluorescein.ts`)
 
@@ -110,11 +110,11 @@ Augenmedien rechnen mit ν = 55,8 (Wasser). Die chromatische Längsaberration F�
 
 | Dicke | Klasse |
 |---|---|
-| < 15 µm | Auflage |
-| < 25 µm | dünn |
-| < 40 µm | parallel |
-| < 100 µm | Pooling |
-| sonst | Randabstand |
+| < 15 µm | Auflage (dunkel) |
+| < 25 µm | dünner Tränenfilm (schwach grün) |
+| < 40 µm | gleichmäßiger Tränenfilm (grün) |
+| < 100 µm | Tränenansammlung (hellgrün) |
+| ≥ 100 µm | starke Tränenansammlung / Blase möglich |
 
 - Die Dicke t(x, y) ist der Abstand zwischen zonaler KL-Rückfläche und Hornhaut.
 - Die Hornhaut ist konisch (Scheitelradius, Torizität, Q): z = r·ρ²/(R + √(R² − (1+Q)·ρ²)), je Meridian.
@@ -129,12 +129,12 @@ Augenmedien rechnen mit ν = 55,8 (Wasser). Die chromatische Längsaberration F�
 
 | Werkzeug | Formel |
 |---|---|
-| HSA | F' = F/(1 − Δd·F) je Hauptschnitt (Matrixform) |
+| HSA | F_HS = F₁/(1 − d₁F₁), F₂ = F_HS/(1 + d₂F_HS); Matrixform F·(I − d·F)⁻¹ je Hauptschnitt |
 | Prentice | P = −F·c (Vektor, cm/m) |
 | Keratometer | K = 337,5/r |
 | Abbildung | 1/a' = 1/a + F |
 | Lupe | Γ = F/4 |
-| Tränenlinse | F = (n_T − 1)(1/r_BC − 1/r_HH) mit n_T = 1,336 |
+| Tränenlinse (Schnellrechner) | F ≈ (n_T − 1)(1/r_BK − 1/r_HH) mit n_T = 1,336; im Simulator exakt als dickes Medium im Strahlengang |
 
 ---
 
@@ -174,7 +174,7 @@ SceneDocument.training?: { id, title, age, complaint, hidden, workingDistance, s
 
 - **Migration:** `migrateV2toV3` setzt `display.workbench = 'free'`. Alle übrigen Felder sind optional, sodass Phase-1/2/3-Szenen unverändert rechnen. Getestet in `tests/phase4.training.test.ts`.
 - **Präferenzen:** `expertMode` (Standard/Experte) und `visionQuality` ('standard' | 'high': hoch = chromatische Patientensicht mit getrennten R/G/B-Kernen).
-- **Material:** `OpticalMaterial { id, name, category, n_d, abbe, density?, dk?, waterContent?, uvCutoff?, modulus?, wettingAngle?, fdaGroup?, … }`. Die Legacy-IDs aus Phase 1–3 bleiben mit identischem n erhalten.
+- **Material:** `OpticalMaterial { id, name, category, subgroup?, n, abbe?, density?, uvCutoff?, dk?, waterContent?, modulus?, wettingAngle?, note? }`. Die Legacy-IDs aus Phase 1–3 bleiben mit identischem n erhalten.
 
 ---
 
@@ -218,6 +218,8 @@ Die Reiter sitzen oben über der Szene; das Dock liegt unten und ist einklappbar
 
 - Reiter *Eigenschaften*, *Fachinfo* und *Werkzeuge*.
 - Die Werkzeuge übernehmen die Werte der Auswahl, z. B. HSA-Umrechnung mit „Glas umsetzen“.
+
+**Layout:** Das Dock bricht seine Spalten bei schmalen Fenstern in neue Zeilen um (nur vertikales Scrollen). Die Arbeitsbereich-Reiter zeigen bei schmaler Bühne nur Symbole (mit Tooltip). Die Leisten über der Szene ragen nicht mehr unter die Seitenpanels. Geprüft bei 1440×900, 1180×820 und 1024×768.
 
 **Standard/Experte:** Im Standardmodus sind Detailfelder ausgeblendet: Linsen-/Kammerindizes, Q, nF/nC, Dichte, UV, Modul, Hauptschnitte und Gucklochgröße.
 

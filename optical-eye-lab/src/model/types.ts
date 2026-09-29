@@ -119,6 +119,23 @@ export interface LensParams {
   frontAxis?: number;
   backRadius2?: number;
   backAxis?: number;
+  /**
+   * Dickenberechnung (Phase 5):
+   *  'auto'   = Mittendicke folgt aus der Geometrie: t = max(t_min,Mitte ; e_min,Rand + max_Kontur(s₁ − s₂))
+   *             (Plusglas: Randdicke bestimmt, Minusglas: Mittendicke bestimmt). Standard für neue Brillengläser.
+   *  'manual' = Mittendicke wie eingegeben (fehlt das Feld → manual, damit ältere Szenen unverändert bleiben).
+   */
+  thicknessMode?: 'auto' | 'manual';
+  /** Mindest-Mittendicke [mm]; fehlt → Richtwert des Materials */
+  minCenterThickness?: number;
+  /** Mindest-Randdicke entlang der Kontur [mm]; fehlt → 1,0 mm (Vollrandfassung) */
+  minEdgeThickness?: number;
+  /**
+   * Lage des optischen Mittelpunkts relativ zur Formscheibenmitte (Kastenmitte) [mm] im TABO-Rahmen
+   * (x → 0°, y → 90°, Blick auf das Auge). Das Element (Transform) sitzt im optischen Mittelpunkt;
+   * die Kontur ist entsprechend verschoben. Beeinflusst Randdicken, Gewicht und Apertur.
+   */
+  opticalCenterOffset?: { x: number; y: number };
 }
 
 export type ContactLensDesign = 'rigid' | 'soft';
@@ -397,7 +414,7 @@ export interface DisplaySettings {
 }
 
 /** Arbeitsbereiche des Simulators (Phase 4) */
-export type WorkbenchId = 'free' | 'retinoscopy' | 'refraction' | 'patient-view' | 'contact-lens';
+export type WorkbenchId = 'free' | 'retinoscopy' | 'refraction' | 'patient-view' | 'contact-lens' | 'spectacle-lens';
 
 /** Sehprobe / Testaufbau der Refraktion (Phase 4) */
 export interface RefractionSetup {

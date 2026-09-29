@@ -7,7 +7,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { CloudFog, Columns2, Crosshair, ScanEye } from 'lucide-react';
 import type { RefractionSetup, SceneDocument } from '@/model/types';
 import { useAppStore } from '@/state/store';
-import { accommodationAmplitude, blurStrength, chromaticRefractionShift, DUOCHROME, formatVisus, jccMatrix, patientViewState, type PatientViewOptions } from '@/engine/optics/vision';
+import { accommodationAmplitude, blurStrength, duochromeResponse, formatVisus, jccMatrix, patientViewState, type PatientViewOptions } from '@/engine/optics/vision';
 import { refractionAtVertex } from '@/engine/optics/calculators';
 import { eyeRefractionState } from '@/engine/physics/eyeRefraction';
 import { eigen2, normalizeAxis, type Mat2 } from '@/core/math/powerMatrix';
@@ -208,12 +208,8 @@ function setPatient(patch: Partial<NonNullable<SceneDocument['eye']['patient']>>
 function patientResponses(doc: SceneDocument, setup: RefractionSetup) {
   const base = patientViewState(doc, viewOptions(setup));
   // Rot-Grün
-  const a = doc.eye.anatomy;
-  const shift = (d: number): Mat2 => ({ a: base.E.a + d, b: base.E.b, c: base.E.c + d });
-  const r = blurStrength(shift(chromaticRefractionShift(a, DUOCHROME.red)));
-  const g = blurStrength(shift(chromaticRefractionShift(a, DUOCHROME.green)));
-  const dc = compare(r, g, 0.05);
-  const duochrome = dc === 0 ? '„Beide Seiten gleich deutlich.“' : dc === 1 ? '„Auf Rot deutlicher.“ (→ mehr Minus)' : '„Auf Grün deutlicher.“ (→ weniger Minus / mehr Plus)';
+  const dc = duochromeResponse(doc.eye.anatomy, base.E).answer;
+  const duochrome = dc === 'equal' ? '„Beide Seiten gleich deutlich.“' : dc === 'red' ? '„Auf Rot deutlicher.“ (→ mehr Minus)' : '„Auf Grün deutlicher.“ (→ weniger Minus / mehr Plus)';
   // Fächer
   const line = sharpestFanLine(base.E);
   const fan = line === null ? '„Alle Linien gleich schwarz.“' : `„Die Linien bei ${formatNumber(line, 0)}° (TABO) sind am schwärzesten.“`;

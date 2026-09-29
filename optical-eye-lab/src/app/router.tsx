@@ -9,7 +9,7 @@ import { useSession } from './session';
 import { useApplyAppearance } from './appearance';
 import { Splash } from './Splash';
 import { AppDialogHost } from './library/dialogs';
-import { AppLayout } from './AppLayout';
+import { AppLayout, DemoTimer } from './AppLayout';
 import { LoginPage } from './pages/LoginPage';
 import { DashboardPage } from './pages/DashboardPage';
 import { LibraryPage } from './pages/LibraryPage';
@@ -19,23 +19,50 @@ import { ProfilePage } from './pages/ProfilePage';
 import { AdminUsersPage } from './pages/AdminUsersPage';
 import { AdminOrganizationPage } from './pages/AdminOrganizationPage';
 import { NewSimulationRoute, SimulatorPage } from './pages/SimulatorPage';
+import { ModuleEntryRoute, ModulesPage } from './pages/ModulesPage';
+import { ModulePage } from './pages/ModulePage';
 import { ModalHost } from '@/ui/ds/modals';
 import { TooltipLayer } from '@/ui/common/TooltipLayer';
 import { Button, EmptyState } from '@/ui/ds';
 import { can, type Permission } from '@/platform/permissions';
 import { landingPath } from './landing';
+import { CLOUD_ENABLED } from '@/cloud/config';
+import { canUseSimulator, isSuperAdmin } from '@/cloud/access';
+import { startAccessWatch, useCloud } from './cloudSession';
+import { CloudLoginPage, ForgotPasswordPage, RegisterPage, ResetPasswordPage } from './pages/cloud/AuthPages';
+import { AccountPage, CloudAdminPage, HomePage, LicensePage, PricingPage } from './pages/cloud/AccountPages';
+import { LegalDocumentPage, LegalTypePage } from './pages/cloud/LegalPages';
+import { AdminLegalPage } from './pages/cloud/AdminLegalPage';
+import { cloudLandingPath } from './pages/cloud/cloudLanding';
 
 const SPLASH_MIN_MS = 650;
+
+/** Demo-Zeit auch im Vollbild-Simulator und in Modulen (außerhalb des App-Rahmens) */
+function FullscreenDemoTimer() {
+  const { pathname } = useLocation();
+  return /^\/simulations\/.+|^\/modules\/[^/]+\/[^/]+/.test(pathname) ? <DemoTimer floating /> : null;
+}
 
 function Root() {
   useApplyAppearance();
   const status = useSession((s) => s.status);
   const bootError = useSession((s) => s.bootError);
+  const cloudStatus = useCloud((s) => s.status);
+  const cloudError = useCloud((s) => s.error);
   const [minElapsed, setMinElapsed] = useState(false);
   useEffect(() => {
-    void useSession.getState().boot();
+    // Erst den lokalen Arbeitsbereich initialisieren, dann (SaaS-Modus) Sitzung + Lizenz aus Supabase laden
+    void useSession
+      .getState()
+      .boot()
+      .then(() => useCloud.getState().init());
     const t = window.setTimeout(() => setMinElapsed(true), SPLASH_MIN_MS);
-    return () => window.clearTimeout(t);
+    // Phase 8: Zugriff (Demo-Ende, Kündigung, Frist) laufend mit Serverzeit neu bewerten
+    const stopWatch = startAccessWatch();
+    return () => {
+      window.clearTimeout(t);
+      stopWatch();
+    };
   }, []);
   if (status === 'error')
     return (
@@ -43,10 +70,17 @@ function Root() {
         <EmptyState icon={AlertTriangle} title="Die Anwendung konnte nicht gestartet werden" text={bootError ?? undefined} action={<Button onClick={() => window.location.reload()}>Neu laden</Button>} />
       </div>
     );
-  if (status === 'booting' || !minElapsed) return <Splash />;
+  if (cloudStatus === 'error')
+    return (
+      <div className="page-center">
+        <EmptyState icon={AlertTriangle} title="Anmeldedienst nicht konfiguriert" text={cloudError ?? undefined} action={<Button onClick={() => window.location.reload()}>Neu laden</Button>} />
+      </div>
+    );
+  if (status === 'booting' || cloudStatus === 'loading' || !minElapsed) return <Splash />;
   return (
     <>
       <Outlet />
+      {CLOUD_ENABLED && <FullscreenDemoTimer />}
       <AppDialogHost />
       <ModalHost />
       <TooltipLayer />
@@ -55,15 +89,53 @@ function Root() {
 }
 
 function IndexRedirect() {
+  const cloudUser = useCloud((s) => s.user);
+  if (CLOUD_ENABLED) return cloudUser ? <Navigate to={cloudLandingPath()} replace /> : <HomePage />;
   return <Navigate to={landingPath()} replace />;
 }
 
+/** Angemeldet? (SaaS: Supabase-Sitzung; lokal: Demo-Anmeldung) */
 function RequireAuth({ children }: { children: ReactNode }) {
   const user = useSession((s) => s.user);
+  const cloudUser = useCloud((s) => s.user);
   const loc = useLocation();
-  if (!user) return <Navigate to={`/login?next=${encodeURIComponent(loc.pathname + loc.search)}`} replace />;
+  if (!(CLOUD_ENABLED ? cloudUser : user)) return <Navigate to={`/login?next=${encodeURIComponent(loc.pathname + loc.search)}`} replace />;
   return <>{children}</>;
 }
+
+/**
+ * Nur mit aktiver Lizenz (SaaS): angemeldet ∧ Profil ∧ Institution ∧ Lizenz ∧ (status = active ∨ past_due in der Frist).
+ * Lokaler Modus: keine Lizenzprüfung (bisheriges Verhalten).
+ */
+function RequireLicense({ children }: { children: ReactNode }) {
+  const access = useCloud((s) => s.access);
+  const user = useSession((s) => s.user);
+  if (!CLOUD_ENABLED) return <>{children}</>;
+  // Demo abgelaufen → sofort aus dem geschützten Bereich auf die Abschlussseite
+  if (access === 'demo-ended') return <Navigate to="/license?demo=ended" replace />;
+  if (!canUseSimulator(access)) return <Navigate to="/license" replace />;
+  if (!user) return <Splash message="Arbeitsbereich wird vorbereitet …" />;
+  return <>{children}</>;
+}
+
+function RequireSuperAdmin({ children }: { children: ReactNode }) {
+  const account = useCloud((s) => s.account);
+  if (!CLOUD_ENABLED || !isSuperAdmin(account))
+    return (
+      <div className="page">
+        <EmptyState icon={AlertTriangle} title="Kein Zugriff" text="Dieser Bereich ist Super-Admins vorbehalten." action={<Button onClick={() => history.back()}>Zurück</Button>} />
+      </div>
+    );
+  return <>{children}</>;
+}
+
+/** Seiten, die es nur im SaaS-Modus gibt */
+function CloudOnly({ children, fallback = '/dashboard' }: { children: ReactNode; fallback?: string }) {
+  if (!CLOUD_ENABLED) return <Navigate to={fallback} replace />;
+  return <>{children}</>;
+}
+
+const licensed = (el: ReactNode) => <RequireLicense>{el}</RequireLicense>;
 
 function RequirePermission({ perm, children }: { perm: Permission; children: ReactNode }) {
   const user = useSession((s) => s.user);
@@ -82,7 +154,7 @@ function NotFound() {
       <EmptyState
         icon={Compass}
         title="Seite nicht gefunden"
-        text="Diese Adresse gibt es in Optical Eye Lab nicht."
+        text="Diese Adresse gibt es in OLO-LAB3D nicht."
         action={
           <Button variant="primary" onClick={() => (window.location.href = '/')}>
             Zur Startseite
@@ -118,7 +190,15 @@ export const router = createBrowserRouter([
     errorElement: <RouteError />,
     children: [
       { index: true, element: <IndexRedirect /> },
-      { path: 'login', element: <LoginPage /> },
+      // öffentlich
+      { path: 'login', element: CLOUD_ENABLED ? <CloudLoginPage /> : <LoginPage /> },
+      { path: 'register', element: CLOUD_ENABLED ? <RegisterPage /> : <Navigate to="/login?mode=signup" replace /> },
+      { path: 'forgot-password', element: <CloudOnly fallback="/login"><ForgotPasswordPage /></CloudOnly> },
+      { path: 'reset-password', element: <CloudOnly fallback="/login"><ResetPasswordPage /></CloudOnly> },
+      { path: 'pricing', element: <CloudOnly fallback="/"><PricingPage /></CloudOnly> },
+      // Rechtstexte: exakt die angezeigte Version bzw. die aktuelle Version eines Typs
+      { path: 'legal/doc/:id', element: <CloudOnly fallback="/"><LegalDocumentPage /></CloudOnly> },
+      { path: 'legal/:type', element: <CloudOnly fallback="/"><LegalTypePage /></CloudOnly> },
       {
         element: (
           <RequireAuth>
@@ -126,15 +206,27 @@ export const router = createBrowserRouter([
           </RequireAuth>
         ),
         children: [
-          { path: 'dashboard', element: <DashboardPage /> },
-          { path: 'simulations', element: <LibraryPage /> },
-          { path: 'templates', element: <TemplatesPage /> },
-          { path: 'settings', element: <SettingsPage /> },
-          { path: 'settings/:section', element: <SettingsPage /> },
-          { path: 'profile', element: <ProfilePage /> },
+          // angemeldet, Lizenz nicht erforderlich
+          { path: 'account', element: <CloudOnly fallback="/profile"><AccountPage /></CloudOnly> },
+          { path: 'license', element: <CloudOnly><LicensePage /></CloudOnly> },
+          { path: 'profile', element: CLOUD_ENABLED ? <Navigate to="/account" replace /> : <ProfilePage /> },
+          // nur mit aktiver Lizenz
+          { path: 'dashboard', element: licensed(<DashboardPage />) },
+          { path: 'simulations', element: licensed(<LibraryPage />) },
+          { path: 'modules', element: licensed(<ModulesPage />) },
+          { path: 'modules/:moduleId', element: licensed(<ModuleEntryRoute />) },
+          { path: 'templates', element: licensed(<TemplatesPage />) },
+          { path: 'settings', element: licensed(<SettingsPage />) },
+          { path: 'settings/:section', element: licensed(<SettingsPage />) },
+          // nur Super-Admin (SaaS)
+          { path: 'admin', element: <CloudOnly><RequireSuperAdmin><CloudAdminPage /></RequireSuperAdmin></CloudOnly> },
+          { path: 'admin/legal', element: <CloudOnly><RequireSuperAdmin><AdminLegalPage /></RequireSuperAdmin></CloudOnly> },
+          // lokale Verwaltung (Phase 3) – im SaaS-Modus ersetzt durch /admin
           {
             path: 'admin/users',
-            element: (
+            element: CLOUD_ENABLED ? (
+              <Navigate to="/admin" replace />
+            ) : (
               <RequirePermission perm="users.manage">
                 <AdminUsersPage />
               </RequirePermission>
@@ -142,7 +234,9 @@ export const router = createBrowserRouter([
           },
           {
             path: 'admin/organization',
-            element: (
+            element: CLOUD_ENABLED ? (
+              <Navigate to="/admin" replace />
+            ) : (
               <RequirePermission perm="organization.manage">
                 <AdminOrganizationPage />
               </RequirePermission>
@@ -154,7 +248,19 @@ export const router = createBrowserRouter([
         path: 'simulations/new',
         element: (
           <RequireAuth>
-            <NewSimulationRoute />
+            <RequireLicense>
+              <NewSimulationRoute />
+            </RequireLicense>
+          </RequireAuth>
+        ),
+      },
+      {
+        path: 'modules/:moduleId/:simId',
+        element: (
+          <RequireAuth>
+            <RequireLicense>
+              <ModulePage />
+            </RequireLicense>
           </RequireAuth>
         ),
       },
@@ -162,7 +268,9 @@ export const router = createBrowserRouter([
         path: 'simulations/:id',
         element: (
           <RequireAuth>
-            <SimulatorPage />
+            <RequireLicense>
+              <SimulatorPage />
+            </RequireLicense>
           </RequireAuth>
         ),
       },

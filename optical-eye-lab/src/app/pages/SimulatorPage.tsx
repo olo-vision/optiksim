@@ -7,11 +7,10 @@
  * Die Physik und die Simulator-Oberfläche selbst bleiben unverändert.
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Link, useBlocker, useNavigate, useParams, useSearchParams } from 'react-router';
-import { ChevronDown, ChevronRight, Copy, Download, FolderOpen, LayoutTemplate, Pencil, RefreshCcw, Save, SaveAll, Upload, X, FileQuestion, History } from 'lucide-react';
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router';
+import { ChevronDown, ChevronRight, Copy, Download, FolderOpen, LayoutTemplate, Pencil, RefreshCcw, Save, SaveAll, Upload, X, FileQuestion } from 'lucide-react';
 import { SimulatorWorkspace } from '@/App';
 import { useAppStore } from '@/state/store';
-import { configureStoreHooks } from '@/state/store';
 import { useSession, errorMessage, currentUser } from '../session';
 import { platform } from '../platformInstance';
 import { Splash } from '../Splash';
@@ -19,14 +18,13 @@ import { Brand, useProductName } from '../Brand';
 import { UserMenu } from '../AppLayout';
 import { Menu } from '@/ui/common/overlays';
 import { Button, EmptyState } from '@/ui/ds';
-import { choiceDialog, promptDialog } from '@/ui/ds/modals';
+import { promptDialog } from '@/ui/ds/modals';
 import { captureViewportThumbnail } from '@/scene/thumbnail';
 import { openAppDialog, importFiles } from '../library/actions';
 import { downloadText, FILE_EXTENSION, safeFileName, serializeSimulation } from '@/platform/fileFormat';
-import type { SimulationMetadata } from '@/platform/models';
 import { uniqueName } from '@/platform/library';
 import { usePageTitle } from '../usePageTitle';
-import { migrateDocument } from '@/state/persistence';
+import { RecoveryBanner, renameCurrentSimulation, useSimulationSession } from '../simulation/useSimulationSession';
 
 const MOD = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform) ? '⌘' : 'Strg+';
 
@@ -63,156 +61,14 @@ export function NewSimulationRoute() {
   return <Splash message="Simulation wird angelegt …" />;
 }
 
-type LoadState = { status: 'loading' } | { status: 'missing' } | { status: 'ready'; meta: SimulationMetadata };
-
 export function SimulatorPage() {
   const { id = '' } = useParams();
   const navigate = useNavigate();
-  const [state, setState] = useState<LoadState>({ status: 'loading' });
-  const [recovery, setRecovery] = useState<{ savedAt: string } | null>(null);
-  const metaRef = useRef<SimulationMetadata | null>(null);
-  const skipGuard = useRef(false);
+  const { state, recovery, setRecovery, metaRef, leaveWithoutGuard } = useSimulationSession(id);
   const docName = useAppStore((s) => (s.simId === id ? s.doc.name : ''));
   usePageTitle(docName || 'Simulation');
 
-  /* ------------------------------ Laden ------------------------------ */
-  useEffect(() => {
-    let alive = true;
-    setState({ status: 'loading' });
-    setRecovery(null);
-    skipGuard.current = false;
-    void (async () => {
-      const user = currentUser();
-      const rec = await platform.library.get(user, id);
-      if (!alive) return;
-      if (!rec) {
-        setState({ status: 'missing' });
-        return;
-      }
-      metaRef.current = rec.meta;
-      useAppStore.getState().openSimulation(id, rec.doc, Date.parse(rec.meta.updatedAt));
-      void platform.library.markOpened(id).then(() => useSession.getState().refreshLibrary());
-      // Absturzsicherung: jüngerer, ungespeicherter Stand vorhanden?
-      const draft = await platform.repos.getDraft(id);
-      if (alive && draft && draft.savedAt > rec.meta.updatedAt && JSON.stringify(draft.doc) !== JSON.stringify(rec.doc)) setRecovery({ savedAt: draft.savedAt });
-      setState({ status: 'ready', meta: rec.meta });
-    })();
-    return () => {
-      alive = false;
-    };
-  }, [id]);
-
-  /* ----------------------- Speichern (Hooks) ----------------------- */
-  const save = useCallback(
-    async (doc: import('@/model/types').SceneDocument) => {
-      try {
-        const thumb = captureViewportThumbnail();
-        const meta = await platform.library.save(currentUser(), id, doc, thumb);
-        metaRef.current = meta;
-        void useSession.getState().refreshLibrary();
-        return true;
-      } catch (e) {
-        useAppStore.getState().notify(`Speichern fehlgeschlagen: ${errorMessage(e)}`, 'warning');
-        return false;
-      }
-    },
-    [id],
-  );
-
-  useEffect(() => {
-    if (state.status !== 'ready') return;
-    configureStoreHooks({
-      save,
-      writeDraft: (doc) => {
-        platform.repos.saveDraft({ simId: id, savedAt: new Date().toISOString(), doc }).catch(() => undefined);
-      },
-    });
-    return () => configureStoreHooks({ save: undefined, writeDraft: undefined });
-  }, [state.status, save, id]);
-
-  /* ---------------------- Automatisches Speichern ---------------------- */
-  useEffect(() => {
-    if (state.status !== 'ready') return;
-    let timer: number | undefined;
-    const schedule = () => {
-      window.clearTimeout(timer);
-      const s = useAppStore.getState();
-      if (!s.prefs.autoSave || !s.dirty || s.simId !== id) return;
-      timer = window.setTimeout(() => {
-        const st = useAppStore.getState();
-        if (st.gestureActive) return schedule();
-        if (st.dirty && st.prefs.autoSave && st.simId === id) void st.saveCurrent({ silent: true });
-      }, s.prefs.autoSaveDelaySec * 1000);
-    };
-    const unsub = useAppStore.subscribe((s, prev) => {
-      if (s.doc !== prev.doc || s.dirty !== prev.dirty || s.prefs.autoSave !== prev.prefs.autoSave || s.gestureActive !== prev.gestureActive) schedule();
-    });
-    schedule();
-    return () => {
-      unsub();
-      window.clearTimeout(timer);
-    };
-  }, [state.status, id]);
-
-  /* ----------------------- Verlassen absichern ----------------------- */
-  useEffect(() => {
-    const onBeforeUnload = (e: BeforeUnloadEvent) => {
-      if (useAppStore.getState().dirty && !skipGuard.current) {
-        e.preventDefault();
-        e.returnValue = '';
-      }
-    };
-    window.addEventListener('beforeunload', onBeforeUnload);
-    return () => window.removeEventListener('beforeunload', onBeforeUnload);
-  }, []);
-
-  const blocker = useBlocker(({ currentLocation, nextLocation }) => !skipGuard.current && useAppStore.getState().dirty && currentLocation.pathname !== nextLocation.pathname);
-
-  useEffect(() => {
-    if (blocker.state !== 'blocked') return;
-    const policy = useAppStore.getState().prefs.onCloseUnsaved;
-    void (async () => {
-      let choice: 'confirm' | 'alt' | 'cancel';
-      if (policy === 'save') choice = 'confirm';
-      else if (policy === 'discard') choice = 'alt';
-      else
-        choice = await choiceDialog({
-          title: 'Änderungen speichern?',
-          message: `„${useAppStore.getState().doc.name}“ enthält ungespeicherte Änderungen.`,
-          confirmLabel: 'Speichern',
-          altLabel: 'Nicht speichern',
-        });
-      if (choice === 'cancel') {
-        blocker.reset?.();
-        return;
-      }
-      if (choice === 'confirm') {
-        const ok = await useAppStore.getState().saveCurrent({ silent: true });
-        if (!ok) {
-          blocker.reset?.();
-          return;
-        }
-      } else {
-        await platform.repos.clearDraft(id);
-        useAppStore.setState({ dirty: false });
-      }
-      blocker.proceed?.();
-    })();
-  }, [blocker, id]);
-
-  /* -------------------- Aufräumen beim Verlassen -------------------- */
-  useEffect(
-    () => () => {
-      useAppStore.setState({ simId: null, shell: null, dialog: null });
-    },
-    [],
-  );
-
   /* -------------------------- Menüaktionen -------------------------- */
-  const leaveWithoutGuard = (to: string) => {
-    skipGuard.current = true;
-    navigate(to);
-  };
 
   const saveAs = useCallback(async () => {
     const st = useAppStore.getState();
@@ -245,18 +101,7 @@ export function SimulatorPage() {
     }
   }, []);
 
-  const rename = useCallback(async () => {
-    const st = useAppStore.getState();
-    const name = await promptDialog({ title: 'Simulation umbenennen', label: 'Name', initial: st.doc.name, confirmLabel: 'Umbenennen' });
-    if (!name || name === st.doc.name) return;
-    st.setSceneName(name);
-    try {
-      await platform.library.rename(currentUser(), id, name);
-      await useSession.getState().refreshLibrary();
-    } catch (e) {
-      st.notify(errorMessage(e), 'warning');
-    }
-  }, [id]);
+  const rename = useCallback(() => renameCurrentSimulation(id), [id]);
 
   const exportFile = useCallback(() => {
     const st = useAppStore.getState();
@@ -324,37 +169,7 @@ export function SimulatorPage() {
       </div>
     );
 
-  const restoreBanner = recovery && (
-    <div className="sim-banner" role="alert">
-      <History size={15} />
-      <span>Es gibt ungespeicherte Änderungen vom {new Date(recovery.savedAt).toLocaleString('de-DE', { dateStyle: 'short', timeStyle: 'short' })}.</span>
-      <button
-        type="button"
-        className="sim-banner__btn sim-banner__btn--primary"
-        onClick={async () => {
-          const d = await platform.repos.getDraft(id);
-          const doc = d ? migrateDocument(d.doc) : null;
-          if (doc) {
-            useAppStore.getState().commit(() => doc);
-            useAppStore.getState().notify('Ungespeicherte Änderungen wiederhergestellt', 'success');
-          }
-          setRecovery(null);
-        }}
-      >
-        Wiederherstellen
-      </button>
-      <button
-        type="button"
-        className="sim-banner__btn"
-        onClick={() => {
-          void platform.repos.clearDraft(id);
-          setRecovery(null);
-        }}
-      >
-        Verwerfen
-      </button>
-    </div>
-  );
+  const restoreBanner = <RecoveryBanner id={id} recovery={recovery} onDone={() => setRecovery(null)} />;
 
   return <SimulatorWorkspace leading={<SimulatorNav />} trailing={<UserMenu compact direction="down" />} banner={restoreBanner} />;
 }

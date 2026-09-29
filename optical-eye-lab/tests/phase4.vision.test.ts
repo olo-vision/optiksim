@@ -4,7 +4,7 @@
 import { describe, expect, it } from 'vitest';
 import { createEmptyScene } from '@/model/sceneFactory';
 import { solveEyeForRefraction } from '@/engine/physics/eyeRefraction';
-import { accommodationAmplitude, blurStrength, chromaticRefractionShift, DUOCHROME, estimateAcuity, fogMatrix, jccMatrix, kernelSpread, patientViewState, psfKernel } from '@/engine/optics/vision';
+import { accommodationAmplitude, balanceShift, blurStrength, chromaticRefractionShift, DUOCHROME, estimateAcuity, fogMatrix, jccMatrix, kernelSpread, patientViewState, psfKernel } from '@/engine/optics/vision';
 import { convolveChannel, fft1d, kernelSpectrum } from '@/engine/optics/fft';
 import { createTrialLens, setTrialRx } from '@/model/instruments';
 import { eigen2, effectivityMatrix, matrixToRx, rxToMatrix, type Rx } from '@/core/math/powerMatrix';
@@ -24,11 +24,15 @@ describe('Defokus und Akkommodation', () => {
     expect(accommodationAmplitude(70)).toBe(0);
   });
 
-  it('Emmetrop in 6 m: +0,17 dpt ohne Akkommodation, 0 mit Akkommodation', () => {
+  it('Emmetrop in 6 m: +0,17 dpt ohne Akkommodation; mit Akkommodation auf den Rot-Grün-Schwerpunkt (mit Lag)', () => {
     expect(patientViewState(eyeDoc(sph(0))).E.a).toBeCloseTo(1 / 6, 2);
-    const s = patientViewState(eyeDoc(sph(0), 25));
-    expect(s.accommodation).toBeCloseTo(1 / 6, 2);
-    expect(blurStrength(s.E)).toBeLessThan(0.01);
+    const doc = eyeDoc(sph(0), 25);
+    const s = patientViewState(doc);
+    const Mref = 1 / 6 + balanceShift(doc.eye.anatomy);
+    expect(balanceShift(doc.eye.anatomy)).toBeLessThan(0);
+    expect(s.accommodation).toBeCloseTo(Mref - 0.15 * Mref, 3);
+    expect(blurStrength(s.E)).toBeLessThan(0.12);
+    expect(s.acuity.decimal).toBeGreaterThan(0.9);
   });
 
   it('Myopie kann nicht wegakkommodiert werden; Hyperopie (jung) schon', () => {
@@ -36,7 +40,9 @@ describe('Defokus und Akkommodation', () => {
     expect(my.accommodation).toBe(0);
     expect(my.E.a).toBeCloseTo(-2 + 1 / 6, 2);
     const hy = patientViewState(eyeDoc(sph(2), 25));
-    expect(blurStrength(hy.E)).toBeLessThan(0.01);
+    // Lag ≤ 0,20 dpt (+ Rot-Grün-Schwerpunkt ≈ 0,07 dpt gegenüber der d-Linie)
+    expect(hy.accommodation).toBeGreaterThan(1.6);
+    expect(blurStrength(hy.E)).toBeLessThan(0.3);
     const presby = patientViewState(eyeDoc(sph(2), 65));
     expect(blurStrength(presby.E)).toBeGreaterThan(1);
   });

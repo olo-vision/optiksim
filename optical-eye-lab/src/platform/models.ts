@@ -84,6 +84,8 @@ export interface SimulationMetadata {
   archived: boolean;
   /** Vorlage, aus der die Simulation entstand */
   templateId?: string;
+  /** Modul-Sitzung (Phase 5): Simulation wurde in diesem Modul angelegt (z. B. 'retinoscopy') */
+  moduleId?: string;
   /** Kurzbeschreibung der Optik (abgeleitet beim Speichern) */
   summary: SimulationSummary;
   hasThumbnail: boolean;

@@ -311,7 +311,7 @@ export const ELEMENT_DEFINITIONS: ElementDefinition[] = [
     description: 'Meniskusglas in Formrandung, frei vor dem Auge positionierbar (HSA).',
     defaultDistance: 12,
     create: () =>
-      lensDraft('spectacle-lens', 'cr39', { outline: 'oval', width: 52, height: 40, diameter: 60, centerThickness: 3.5, frontRadius: 87, backRadius: 133.3 }, {
+      lensDraft('spectacle-lens', 'cr39', { outline: 'oval', width: 52, height: 40, diameter: 60, centerThickness: 3.5, frontRadius: 87, backRadius: 133.3, thicknessMode: 'auto' }, {
         appearance: { tint: '#e3f0f6', transparency: 0.93, finish: 'coated' },
       }),
     fields: [lensGeometryFields({ outline: true }), lensSurfaceFields('Vorderfläche r₁ (Basiskurve)', 'Rückfläche r₂ (augenseitig)')],

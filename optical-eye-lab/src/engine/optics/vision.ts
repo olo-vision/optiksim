@@ -5,8 +5,9 @@
  *      E = A_Auge − L_HS(Objekt)       (computeCorrection mit objectZ = −d; enthält Messgläser, HSA, KL, Tränenlinse)
  *    E = 0: scharf. E < 0: Bild vor der Netzhaut (myop), E > 0: hinter der Netzhaut (hyperop).
  * 2) Akkommodation: Der Patient kann die Brechkraft um α ∈ [0, AB] erhöhen → E' = E − α·I.
- *    Er wählt α so, dass der Kreis kleinster Verwirrung auf der Netzhaut liegt: α = clamp(M, 0, AB),
- *    M = sphärisches Äquivalent von E. Myoper Defokus (M < 0) kann nicht wegakkommodiert werden (→ Nebeln).
+ *    Er zielt auf den Kreis kleinster Verwirrung im Helligkeitsschwerpunkt (Rot-Grün-Mitte) mit einem
+ *    kleinen Lag: α = clamp(M_ref − lag, 0, AB) (accommodationResponse). Myoper Defokus kann nicht
+ *    wegakkommodiert werden (→ Nebeln).
  *    Akkommodationsbreite nach Hofstetter (Mittelwert): AB = 18,5 − 0,30 · Alter (≥ 0).
  * 3) Geometrische Punktbildfunktion: Ein Strahl durch den Pupillenpunkt x (m) trifft die Netzhaut mit der
  *    Winkelabweichung Δθ = E·x (rad). Die PSF ist das Bild der Pupillenscheibe unter E – eine gleichmäßig
@@ -23,7 +24,7 @@ import type { EyeAnatomy, SceneDocument } from '@/model/types';
 import { computeCorrection } from '@/engine/physics/correction';
 import { summarizeEye } from '@/engine/physics/eyeOptics';
 import { eigen2, madd2, matrixToRx, rxToMatrix, type Mat2 } from '@/core/math/powerMatrix';
-import { EYE_MEDIA_ABBE, indexAt, LAMBDA_D } from './dispersion';
+import { eyeIndicesAt, LAMBDA_D } from './dispersion';
 
 export const DEFAULT_TEST_DISTANCE = 6000;
 
@@ -94,18 +95,39 @@ export function patientViewState(doc: SceneDocument, opts: PatientViewOptions = 
   const amplitude = patient ? (patient.amplitude ?? accommodationAmplitude(patient.age)) : 0;
   const e = eigen2(E0);
   const M = (e.l1 + e.l2) / 2;
-  const accommodation = patient?.accommodates ? Math.max(0, Math.min(amplitude, M)) : 0;
+  const accommodation = patient?.accommodates ? accommodationResponse(M + balanceShift(doc.eye.anatomy), amplitude) : 0;
   const E = { a: E0.a - accommodation, b: E0.b, c: E0.c - accommodation };
   const pupil = opts.pupilDiameterMm ?? doc.eye.anatomy.pupilDiameter;
   return { E0, accommodation, amplitude, E, pupilDiameter: pupil, acuity: estimateAcuity(E, pupil), residualRx: matrixToRx(E, 'minus') };
 }
 
+/**
+ * Akkommodationsantwort (Phase 5, überarbeitet) auf einen hyperopen Defokus M_ref [dpt]:
+ *   α = clamp(M_ref − lag, 0, AB),   lag = min(0,2 dpt; 0,15·M_ref)   (Akkommodations-„Lag“)
+ * M_ref ist der Defokus im Helligkeitsschwerpunkt (Mitte zwischen Rot- und Grünfilter, ≈ 565 nm), nicht
+ * der d-Linie: Das Auge stellt weißes Licht nicht auf 587,6 nm scharf. Der Lag bewirkt, dass ein
+ * übermintes Auge trotz Akkommodation etwas hyperop bleibt – daher „Grün deutlicher“ im Rot-Grün-Test.
+ * Myoper Defokus (M_ref < 0) kann nicht wegakkommodiert werden.
+ */
+export function accommodationResponse(Mref: number, amplitude: number): number {
+  if (Mref <= 0 || amplitude <= 0) return 0;
+  const lag = Math.min(0.2, 0.15 * Mref);
+  return Math.max(0, Math.min(amplitude, Mref - lag));
+}
+
+const balanceCache = new WeakMap<EyeAnatomy, number>();
+/** Refraktionsverschiebung im Rot-Grün-Gleichgewicht gegenüber der d-Linie [dpt] (≈ −0,07 dpt) */
+export function balanceShift(a: EyeAnatomy): number {
+  const hit = balanceCache.get(a);
+  if (hit !== undefined) return hit;
+  const v = (chromaticRefractionShift(a, DUOCHROME.red) + chromaticRefractionShift(a, DUOCHROME.green)) / 2;
+  balanceCache.set(a, v);
+  return v;
+}
+
 /* ------------------------ Chromatische Aberration ------------------------ */
 
-function anatomyAt(a: EyeAnatomy, lambda: number): EyeAnatomy {
-  const f = (n: number) => indexAt(n, EYE_MEDIA_ABBE, lambda);
-  return { ...a, nCornea: f(a.nCornea), nAqueous: f(a.nAqueous), nLens: f(a.nLens), nVitreous: f(a.nVitreous) };
-}
+const anatomyAt = (a: EyeAnatomy, lambda: number): EyeAnatomy => eyeIndicesAt(a, lambda);
 
 /**
  * Änderung der Refraktion des Modellauges bei Wellenlänge λ gegenüber der d-Linie [dpt]
@@ -119,6 +141,19 @@ export function chromaticRefractionShift(a: EyeAnatomy, lambda: number): number 
 
 /** Wellenlängen der Duochrom-Filter (Schwerpunkt, Richtwert) */
 export const DUOCHROME = { red: 620, green: 535 };
+
+/**
+ * Rot-Grün-Test: Blurstärke der Sehzeichen auf rotem bzw. grünem Grund für den wirksamen Defokus E
+ * (d-Linie, nach Akkommodation). Rot fokussiert weiter hinten: E_rot = E + Δ_rot (Δ_rot > 0).
+ * Antwort: 'red' = Rot deutlicher (→ mehr Minus), 'green' = Grün deutlicher (→ weniger Minus), 'equal'.
+ */
+export function duochromeResponse(a: EyeAnatomy, E: Mat2, tol = 0.04): { red: number; green: number; answer: 'red' | 'green' | 'equal' } {
+  const sh = (d: number): Mat2 => ({ a: E.a + d, b: E.b, c: E.c + d });
+  const red = blurStrength(sh(chromaticRefractionShift(a, DUOCHROME.red)));
+  const green = blurStrength(sh(chromaticRefractionShift(a, DUOCHROME.green)));
+  const answer = Math.abs(red - green) < tol ? 'equal' : red < green ? 'red' : 'green';
+  return { red, green, answer };
+}
 
 /* ------------------------------ Kreuzzylinder ------------------------------ */
 

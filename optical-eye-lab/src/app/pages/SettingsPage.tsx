@@ -143,7 +143,7 @@ function DataSection() {
             Entfernen
           </Button>
         </SettingRow>
-        <SettingRow label="Alle lokalen Daten löschen" description="Setzt Optical Eye Lab in diesem Browser vollständig zurück.">
+        <SettingRow label="Alle lokalen Daten löschen" description="Setzt OLO-LAB3D in diesem Browser vollständig zurück.">
           <Button variant="danger" icon={Trash2} onClick={() => void wipe()} disabled={!mayManage}>
             Alles löschen
           </Button>
