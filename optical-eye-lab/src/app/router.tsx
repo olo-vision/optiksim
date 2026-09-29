@@ -31,8 +31,9 @@ import { canUseSimulator, isSuperAdmin } from '@/cloud/access';
 import { startAccessWatch, useCloud } from './cloudSession';
 import { CloudLoginPage, ForgotPasswordPage, RegisterPage, ResetPasswordPage } from './pages/cloud/AuthPages';
 import { AccountPage, CloudAdminPage, HomePage, LicensePage, PricingPage } from './pages/cloud/AccountPages';
-import { LegalDocumentPage, LegalTypePage } from './pages/cloud/LegalPages';
-import { AdminLegalPage } from './pages/cloud/AdminLegalPage';
+import { ImprintPage, LegalDocumentPage, LegalTypePage } from './pages/cloud/LegalPages';
+import { AdminDeclarationsPage, AdminLegalPage } from './pages/cloud/AdminLegalPage';
+import { CancellationPage, WithdrawalPage } from './pages/cloud/ConsumerPages';
 import { cloudLandingPath } from './pages/cloud/cloudLanding';
 
 const SPLASH_MIN_MS = 650;
@@ -199,6 +200,10 @@ export const router = createBrowserRouter([
       // Rechtstexte: exakt die angezeigte Version bzw. die aktuelle Version eines Typs
       { path: 'legal/doc/:id', element: <CloudOnly fallback="/"><LegalDocumentPage /></CloudOnly> },
       { path: 'legal/:type', element: <CloudOnly fallback="/"><LegalTypePage /></CloudOnly> },
+      // öffentlich ohne Anmeldung: Impressum, Kündigungsbutton (§ 312k BGB), Widerrufsbutton (§ 356a BGB)
+      { path: 'impressum', element: <CloudOnly fallback="/"><ImprintPage /></CloudOnly> },
+      { path: 'kuendigen', element: <CloudOnly fallback="/"><CancellationPage /></CloudOnly> },
+      { path: 'widerrufen', element: <CloudOnly fallback="/"><WithdrawalPage /></CloudOnly> },
       {
         element: (
           <RequireAuth>
@@ -221,6 +226,7 @@ export const router = createBrowserRouter([
           // nur Super-Admin (SaaS)
           { path: 'admin', element: <CloudOnly><RequireSuperAdmin><CloudAdminPage /></RequireSuperAdmin></CloudOnly> },
           { path: 'admin/legal', element: <CloudOnly><RequireSuperAdmin><AdminLegalPage /></RequireSuperAdmin></CloudOnly> },
+          { path: 'admin/declarations', element: <CloudOnly><RequireSuperAdmin><AdminDeclarationsPage /></RequireSuperAdmin></CloudOnly> },
           // lokale Verwaltung (Phase 3) – im SaaS-Modus ersetzt durch /admin
           {
             path: 'admin/users',

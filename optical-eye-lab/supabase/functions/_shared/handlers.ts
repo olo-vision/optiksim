@@ -12,10 +12,12 @@
  *    idempotent über public.stripe_events; Abo-Daten werden frisch von der Stripe-API geladen.
  *  - Keine Secrets, Tokens oder Payloads in Logs.
  */
-import { corsHeaders, isBillingInterval, PLAN_MISMATCH_MESSAGE, planAllowedFor, priceIdFor, resolveSiteUrl, type BillingInterval, type EnvGetter } from './stripeConfig.ts';
+import { checkoutSubmitMessage, corsHeaders, isBillingInterval, PLAN_MISMATCH_MESSAGE, planAllowedFor, priceIdFor, resolveSiteUrl, type BillingInterval, type EnvGetter } from './stripeConfig.ts';
 import { isPlan, LIVE_SUBSCRIPTION_STATUSES, type InstitutionType, type LicensePlan, type LicenseStatus } from './licenseStatus.ts';
 import { verifyStripeSignature } from './stripeSignature.ts';
 import { idOf, snapshotFromSubscription, subscriptionIdFromInvoice, type SubscriptionSnapshot } from './stripeObjects.ts';
+import { afterCheckoutCompleted, enforceNoAutoRenewal, type OpsDb } from './legalOps.ts';
+import type { Mailer } from './mailer.ts';
 
 // deno-lint-ignore no-explicit-any
 type Obj = Record<string, any>;
@@ -27,6 +29,8 @@ export interface BillingAccount {
   institutionId: string;
   institutionType: InstitutionType;
   institutionName: string;
+  /** Land der Rechnungsanschrift aus der Registrierung (ISO, z. B. DE) */
+  country?: string | null;
   license: { status: LicenseStatus; source: 'stripe' | 'manual' } | null;
 }
 
@@ -58,7 +62,19 @@ export interface Deps {
   stripe: StripeApi;
   now?: () => number;
   log?: (message: string) => void;
+  /** Rechtsbetrieb: Erklärungen, Vertragsbestätigung, E-Mail-Protokoll (optional – ohne: keine E-Mails) */
+  ops?: OpsDb;
+  mailer?: Mailer;
 }
+
+/** Steuersatz „19 % DE, inklusive“ aus dem Stripe-Dashboard (Function Secret STRIPE_TAX_RATE_ID) */
+export const taxRateId = (env: EnvGetter) => {
+  const v = env('STRIPE_TAX_RATE_ID')?.trim();
+  return v && /^txr_[A-Za-z0-9]+$/.test(v) ? v : null;
+};
+
+export const B2B_COUNTRY_MESSAGE =
+  'Buchungen für Unternehmen und Bildungseinrichtungen sind derzeit nur mit Sitz in Deutschland möglich. Bitte wende dich für ein Angebot an info@olo-vision.de.';
 
 const json = (body: unknown, status: number, headers: Record<string, string> = {}) =>
   new Response(JSON.stringify(body), { status, headers: { ...headers, 'Content-Type': 'application/json' } });
@@ -119,6 +135,10 @@ async function checkout(req: Request, deps: Deps): Promise<Response> {
   const priceId = priceIdFor(plan, interval, deps.env);
   if (!priceId) return json({ error: 'Unbekannter Tarif.', code: 'unknown_plan' }, 400, cors);
   if (!planAllowedFor(account.institutionType, plan)) return json({ error: PLAN_MISMATCH_MESSAGE[plan], code: 'plan_mismatch' }, 422, cors);
+  // B2B vorerst nur mit Sitz in Deutschland (fester deutscher Steuersatz, kein Reverse Charge)
+  if (account.institutionType !== 'private' && (account.country ?? 'DE').toUpperCase() !== 'DE') {
+    return json({ error: B2B_COUNTRY_MESSAGE, code: 'b2b_country' }, 422, cors);
+  }
   const consentIds = Array.isArray(body?.consents) ? body.consents.filter((x): x is string => typeof x === 'string' && UUID_RE.test(x)).slice(0, 20) : [];
 
   if (account.license?.source === 'manual' && account.license.status === 'active') {
@@ -168,6 +188,9 @@ async function checkout(req: Request, deps: Deps): Promise<Response> {
       'subscription_data[metadata][institution_id]': account.institutionId,
       'subscription_data[metadata][plan]': plan,
       'subscription_data[metadata][billing_interval]': interval,
+      'subscription_data[metadata][customer_type]': account.institutionType,
+      // Hinweis direkt am Stripe-Button „Abonnieren“ (zahlungspflichtige Bestellung, Laufzeit, Bedingungen)
+      'custom_text[submit][message]': checkoutSubmitMessage(plan, interval, !b2b),
       billing_address_collection: b2b ? 'required' : 'auto',
       // Name/Adresse aus dem Checkout am Kunden speichern (für Rechnungen)
       'customer_update[address]': 'auto',
@@ -175,6 +198,10 @@ async function checkout(req: Request, deps: Deps): Promise<Response> {
     };
     // B2B: USt-IdNr. im Checkout erfassen (Stripe prüft das Format je Land)
     if (b2b) params['tax_id_collection[enabled]'] = 'true';
+    // 19 % USt. (inklusive) auf Rechnungen ausweisen – Steuersatz im Stripe-Dashboard anlegen
+    const taxRate = taxRateId(deps.env);
+    if (taxRate) params['subscription_data[default_tax_rates][0]'] = taxRate;
+    else deps.log?.('create-checkout-session: STRIPE_TAX_RATE_ID fehlt – Rechnungen ohne Steuerausweis');
     const session = await deps.stripe.request(
       'POST',
       'checkout/sessions',
@@ -339,7 +366,11 @@ async function processEvent(type: string, eventId: string, obj: Obj, deps: Deps)
   const sync = async (subscriptionId: string, paymentFailed = false, checkoutSessionId: string | null = null) => {
     // immer den AKTUELLEN Stand von Stripe laden – Reihenfolge und Alter der Ereignisse spielen so keine Rolle
     const sub = await deps.stripe.request('GET', `subscriptions/${encodeURIComponent(subscriptionId)}`);
-    return deps.db.applySubscription(snapshotFromSubscription(sub, { eventId, eventType: type, paymentFailed, env: deps.env, checkoutSessionId }));
+    const snapshot = snapshotFromSubscription(sub, { eventId, eventType: type, paymentFailed, env: deps.env, checkoutSessionId });
+    const result = await deps.db.applySubscription(snapshot);
+    // private Jahreslizenz: keine automatische Verlängerung (Stripe meldet die Änderung anschließend erneut)
+    await enforceNoAutoRenewal(snapshot, eventId, deps);
+    return result;
   };
 
   switch (type) {
@@ -348,8 +379,12 @@ async function processEvent(type: string, eventId: string, obj: Obj, deps: Deps)
     case 'checkout.session.async_payment_failed': {
       if (obj.mode !== 'subscription') return null;
       const subId = idOf(obj.subscription);
+      if (!subId) return null;
       // Session-ID verknüpft das Abo mit den beim Kauf protokollierten Zustimmungen
-      return subId ? sync(subId, false, idOf(obj)) : null;
+      const result = await sync(subId, false, idOf(obj));
+      // Vertragsbestätigung per E-Mail (einmal je Session; Fehler verhindern die Freischaltung nie)
+      if (type !== 'checkout.session.async_payment_failed') await afterCheckoutCompleted(obj, deps);
+      return result;
     }
     case 'customer.subscription.created':
     case 'customer.subscription.updated':

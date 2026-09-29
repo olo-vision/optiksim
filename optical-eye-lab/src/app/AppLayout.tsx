@@ -21,7 +21,7 @@ import { demoRemainingMs } from '@/cloud/access';
 import { formatCountdown } from '@/cloud/plans';
 import { serverDate } from '@/cloud/serverClock';
 import { useSecondTick } from './pages/cloud/PlanCards';
-import { Clock3 } from 'lucide-react';
+import { Clock3, FileX2 } from 'lucide-react';
 import { useAppStore } from '@/state/store';
 import { GUEST_SIMULATION_LIMIT } from '@/platform/permissions';
 
@@ -67,6 +67,7 @@ function CloudUserMenu({ compact, direction = 'up' }: { compact?: boolean; direc
         { heading: true, label: cloudUser?.email ?? '' },
         { label: 'Konto', icon: UserRound, onSelect: () => navigate('/account') },
         { label: 'Lizenz', icon: BadgeCheck, onSelect: () => navigate('/license') },
+        { label: 'Verträge hier kündigen', icon: FileX2, onSelect: () => navigate('/kuendigen') },
         ...(canUseSimulator(access) ? [{ label: 'Einstellungen', icon: Settings, onSelect: () => navigate('/settings') }] : []),
         { separator: true, label: '' },
         {

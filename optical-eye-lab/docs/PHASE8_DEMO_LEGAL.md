@@ -1,5 +1,7 @@
 # OLO-LAB3D – Phase 8: Demo, Jahrespreise, B2C/B2B, Rechtstexte & Vertragscenter
 
+> Fortsetzung: Rechtstexte 1.0, Kündigungs-/Widerrufsbutton, Vertragsbestätigung, USt. → [LEGAL_OPERATIONS.md](LEGAL_OPERATIONS.md)
+
 Baut auf Phase 6 (Supabase-Auth) und Phase 7/7.1 (Stripe-Abos) auf. Bestehende Checkout-, Webhook-, Portal- und
 Login-Abläufe bleiben unverändert; neu sind nur zusätzliche Parameter und Prüfungen.
 

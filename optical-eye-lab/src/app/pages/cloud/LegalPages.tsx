@@ -14,7 +14,7 @@ import { EmptyState, Pill } from '@/ui/ds';
 import { usePageTitle } from '../../usePageTitle';
 import { cloudBackend, useCloud } from '../../cloudSession';
 import { formatDate, LEGAL_AUDIENCE_LABEL, LEGAL_DOC_TYPE_LABEL, PRODUCT_NAME } from '@/cloud/plans';
-import { parseMarkdown, type Inline } from '@/cloud/legal';
+import { parseMarkdown, REVIEW_MARKER, type Inline } from '@/cloud/legal';
 import type { LegalDocSummary, LegalDocType, LegalDocument } from '@/cloud/types';
 import { LEGAL_DOC_TYPES } from '@/cloud/types';
 import { cloudLandingPath } from './cloudLanding';
@@ -22,9 +22,15 @@ import { cloudLandingPath } from './cloudLanding';
 /* ------------------------------ öffentlicher Rahmen ------------------------------ */
 
 /** In der Fußzeile verlinkte Dokumenttypen (sofern veröffentlicht) */
-const FOOTER_TYPES: LegalDocType[] = ['terms', 'privacy', 'withdrawal', 'license_terms'];
+const FOOTER_TYPES: LegalDocType[] = ['imprint', 'terms', 'privacy', 'withdrawal', 'license_terms'];
+const DOC_PATH: Partial<Record<LegalDocType, string>> = { imprint: '/impressum' };
+export const legalTypePath = (t: LegalDocType) => DOC_PATH[t] ?? `/legal/${t}`;
 
-export function LegalFooterLinks() {
+/**
+ * Rechtliche Links. „Verträge hier kündigen“ (§ 312k BGB) und „Vertrag widerrufen“ (§ 356a BGB) sind immer
+ * sichtbar – auch bevor Rechtstexte veröffentlicht sind –, weil sie ständig verfügbar sein müssen.
+ */
+export function LegalFooterLinks({ compact = false }: { compact?: boolean }) {
   const [docs, setDocs] = useState<LegalDocSummary[]>([]);
   useEffect(() => {
     let alive = true;
@@ -37,14 +43,19 @@ export function LegalFooterLinks() {
     };
   }, []);
   const types = FOOTER_TYPES.filter((t) => docs.some((d) => d.type === t));
-  if (!types.length) return null;
   return (
-    <nav className="legal-links" aria-label="Rechtliches" data-testid="legal-footer">
+    <nav className={`legal-links${compact ? ' legal-links--compact' : ''}`} aria-label="Rechtliches" data-testid="legal-footer">
       {types.map((t) => (
-        <Link key={t} to={`/legal/${t}`}>
+        <Link key={t} to={legalTypePath(t)}>
           {LEGAL_DOC_TYPE_LABEL[t]}
         </Link>
       ))}
+      <Link to="/kuendigen" className="legal-links__action" data-testid="footer-cancel">
+        Verträge hier kündigen
+      </Link>
+      <Link to="/widerrufen" className="legal-links__action" data-testid="footer-withdraw">
+        Vertrag widerrufen
+      </Link>
     </nav>
   );
 }
@@ -86,7 +97,7 @@ export function PublicShell({ children }: { children: ReactNode }) {
 
 /* ------------------------------ Markdown ------------------------------ */
 
-const renderInline = (parts: Inline[]) => parts.map((p, i) => (p.bold ? <strong key={i}>{p.text}</strong> : <Fragment key={i}>{p.text}</Fragment>));
+const renderInline = (parts: Inline[]) => parts.map((p, i) => (p.br ? <br key={i} /> : p.bold ? <strong key={i}>{p.text}</strong> : <Fragment key={i}>{p.text}</Fragment>));
 
 export function LegalMarkdown({ content }: { content: string }) {
   const blocks = useMemo(() => parseMarkdown(content), [content]);
@@ -101,6 +112,8 @@ export function LegalMarkdown({ content }: { content: string }) {
         if (b.kind === 'h1') return <h2 key={i}>{inline}</h2>;
         if (b.kind === 'h2') return <h3 key={i}>{inline}</h3>;
         if (b.kind === 'h3') return <h4 key={i}>{inline}</h4>;
+        // offene Prüfhinweise in Entwürfen sichtbar hervorheben (veröffentlichte Texte enthalten keine)
+        if (b.inline[0]?.text.startsWith(REVIEW_MARKER)) return <p key={i} className="legal-md__review" data-testid="review-marker">{inline}</p>;
         return <p key={i}>{inline}</p>;
       })}
     </div>
@@ -123,7 +136,7 @@ function LegalDocView({ doc }: { doc: LegalDocument }) {
         </p>
         {doc.status === 'archived' && (
           <p className="auth-note">
-            Diese Fassung ist nicht mehr aktuell. Sie wird für die Nachvollziehbarkeit früherer Zustimmungen weiterhin angezeigt. <Link to={`/legal/${doc.type}`}>Aktuelle Fassung</Link>
+            Diese Fassung ist nicht mehr aktuell. Sie wird für die Nachvollziehbarkeit früherer Zustimmungen weiterhin angezeigt. <Link to={legalTypePath(doc.type)}>Aktuelle Fassung</Link>
           </p>
         )}
       </header>
@@ -146,8 +159,14 @@ export function LegalDocumentPage() {
   return <PublicShell>{doc === undefined ? <p className="muted">Wird geladen …</p> : doc ? <LegalDocView doc={doc} /> : <EmptyState icon={FileText} title="Dokument nicht gefunden" text="Dieses Dokument ist nicht (mehr) veröffentlicht." />}</PublicShell>;
 }
 
-export function LegalTypePage() {
-  const { type = '' } = useParams();
+/** Impressum unter /impressum */
+export function ImprintPage() {
+  return <LegalTypePage fixedType="imprint" />;
+}
+
+export function LegalTypePage({ fixedType }: { fixedType?: LegalDocType } = {}) {
+  const params0 = useParams();
+  const type = fixedType ?? params0.type ?? '';
   const [params] = useSearchParams();
   const [list, setList] = useState<LegalDocSummary[] | null>(null);
   const [doc, setDoc] = useState<LegalDocument | null>(null);
@@ -174,7 +193,7 @@ export function LegalTypePage() {
       {variants.length > 1 && (
         <nav className="legal-variants">
           {variants.map((v) => (
-            <Link key={v.id} to={`/legal/${type}?audience=${v.audience}`} className={v.id === pick?.id ? 'is-on' : ''}>
+            <Link key={v.id} to={`${legalTypePath(type as LegalDocType)}?audience=${v.audience}`} className={v.id === pick?.id ? 'is-on' : ''}>
               {LEGAL_AUDIENCE_LABEL[v.audience]}
             </Link>
           ))}

@@ -42,7 +42,7 @@ export const legalDocPath = (id: string) => `/legal/doc/${encodeURIComponent(id)
 
 /* ------------------------------ Einfaches Markdown ------------------------------ */
 
-export type Inline = { text: string; bold?: boolean };
+export type Inline = { text: string; bold?: boolean; br?: boolean };
 export type Block = { kind: 'h1' | 'h2' | 'h3' | 'p'; inline: Inline[] } | { kind: 'ul'; items: Inline[][] } | { kind: 'ol'; items: Inline[][] };
 
 export function parseInline(text: string): Inline[] {
@@ -63,8 +63,9 @@ export function parseMarkdown(src: string): Block[] {
   const blocks: Block[] = [];
   let para: string[] = [];
   let list: { kind: 'ul' | 'ol'; items: Inline[][] } | null = null;
+  // Zeilenumbrüche innerhalb eines Absatzes bleiben erhalten (Anschriften, Formulare)
   const flushPara = () => {
-    if (para.length) blocks.push({ kind: 'p', inline: parseInline(para.join(' ')) });
+    if (para.length) blocks.push({ kind: 'p', inline: para.flatMap((line, i) => (i ? [{ text: '', br: true }, ...parseInline(line)] : parseInline(line))) });
     para = [];
   };
   const flushList = () => {
@@ -116,3 +117,8 @@ export function suggestNextVersion(versions: string[]): string {
   const [maj, min] = nums[nums.length - 1];
   return `${maj}.${min + 1}`;
 }
+
+/** Markierung offener Punkte in Entwürfen – Veröffentlichung ist erst ohne sie möglich (Server prüft) */
+export const REVIEW_MARKER = '[Prüfhinweis';
+export const hasReviewMarkers = (text: string | null | undefined) => !!text && text.includes(REVIEW_MARKER);
+export const countReviewMarkers = (text: string | null | undefined) => (text ? text.split(REVIEW_MARKER).length - 1 : 0);

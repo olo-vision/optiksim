@@ -76,9 +76,50 @@ export interface BillingStatus {
   serverNow?: string | null;
 }
 
+/* ------------------------------ Kündigung / Widerruf über die Website ------------------------------ */
+
+export type ConsumerDeclarationKind = 'cancellation' | 'withdrawal';
+export interface ConsumerDeclarationInput {
+  kind: ConsumerDeclarationKind;
+  /** nur Kündigung: ordentlich (nächstmöglicher Zeitpunkt) oder außerordentlich (mit Grund) */
+  cancellationType?: 'ordinary' | 'extraordinary';
+  name: string;
+  email: string;
+  contract?: string;
+  reason?: string;
+  /** Honeypot – bleibt für Menschen leer */
+  website?: string;
+}
+export interface ConsumerDeclarationReceipt {
+  id: string | null;
+  receivedAt: string;
+  confirmationSent: boolean;
+}
+export type DeclarationStatus = 'received' | 'processed' | 'needs_review' | 'done';
+export interface AdminDeclarationRow {
+  id: string;
+  kind: ConsumerDeclarationKind;
+  cancellationType: 'ordinary' | 'extraordinary' | null;
+  name: string;
+  email: string;
+  contractDetails: string | null;
+  reason: string | null;
+  customerType: InstitutionType | null;
+  institutionName: string | null;
+  stripeSubscriptionId: string | null;
+  status: DeclarationStatus;
+  cancelAt: string | null;
+  unmatched: boolean;
+  confirmationSentAt: string | null;
+  notifiedAt: string | null;
+  handledAt: string | null;
+  receivedAt: string;
+}
+
 /* ------------------------------ Rechtstexte (Phase 8) ------------------------------ */
 
 export type LegalDocType =
+  | 'imprint'
   | 'terms'
   | 'privacy'
   | 'withdrawal'
@@ -88,7 +129,7 @@ export type LegalDocType =
   | 'consent_immediate_performance'
   | 'consent_withdrawal_loss'
   | 'other';
-export const LEGAL_DOC_TYPES: LegalDocType[] = ['terms', 'privacy', 'withdrawal', 'withdrawal_form', 'license_terms', 'b2b_terms', 'consent_immediate_performance', 'consent_withdrawal_loss', 'other'];
+export const LEGAL_DOC_TYPES: LegalDocType[] = ['imprint', 'terms', 'privacy', 'withdrawal', 'withdrawal_form', 'license_terms', 'b2b_terms', 'consent_immediate_performance', 'consent_withdrawal_loss', 'other'];
 export type LegalAudience = 'all' | 'b2c' | 'b2b';
 export type LegalDocStatus = 'draft' | 'active' | 'archived';
 export type LegalConsentContext = 'registration' | 'demo' | 'checkout';

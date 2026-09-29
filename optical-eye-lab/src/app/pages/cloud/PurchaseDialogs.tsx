@@ -14,7 +14,7 @@ import { Dialog } from '@/ui/common/overlays';
 import { Button } from '@/ui/ds';
 import { cloudBackend, useCloud } from '../../cloudSession';
 import { allConsentsGiven, requiredDocs } from '@/cloud/legal';
-import { BILLING_INTERVAL_LABEL, DEMO_PLAN, isB2B, planInfo, planPrice } from '@/cloud/plans';
+import { B2B_COUNTRY_MESSAGE, DEMO_PLAN, endsAutomatically, isB2B, planInfo, planPrice } from '@/cloud/plans';
 import type { BillingInterval, LegalDocRef, LicensePlan } from '@/cloud/types';
 import { CloudError } from '@/cloud/types';
 import { useAppStore } from '@/state/store';
@@ -26,13 +26,17 @@ const notify = (m: string, tone: 'success' | 'warning' = 'warning') => useAppSto
 
 export function CheckoutDialog({ plan, interval, onClose }: { plan: LicensePlan; interval: BillingInterval; onClose: () => void }) {
   const type = useCloud((s) => s.account?.institution?.type ?? null);
+  const country = useCloud((s) => s.account?.institution?.country ?? 'DE');
+  // B2B vorerst nur mit Sitz in Deutschland (der Server prüft das ebenfalls)
+  const blocked = isB2B(type) && (country ?? 'DE').toUpperCase() !== 'DE';
   const { docs, error, reload } = useRequiredLegalDocs('checkout', type);
   const { checked, toggle, reset } = useConsentState();
   const [busy, setBusy] = useState(false);
   const [problem, setProblem] = useState<string | null>(null);
   const info = planInfo(plan)!;
   const price = planPrice(info, interval);
-  const ready = !!docs && allConsentsGiven(docs, checked);
+  const ready = !!docs && allConsentsGiven(docs, checked) && !blocked;
+  const autoEnd = endsAutomatically(plan, interval);
 
   const submit = async () => {
     if (!docs) return;
@@ -87,12 +91,20 @@ export function CheckoutDialog({ plan, interval, onClose }: { plan: LicensePlan;
           <li>
             <CircleCheck size={14} /> Voller Funktionsumfang, sofort nach der Zahlungsbestätigung
           </li>
+          <li data-testid="checkout-term">
+            <CircleCheck size={14} />{' '}
+            {interval === 'monthly'
+              ? 'Monatliche Abrechnung im Voraus; das Abonnement verlängert sich monatlich und ist jederzeit zum Ende des Abrechnungsmonats kündbar'
+              : autoEnd
+                ? 'Einmalige Zahlung für 12 Monate; die Lizenz endet danach automatisch – keine Verlängerung, keine weitere Abbuchung'
+                : 'Jährliche Abrechnung im Voraus; das Abonnement verlängert sich um jeweils 12 Monate und ist jederzeit zum Laufzeitende kündbar'}
+          </li>
           <li>
-            <CircleCheck size={14} /> Abrechnung {BILLING_INTERVAL_LABEL[interval]}; das Abonnement verlängert sich, bis du es über „Abonnement verwalten“ kündigst
+            <CircleCheck size={14} /> Alle Preise sind Endpreise inkl. 19 % USt.
           </li>
           {isB2B(type) && (
             <li>
-              <CircleCheck size={14} /> Rechnungsanschrift und USt-IdNr. gibst du bei Stripe an – sie erscheinen auf deiner Rechnung
+              <CircleCheck size={14} /> Rechnungsanschrift und USt-IdNr. gibst du bei Stripe an – sie erscheinen auf deiner Rechnung (derzeit nur mit Sitz in Deutschland)
             </li>
           )}
         </ul>
@@ -107,6 +119,17 @@ export function CheckoutDialog({ plan, interval, onClose }: { plan: LicensePlan;
             {problem}
           </p>
         )}
+        {blocked && (
+          <p className="auth-note auth-note--warn" role="alert" data-testid="checkout-country">
+            {B2B_COUNTRY_MESSAGE}
+          </p>
+        )}
+        <p className="purchase__order-note" data-testid="checkout-order-note">
+          <Lock size={13} />
+          <span>
+            Mit „Weiter zur sicheren Zahlung“ gelangst du zur Bestellseite von Stripe. Dort gibst du deine Zahlungsdaten ein; <strong>zahlungspflichtig bestellt ist erst mit dem Klick auf „Abonnieren“</strong> auf der Stripe-Seite. Bis dahin kannst du alle Angaben ändern oder abbrechen.
+          </span>
+        </p>
         <p className="purchase__secure">
           <ShieldCheck size={13} /> Zahlung über Stripe. Freigeschaltet wird erst nach bestätigter Zahlung.
         </p>

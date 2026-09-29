@@ -7,7 +7,7 @@ import { createClient, type SupabaseClient, type User as SbUser } from '@supabas
 import type { CloudBackend } from './backend';
 import { translateError } from './errors';
 import { registrationMetadata, validateRegistration } from './validation';
-import type { AdminAccountRow, AdminConsentRow, AdminLegalDocument, BillingInterval, BillingStatus, CloudAccount, CloudInstitution, CloudLicense, CloudProfile, CloudUser, InstitutionType, LegalConsentContext, LegalDocRef, LegalDocSummary, LegalDocument, LegalDraftInput, LicensePlan, LicenseSource, LicenseStatus, SubscriptionStatus } from './types';
+import type { AdminAccountRow, AdminConsentRow, AdminDeclarationRow, ConsumerDeclarationInput, ConsumerDeclarationReceipt, AdminLegalDocument, BillingInterval, BillingStatus, CloudAccount, CloudInstitution, CloudLicense, CloudProfile, CloudUser, InstitutionType, LegalConsentContext, LegalDocRef, LegalDocSummary, LegalDocument, LegalDraftInput, LicensePlan, LicenseSource, LicenseStatus, SubscriptionStatus } from './types';
 import { CloudError } from './types';
 
 const toUser = (u: SbUser | null | undefined): CloudUser | null => (u ? { id: u.id, email: u.email ?? '' } : null);
@@ -94,8 +94,8 @@ async function functionError(error: unknown, fallback: string): Promise<CloudErr
   try {
     const ctx = (error as { context?: { json?: () => Promise<unknown> } })?.context;
     if (ctx && typeof ctx.json === 'function') {
-      const body = (await ctx.json()) as { error?: unknown; code?: unknown } | null;
-      if (body && typeof body.error === 'string') return new CloudError(body.error, undefined, typeof body.code === 'string' ? body.code : undefined);
+      const body = (await ctx.json()) as { error?: unknown; code?: unknown; field?: unknown } | null;
+      if (body && typeof body.error === 'string') return new CloudError(body.error, typeof body.field === 'string' ? body.field : undefined, typeof body.code === 'string' ? body.code : undefined);
     }
   } catch {
     /* Rückfall */
@@ -244,6 +244,47 @@ export class SupabaseBackend implements CloudBackend {
     const url = (data as { url?: string } | null)?.url;
     if (!url || !/^https:\/\//.test(url)) throw new CloudError('Die Zahlungsseite konnte nicht geöffnet werden.');
     return url;
+  }
+
+  async submitConsumerDeclaration(input: ConsumerDeclarationInput): Promise<ConsumerDeclarationReceipt> {
+    const { data, error } = await this.client.functions.invoke('consumer-request', {
+      body: { kind: input.kind, cancellationType: input.cancellationType, name: input.name, email: input.email, contract: input.contract ?? '', reason: input.reason ?? '', website: input.website ?? '' },
+    });
+    if (error) throw await functionError(error, 'Deine Erklärung konnte gerade nicht übermittelt werden. Bitte sende sie per E-Mail an info@olo-vision.de.');
+    const r = (data ?? {}) as Row;
+    return { id: r.id ? String(r.id) : null, receivedAt: String(r.receivedAt ?? new Date().toISOString()), confirmationSent: r.confirmationSent === true };
+  }
+
+  async adminListDeclarations(): Promise<AdminDeclarationRow[]> {
+    const { data, error } = await this.client.rpc('admin_list_declarations');
+    if (error) throw translateError(error);
+    return ((data ?? []) as Row[]).map((r) => {
+      const result = (r.result ?? {}) as Row;
+      return {
+        id: String(r.id),
+        kind: r.kind as AdminDeclarationRow['kind'],
+        cancellationType: (r.cancellation_type as AdminDeclarationRow['cancellationType']) ?? null,
+        name: String(r.name ?? ''),
+        email: String(r.email ?? ''),
+        contractDetails: s(r.contract_details),
+        reason: s(r.reason),
+        customerType: (r.customer_type as AdminDeclarationRow['customerType']) ?? null,
+        institutionName: s(r.institution_name),
+        stripeSubscriptionId: s(r.stripe_subscription_id),
+        status: r.status as AdminDeclarationRow['status'],
+        cancelAt: s(result.cancel_at),
+        unmatched: result.unmatched === true,
+        confirmationSentAt: s(r.confirmation_sent_at),
+        notifiedAt: s(r.notified_at),
+        handledAt: s(r.handled_at),
+        receivedAt: String(r.received_at),
+      };
+    });
+  }
+
+  async adminSetDeclarationStatus(id: string, status: 'needs_review' | 'done') {
+    const { error } = await this.client.rpc('admin_set_declaration_status', { p_id: id, p_status: status });
+    if (error) throw translateError(error);
   }
 
   async startDemo(consentDocumentIds: string[]) {

@@ -2,7 +2,8 @@
   "version": "5",
   "specifiers": {
     "npm:@supabase/server@1.8.0": "1.8.0_@supabase+supabase-js@2.117.1",
-    "npm:@supabase/supabase-js@2.117.1": "2.117.1"
+    "npm:@supabase/supabase-js@2.117.1": "2.117.1",
+    "npm:nodemailer@6.9.16": "6.9.16"
   },
   "npm": {
     "@supabase/auth-js@2.117.1": {
@@ -70,6 +71,9 @@
     "jose@6.2.12": {
       "integrity": "sha512-9NiFmJEex0sy2Dk58j2UGBSHgUs2ypF9eZSu4L6vjOX3Dp96Sw1F3uL+H+D1sx02jZZdzUT0HgvCy59CuvXcWw=="
     },
+    "nodemailer@6.9.16": {
+      "integrity": "sha512-psAuZdTIRN08HKVd/E8ObdV6NO7NTBY3KsC30F7M4H1OnmLCUNaS56FpYxyb26zWLSyYF9Ozch9KYHhHegsiOQ=="
+    },
     "std-env@4.2.0": {
       "integrity": "sha512-oCUKSupKTHX53EyjDtuZQ64pjLJ6yYCtpmEw0goYxtjG9KpbRe8KAsl2tBUGU9DyMcJ0RwJ8GqJAFzMXcXW1Rw=="
     },
@@ -80,7 +84,8 @@
   "workspace": {
     "dependencies": [
       "npm:@supabase/server@1.8.0",
-      "npm:@supabase/supabase-js@2.117.1"
+      "npm:@supabase/supabase-js@2.117.1",
+      "npm:nodemailer@6.9.16"
     ]
   }
 }

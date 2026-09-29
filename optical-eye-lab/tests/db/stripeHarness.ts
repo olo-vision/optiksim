@@ -8,6 +8,8 @@ import type { helpers } from './pg';
 import type { BillingDb, StripeApi } from '../../supabase/functions/_shared/handlers';
 import { DEFAULT_PRICE_IDS } from '../../supabase/functions/_shared/stripeConfig';
 import type { SubscriptionSnapshot } from '../../supabase/functions/_shared/stripeObjects';
+import type { OpsDb } from '../../supabase/functions/_shared/legalOps';
+import type { Mailer, MailMessage } from '../../supabase/functions/_shared/mailer';
 
 type Obj = Record<string, any>; // eslint-disable-line @typescript-eslint/no-explicit-any
 const DAY = 86400;
@@ -34,6 +36,15 @@ export class FakeStripe implements StripeApi {
     else if (method === 'GET' && path.startsWith('subscriptions/')) {
       const s = this.subs.get(decodeURIComponent(path.slice(14)));
       if (!s) throw new Error('Stripe 404 invalid_request_error resource_missing: No such subscription');
+      res = structuredClone(s);
+    } else if (method === 'POST' && /^subscriptions\/[^/]+$/.test(path)) {
+      // Abo ändern (z. B. cancel_at_period_end) – wie Stripe: liefert das aktualisierte Abo
+      const s = this.subs.get(decodeURIComponent(path.slice(14)));
+      if (!s) throw new Error('Stripe 404 invalid_request_error resource_missing: No such subscription');
+      if (params.cancel_at_period_end !== undefined) {
+        s.cancel_at_period_end = params.cancel_at_period_end === 'true';
+        s.cancel_at = s.cancel_at_period_end ? s.items?.data?.[0]?.current_period_end ?? null : null;
+      }
       res = structuredClone(s);
     } else if (method === 'GET' && path.startsWith('invoices/')) {
       const i = this.invoices.get(decodeURIComponent(path.slice(9)));
@@ -77,14 +88,14 @@ export function pgBillingDb(db: PGlite, h: ReturnType<typeof helpers>): BillingD
       const r = (
         await q<Obj>(
           `select p.user_id, p.email, p.role, i.id as institution_id, i.type, i.name, l.status, l.source
-             from public.profiles p join public.institutions i on i.id = p.institution_id
+             , i.country from public.profiles p join public.institutions i on i.id = p.institution_id
              left join lateral (select * from public.licenses l2 where l2.institution_id = i.id order by l2.created_at desc limit 1) l on true
             where p.user_id = $1`,
           [userId],
         )
       )[0];
       if (!r) return null;
-      return { userId: r.user_id, email: r.email, role: r.role, institutionId: r.institution_id, institutionType: r.type, institutionName: r.name, license: r.status ? { status: r.status, source: r.source } : null };
+      return { userId: r.user_id, email: r.email, role: r.role, institutionId: r.institution_id, institutionType: r.type, institutionName: r.name, country: r.country, license: r.status ? { status: r.status, source: r.source } : null };
     },
     async getCustomerId(inst) {
       return (await q<{ c: string }>('select stripe_customer_id as c from public.billing_customers where institution_id = $1', [inst]))[0]?.c ?? null;
@@ -115,3 +126,47 @@ export function pgBillingDb(db: PGlite, h: ReturnType<typeof helpers>): BillingD
   };
 }
 
+
+/* ------------------------------ Rechtsbetrieb als service_role ------------------------------ */
+
+export function pgOpsDb(db: PGlite, h: ReturnType<typeof helpers>): OpsDb {
+  const q = <T = Obj>(sql: string, params: unknown[] = []) => h.asService(async () => (await db.query<T>(sql, params)).rows);
+  const iso = (v: unknown) => (v instanceof Date ? v.toISOString() : (v as string | null));
+  return {
+    async recordDeclaration(i) {
+      return (await q<{ r: Obj }>('select public.consumer_declaration_record($1, $2, $3, $4, $5, $6) as r', [i.kind, i.cancellationType, i.name, i.email, i.contractDetails, i.reason]))[0].r as never;
+    },
+    async updateDeclaration(id, status, result, sent, notified) {
+      await q('select public.consumer_declaration_update($1, $2, $3::jsonb, $4, $5)', [id, status, JSON.stringify(result), sent, notified]);
+    },
+    async contractConfirmationData(sessionId) {
+      return ((await q<{ r: Obj | null }>('select public.contract_confirmation_data($1) as r', [sessionId]))[0].r ?? null) as never;
+    },
+    async logMail(kind, to, subject, key, status, error) {
+      return (await q<{ ok: boolean }>('select public.system_mail_log($1, $2, $3, $4, $5, $6) as ok', [kind, to, subject, key, status, error]))[0].ok;
+    },
+    async renewalCandidates(days) {
+      return (await q<Obj>('select * from public.renewal_reminder_candidates($1)', [days])).map((r) => ({ ...r, current_period_end: iso(r.current_period_end) })) as never;
+    },
+    async markRenewal(id) {
+      await q('select public.renewal_reminder_mark($1)', [id]);
+    },
+    async pendingContractConfirmations(days) {
+      return (await q<{ s: string }>('select s from public.contract_confirmation_pending($1) as s', [days])).map((r) => r.s);
+    },
+  };
+}
+
+/** Mailer-Attrappe: sammelt Nachrichten; failNext simuliert einen SMTP-Fehler */
+export class FakeMailer implements Mailer {
+  sent: MailMessage[] = [];
+  failNext = 0;
+  constructor(readonly configured = true, readonly notifyTo: string | null = 'info@olo-vision.de') {}
+  async send(m: MailMessage) {
+    if (this.failNext > 0) {
+      this.failNext--;
+      throw new Error('SMTP 421 Service not available');
+    }
+    this.sent.push(m);
+  }
+}

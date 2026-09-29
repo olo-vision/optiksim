@@ -1,6 +1,6 @@
 # OLO-LAB3D (Optical Eye Lab)
 
-Interaktive 3D-Simulationsumgebung für Augenoptik – **Phase 8: Demo, Jahrespreise, B2C/B2B, Rechtstexte & Vertragscenter**. Details: [docs/PHASE8_DEMO_LEGAL.md](docs/PHASE8_DEMO_LEGAL.md) · Stripe-Abos (Phase 7): [docs/STRIPE_SUBSCRIPTIONS.md](docs/STRIPE_SUBSCRIPTIONS.md) · SaaS-Grundstruktur (Phase 6): [docs/SAAS_AUTH_FOUNDATION.md](docs/SAAS_AUTH_FOUNDATION.md).
+Interaktive 3D-Simulationsumgebung für Augenoptik – **0.9.0: Rechtstexte & Rechtsbetrieb** (Entwürfe 1.0, Kündigungs-/Widerrufsbutton, Vertragsbestätigung, USt.-Ausweis). Details: [docs/LEGAL_OPERATIONS.md](docs/LEGAL_OPERATIONS.md) · Phase 8: [docs/PHASE8_DEMO_LEGAL.md](docs/PHASE8_DEMO_LEGAL.md) · Stripe-Abos (Phase 7): [docs/STRIPE_SUBSCRIPTIONS.md](docs/STRIPE_SUBSCRIPTIONS.md) · SaaS-Grundstruktur (Phase 6): [docs/SAAS_AUTH_FOUNDATION.md](docs/SAAS_AUTH_FOUNDATION.md).
 
 Davor: **Phase 5: modulares Dashboard** (Skiaskopie, Refraktion, Patientensicht, Kontaktlinse und Brillenglas als eigenständige Module) und **fachlicher Physik-Review** (u. a. Glasdicke aus der Geometrie). Details: [docs/PHASE5.md](docs/PHASE5.md) · Untersuchungsmodi: [docs/PHASE4.md](docs/PHASE4.md) · Anwendung: [docs/PHASE3.md](docs/PHASE3.md) · Optik/Physik: [docs/PHASE2.md](docs/PHASE2.md).
 
@@ -35,7 +35,8 @@ Weitere Befehle:
 | `npm run dev:local` | lokale Demo wie Phase 3–5, ohne Backend und ohne Lizenzprüfung |
 | `npm run dev:e2e-cloud` | Mock-Backend im Browser (für SaaS-E2E, Port 5174) |
 | `npm run test:db` | RLS-/Trigger-Tests der Migration gegen echtes Postgres (PGlite) |
-| `npm run test:e2e:saas` | Browser-Tests Registrierung → Tarif → Checkout → Freischaltung → Frist/Kündigung, Demo, Jahrespreise, Rechtstexte (Mock-Modus) |
+| `npm run test:e2e:saas` | Browser-Tests Registrierung → Tarif → Checkout → Freischaltung → Frist/Kündigung, Demo, Jahrespreise, Rechtstexte, Kündigungs-/Widerrufsbutton (Mock-Modus) |
+| `npm run legal:seed` | SQL-Import der Rechtstext-Entwürfe aus `docs/legal/` neu erzeugen |
 | `npm run test:stripe` | Stripe-Handler, Abo-Logik, Demo, Zustimmungen, Rechte und Webhook Ende-zu-Ende gegen PostgreSQL |
 | `npm run test:edge` | echte Edge Functions unter Deno gegen einen Supabase-Nachbau (JWT-Prüfung, Admin-Client) – benötigt Deno |
 | `npm run supabase:deploy-functions` | Edge Functions deployen (Webhook ohne JWT-Prüfung) |
@@ -91,6 +92,13 @@ Simulationen werden weiterhin lokal im Browser gespeichert (je Konto getrennt).
 Funktionen, die noch nicht umgesetzt sind, erscheinen ausschließlich deaktiviert mit dem Hinweis *In Entwicklung* (Untersuchungsgeräte, Lernmodus).
 
 ---
+
+## Neu in 0.9.0 – Rechtstexte und Rechtsbetrieb
+
+- **Rechtstexte 1.0 als Entwürfe** (Impressum, AGB, Lizenz- und Nutzungsbedingungen, B2B-Zusatzbedingungen, Datenschutz, Widerrufsbelehrung, Muster-Formular, Verlangen des sofortigen Beginns, Hinweis zum Wertersatz) in `docs/legal/`, Import per `supabase/seed/legal_documents_v1_0_drafts.sql`. Offene Punkte sind mit `[Prüfhinweis]` markiert; veröffentlicht wird erst ohne Markierung.
+- **„Verträge hier kündigen“ und „Vertrag widerrufen“** ohne Login (§ 312k / § 356a BGB), mit automatischer Kündigung zum Periodenende und Eingangsbestätigung per E-Mail.
+- **Vertragsbestätigung** nach dem Kauf mit allen akzeptierten Texten; **19 % USt.** auf Stripe-Rechnungen; private Jahreslizenz **endet automatisch**; B2B vorerst nur Deutschland.
+- E-Mail über SMTP (austauschbar), Edge Functions `consumer-request` und `mail-jobs`, Migration `20260930090000_legal_operations.sql`.
 
 ## Neu in Phase 8
 

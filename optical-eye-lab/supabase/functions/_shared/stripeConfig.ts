@@ -130,3 +130,52 @@ export function corsHeaders(origin: string | null | undefined, env: EnvGetter = 
     Vary: 'Origin',
   };
 }
+
+/* ------------------------------------------------------------------------------------------------ */
+/* Anzeige (Stripe-Bestellseite, E-Mails) – muss mit src/cloud/plans.ts übereinstimmen (Test prüft das) */
+/* ------------------------------------------------------------------------------------------------ */
+
+export const PRODUCT_NAME = 'OLO-LAB3D';
+export const PROVIDER_NAME = 'OLO Vision';
+
+export const PLAN_NAMES: Readonly<Record<LicensePlan, string>> = Object.freeze({
+  private: 'OLO-LAB3D Private',
+  business: 'OLO-LAB3D Business',
+  education: 'OLO-LAB3D Education',
+});
+
+/** Endpreise inkl. 19 % USt. */
+export const PRICE_LABELS: Readonly<Record<ProductKey, string>> = Object.freeze({
+  private_monthly: '19,90 €',
+  business_monthly: '39,90 €',
+  education_monthly: '99,90 €',
+  private_yearly: '199,00 €',
+  business_yearly: '399,00 €',
+  education_yearly: '999,00 €',
+});
+
+/**
+ * Private Jahreslizenzen verlängern sich NICHT automatisch (§ 309 Nr. 9 BGB): Das Abo wird direkt nach dem
+ * Kauf auf „endet zum Periodenende“ gesetzt; eine Reaktivierung wird vom Webhook zurückgenommen.
+ */
+export const endsAutomatically = (plan: LicensePlan | null | undefined, interval: BillingInterval | null | undefined) => plan === 'private' && interval === 'yearly';
+
+/** Laufzeitregel in einem Satz (Bestellseite, Bestätigung) */
+export function termNote(plan: LicensePlan, interval: BillingInterval): string {
+  if (interval === 'monthly') return 'monatliche Abrechnung, jederzeit zum Ende des Abrechnungsmonats kündbar';
+  if (endsAutomatically(plan, interval)) return 'Laufzeit 12 Monate, endet automatisch ohne Verlängerung';
+  return 'Laufzeit 12 Monate, verlängert sich um jeweils 12 Monate, jederzeit zum Laufzeitende kündbar';
+}
+
+export function priceLine(plan: LicensePlan, interval: BillingInterval): string {
+  return `${PRICE_LABELS[productKey(plan, interval)]} ${interval === 'yearly' ? (endsAutomatically(plan, interval) ? 'für 12 Monate' : 'pro Jahr') : 'pro Monat'} inkl. 19 % USt.`;
+}
+
+/**
+ * Hinweis direkt am Button der Stripe-Bestellseite (custom_text.submit, max. 1200 Zeichen).
+ * Die Beschriftung des Buttons selbst („Abonnieren“) gibt Stripe vor.
+ */
+export function checkoutSubmitMessage(plan: LicensePlan, interval: BillingInterval, b2c: boolean): string {
+  const docs = b2c ? 'die AGB sowie die Lizenz- und Nutzungsbedingungen; die Widerrufsbelehrung hast du vor der Bestellung erhalten' : 'die AGB, die B2B-Zusatzbedingungen sowie die Lizenz- und Nutzungsbedingungen';
+  return `Mit Klick auf „Abonnieren“ bestellst du ${PLAN_NAMES[plan]} zahlungspflichtig: ${priceLine(plan, interval)}; ${termNote(plan, interval)}. Es gelten ${docs} von ${PROVIDER_NAME}.`.slice(0, 1200);
+}

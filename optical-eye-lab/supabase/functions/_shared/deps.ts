@@ -12,7 +12,9 @@
  *      Benötigte Tabellenrechte: Migration 20260929090000_service_role_grants.sql.
  *
  * Secrets NUR als Supabase Function Secrets (nie im Frontend, nie im Git):
- *   STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET, SITE_URL (optional STRIPE_PRICE_*, STRIPE_PORTAL_CONFIGURATION_ID)
+ *   STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET, SITE_URL (optional STRIPE_PRICE_*, STRIPE_PORTAL_CONFIGURATION_ID,
+ *   STRIPE_TAX_RATE_ID), E-Mail: SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASSWORD, MAIL_FROM, MAIL_NOTIFY_TO (mailer.ts),
+ *   CRON_SECRET (mail-jobs)
  * SUPABASE_URL, SUPABASE_SECRET_KEYS, SUPABASE_PUBLISHABLE_KEYS, SUPABASE_JWKS stellt Supabase automatisch bereit.
  */
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
@@ -22,6 +24,9 @@ import { STRIPE_API_VERSION, type EnvGetter } from './stripeConfig.ts';
 import type { SubscriptionSnapshot } from './stripeObjects.ts';
 import { LIVE_SUBSCRIPTION_STATUSES } from './licenseStatus.ts';
 import { bearerToken, resolvePublishableKey, resolveServerKey, SERVER_CLIENT_OPTIONS } from './supabaseKeys.ts';
+import type { OpsDb } from './legalOps.ts';
+import type { ContractData } from './mailTemplates.ts';
+import { mailerFromEnv } from './smtpMailer.ts';
 
 export const env: EnvGetter = (name) => Deno.env.get(name) ?? undefined;
 
@@ -94,7 +99,7 @@ function billingDb(admin: SupabaseClient): BillingDb {
       fail(error);
       if (!p) return null;
       const [{ data: inst, error: e1 }, { data: lic, error: e2 }] = await Promise.all([
-        admin.from('institutions').select('id, type, name').eq('id', p.institution_id).maybeSingle(),
+        admin.from('institutions').select('id, type, name, country').eq('id', p.institution_id).maybeSingle(),
         admin.from('licenses').select('status, source').eq('institution_id', p.institution_id).order('created_at', { ascending: false }).limit(1).maybeSingle(),
       ]);
       fail(e1);
@@ -107,6 +112,7 @@ function billingDb(admin: SupabaseClient): BillingDb {
         institutionId: inst.id,
         institutionType: inst.type,
         institutionName: inst.name,
+        country: inst.country ?? null,
         license: lic ? { status: lic.status, source: lic.source } : null,
       };
     },
@@ -169,6 +175,52 @@ function billingDb(admin: SupabaseClient): BillingDb {
   return db;
 }
 
+/** Rechtsbetrieb (Migration 20260930090000_legal_operations.sql) – nur über security-definer-Funktionen */
+function opsDb(admin: SupabaseClient): OpsDb {
+  return {
+    async recordDeclaration(i) {
+      const { data, error } = await admin.rpc('consumer_declaration_record', {
+        p_kind: i.kind,
+        p_cancellation_type: i.cancellationType,
+        p_name: i.name,
+        p_email: i.email,
+        p_contract_details: i.contractDetails,
+        p_reason: i.reason,
+      });
+      fail(error);
+      return data as Awaited<ReturnType<OpsDb['recordDeclaration']>>;
+    },
+    async updateDeclaration(id, status, result, confirmationSent, notified) {
+      const { error } = await admin.rpc('consumer_declaration_update', { p_id: id, p_status: status, p_result: result, p_confirmation_sent: confirmationSent, p_notified: notified });
+      fail(error);
+    },
+    async contractConfirmationData(sessionId) {
+      const { data, error } = await admin.rpc('contract_confirmation_data', { p_checkout_session_id: sessionId });
+      fail(error);
+      return (data ?? null) as ContractData | null;
+    },
+    async logMail(kind, recipient, subject, relatedKey, status, message) {
+      const { data, error } = await admin.rpc('system_mail_log', { p_kind: kind, p_recipient: recipient, p_subject: subject, p_related_key: relatedKey, p_status: status, p_error: message });
+      fail(error);
+      return data === true;
+    },
+    async renewalCandidates(days) {
+      const { data, error } = await admin.rpc('renewal_reminder_candidates', { p_days: days });
+      fail(error);
+      return (data ?? []) as Awaited<ReturnType<OpsDb['renewalCandidates']>>;
+    },
+    async markRenewal(subscriptionId) {
+      const { error } = await admin.rpc('renewal_reminder_mark', { p_subscription_id: subscriptionId });
+      fail(error);
+    },
+    async pendingContractConfirmations(days) {
+      const { data, error } = await admin.rpc('contract_confirmation_pending', { p_days: days });
+      fail(error);
+      return ((data ?? []) as unknown[]).map((x) => (typeof x === 'string' ? x : String((x as Record<string, unknown>).contract_confirmation_pending ?? ''))).filter(Boolean);
+    },
+  };
+}
+
 /* ------------------------------------------------------------------------------------------------ */
 /* Stripe                                                                                           */
 /* ------------------------------------------------------------------------------------------------ */
@@ -218,5 +270,16 @@ export function realDeps(): Deps {
     checkCheckoutConsents: (...a) => lazyDb().checkCheckoutConsents(...a),
     recordCheckoutConsents: (...a) => lazyDb().recordCheckoutConsents(...a),
   };
-  return { env, authUser, db, stripe, log: (m) => console.error(m) };
+  const lazyOps = (): OpsDb => opsDb((admin ??= createServerAdminClient()));
+  const ops: OpsDb = {
+    recordDeclaration: (...a) => lazyOps().recordDeclaration(...a),
+    updateDeclaration: (...a) => lazyOps().updateDeclaration(...a),
+    contractConfirmationData: (...a) => lazyOps().contractConfirmationData(...a),
+    logMail: (...a) => lazyOps().logMail(...a),
+    renewalCandidates: (...a) => lazyOps().renewalCandidates(...a),
+    markRenewal: (...a) => lazyOps().markRenewal(...a),
+    pendingContractConfirmations: (...a) => lazyOps().pendingContractConfirmations(...a),
+  };
+  const log = (m: string) => console.error(m);
+  return { env, authUser, db, stripe, log, ops, mailer: mailerFromEnv(env, log) };
 }

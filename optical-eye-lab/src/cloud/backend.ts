@@ -3,7 +3,7 @@
  *   SupabaseBackend – echte Anmeldung/Datenbank (Produktion)
  *   MockBackend     – Nachbau im Browser (nur Tests/Entwicklung, VITE_AUTH_MODE=mock)
  */
-import type { AdminAccountRow, AdminConsentRow, AdminLegalDocument, BillingInterval, CloudAccount, CloudUser, InstitutionType, LegalConsentContext, LegalDocRef, LegalDocSummary, LegalDocument, LegalDraftInput, LicensePlan, LicenseSource, LicenseStatus, RegistrationInput } from './types';
+import type { AdminAccountRow, AdminConsentRow, AdminDeclarationRow, ConsumerDeclarationInput, ConsumerDeclarationReceipt, DeclarationStatus, AdminLegalDocument, BillingInterval, CloudAccount, CloudUser, InstitutionType, LegalConsentContext, LegalDocRef, LegalDocSummary, LegalDocument, LegalDraftInput, LicensePlan, LicenseSource, LicenseStatus, RegistrationInput } from './types';
 
 export type AuthEvent = 'SIGNED_IN' | 'SIGNED_OUT' | 'TOKEN_REFRESHED' | 'USER_UPDATED' | 'PASSWORD_RECOVERY' | 'INITIAL_SESSION' | string;
 
@@ -52,6 +52,12 @@ export interface CloudBackend {
   adminListConsents(institutionId: string): Promise<AdminConsentRow[]>;
   /** Stripe Customer Portal der eigenen Institution (Edge Function create-customer-portal) → URL */
   openCustomerPortal(): Promise<string>;
+  /** „Verträge hier kündigen“ / „Vertrag widerrufen“ – ohne Anmeldung (Edge Function consumer-request).
+   *  Die Antwort verrät nicht, ob zur E-Mail-Adresse ein Konto existiert. */
+  submitConsumerDeclaration(input: ConsumerDeclarationInput): Promise<ConsumerDeclarationReceipt>;
+  /** Super-Admin: eingegangene Kündigungen und Widerrufe */
+  adminListDeclarations(): Promise<AdminDeclarationRow[]>;
+  adminSetDeclarationStatus(id: string, status: Extract<DeclarationStatus, 'needs_review' | 'done'>): Promise<void>;
   /** Super-Admin: Lizenz wieder an Stripe übergeben bzw. als Sonderlizenz markieren */
   adminSetLicenseSource(licenseId: string, source: LicenseSource): Promise<void>;
 }

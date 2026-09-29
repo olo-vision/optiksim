@@ -109,12 +109,17 @@ export function BillingSummary() {
             <dd data-testid="billing-next">{formatDate(nextBilling)}</dd>
           </div>
         )}
-        {cancelled && (
+        {cancelled && (l.plan === 'private' && b?.billingInterval === 'yearly' ? (
+          <div>
+            <dt>Laufzeit</dt>
+            <dd data-testid="billing-term-end">endet am {formatDate(l.validUntil ?? b?.cancelAt ?? b?.currentPeriodEnd)} – keine automatische Verlängerung</dd>
+          </div>
+        ) : (
           <div>
             <dt>Kündigung</dt>
             <dd data-testid="billing-cancel">Gekündigt – Zugriff bis {formatDate(l.validUntil ?? b?.cancelAt ?? b?.currentPeriodEnd)}</dd>
           </div>
-        )}
+        ))}
         {l.status === 'past_due' && l.gracePeriodUntil && (
           <div>
             <dt>Zahlungsfrist</dt>

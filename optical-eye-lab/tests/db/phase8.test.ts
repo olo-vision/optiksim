@@ -374,5 +374,12 @@ describe('Kauf Ende-zu-Ende (Handler + Datenbank): B2C jährlich mit Zustimmunge
     // späteres Login: Status bleibt (Browser nach Zahlung geschlossen – Webhook reicht)
     const b = await h.asUser(uid, async () => (await h.rows<Obj>('select * from public.my_billing_status()'))[0]);
     expect(b).toMatchObject({ has_access: true, billing_interval: 'yearly', subscription_status: 'active' });
+    // private Jahreslizenz verlängert sich nicht: der Webhook setzt bei Stripe „endet zum Periodenende“ …
+    expect(stripe.calls.filter((c) => c.method === 'POST' && c.path === 'subscriptions/sub_jahr').map((c) => c.params)).toEqual([{ cancel_at_period_end: 'true' }]);
+    // … Stripe meldet die Änderung, danach steht sie auch in der Datenbank; kein weiterer Stripe-Aufruf
+    expect((await hook('customer.subscription.updated', { id: 'sub_jahr', object: 'subscription' }, 'evt_p8_2')).status).toBe(200);
+    expect((await h.rows<Obj>('select cancel_at_period_end from public.subscriptions where stripe_subscription_id = $1', ['sub_jahr']))[0].cancel_at_period_end).toBe(true);
+    expect(stripe.calls.filter((c) => c.method === 'POST' && c.path === 'subscriptions/sub_jahr')).toHaveLength(1);
+    expect(await h.licenseOf(uid)).toMatchObject({ status: 'active' });
   });
 });

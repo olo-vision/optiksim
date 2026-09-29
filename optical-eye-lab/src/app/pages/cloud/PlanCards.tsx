@@ -88,7 +88,7 @@ export function PlanCards({ current, intent, showDemo = true }: { current?: Lice
     <div className="plans" data-testid="plan-cards">
       <div className="plans__toolbar">
         <IntervalToggle value={interval} onChange={setBillingInterval} />
-        <span className="plans__toolbar-note">{interval === 'yearly' ? 'Jährliche Abrechnung' : 'Monatliche Abrechnung'}</span>
+        <span className="plans__toolbar-note">{interval === 'yearly' ? 'Jahrespreise' : 'Monatspreise'} · alle Preise inkl. 19 % USt.</span>
       </div>
       <div className={`plan-grid${showDemo ? ' plan-grid--with-demo' : ''}`}>
         {showDemo && <DemoCard onStart={() => (user ? void demo.begin() : (saveIntent({ plan: 'demo', interval: 'monthly' }), navigate('/register?plan=demo')))} busy={demo.busy} running={demoRunning} />}
@@ -112,6 +112,9 @@ export function PlanCards({ current, intent, showDemo = true }: { current?: Lice
                 <span> {price.unit}</span>
               </p>
               <p className="plan-card__billing">{price.note}</p>
+              <p className="plan-card__term" data-testid={`term-${p.id}`}>
+                {price.term}
+              </p>
               <p className="plan-card__audience">{p.audience}</p>
               {p.locationNote && <p className="plan-card__note">{p.locationNote}</p>}
               <ul className="plan-card__features">

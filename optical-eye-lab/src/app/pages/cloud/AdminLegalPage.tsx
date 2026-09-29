@@ -9,15 +9,15 @@
  */
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { NavLink } from 'react-router';
-import { Archive, CircleAlert, Eye, FilePlus2, FileText, PencilLine, RefreshCcw, Rocket, ShieldCheck, Trash2, Users } from 'lucide-react';
+import { Archive, CircleAlert, Eye, FilePlus2, FileText, Inbox, PencilLine, RefreshCcw, Rocket, ShieldCheck, Trash2, Users } from 'lucide-react';
 import { Button, EmptyState, PageHeader, Pill, SelectField, TextArea, TextField } from '@/ui/ds';
 import { Dialog } from '@/ui/common/overlays';
 import { confirmDialog } from '@/ui/ds/modals';
 import { usePageTitle } from '../../usePageTitle';
 import { cloudBackend } from '../../cloudSession';
 import { formatDate, LEGAL_AUDIENCE_LABEL, LEGAL_DOC_TYPE_LABEL } from '@/cloud/plans';
-import { legalDocPath, suggestNextVersion } from '@/cloud/legal';
-import { LEGAL_DOC_TYPES, type AdminLegalDocument, type LegalAudience, type LegalDocType, type LegalDraftInput } from '@/cloud/types';
+import { countReviewMarkers, legalDocPath, suggestNextVersion } from '@/cloud/legal';
+import { LEGAL_DOC_TYPES, type AdminDeclarationRow, type AdminLegalDocument, type LegalAudience, type LegalDocType, type LegalDraftInput } from '@/cloud/types';
 import { useAppStore } from '@/state/store';
 import { LegalMarkdown } from './LegalPages';
 
@@ -33,12 +33,16 @@ export function AdminTabs() {
       <NavLink to="/admin/legal" className={({ isActive }) => (isActive ? 'is-active' : '')} data-testid="admin-tab-legal">
         <FileText size={14} /> Rechtliches
       </NavLink>
+      <NavLink to="/admin/declarations" className={({ isActive }) => (isActive ? 'is-active' : '')} data-testid="admin-tab-declarations">
+        <Inbox size={14} /> Kündigungen &amp; Widerrufe
+      </NavLink>
     </nav>
   );
 }
 
 /** Für welche Abläufe welche Dokumente vorgesehen sind (Spiegel von legal_required_documents, nur Anzeige) */
 const EXPECTED: Array<{ label: string; audience: Exclude<LegalAudience, 'all'>; types: LegalDocType[] }> = [
+  { label: 'Website (öffentlich)', audience: 'b2c', types: ['imprint'] },
   { label: 'Registrierung & Demo', audience: 'b2c', types: ['privacy', 'license_terms'] },
   { label: 'Registrierung & Demo', audience: 'b2b', types: ['privacy', 'license_terms'] },
   { label: 'Kauf B2C', audience: 'b2c', types: ['terms', 'privacy', 'withdrawal', 'withdrawal_form', 'license_terms', 'consent_immediate_performance', 'consent_withdrawal_loss'] },
@@ -96,12 +100,18 @@ export function AdminLegalPage() {
     });
   };
 
-  const activate = (d: AdminLegalDocument) =>
+  const activate = (d: AdminLegalDocument) => {
+    const open = countReviewMarkers(d.content) + countReviewMarkers(d.checkboxLabel);
+    if (open) {
+      notify(`Dieser Entwurf enthält noch ${open} Prüfhinweis${open === 1 ? '' : 'e'}. Bitte klären, aus dem Text entfernen und dann veröffentlichen.`, 'warning');
+      return;
+    }
     void confirmDialog({
       title: `${d.title} (Version ${d.version}) veröffentlichen?`,
       message: 'Die Version wird sofort für neue Registrierungen, Demos und Käufe verwendet. Eine bisher aktive Version desselben Typs und derselben Zielgruppe wird archiviert. Veröffentlichte Versionen können nicht mehr geändert werden.',
       confirmLabel: 'Veröffentlichen',
     }).then((ok) => void (ok && run(() => cloudBackend().adminLegalActivate(d.id), `Version ${d.version} ist aktiv.`)));
+  };
 
   const groups = LEGAL_DOC_TYPES.map((type) => ({ type, items: (docs ?? []).filter((d) => d.type === type) }));
 
@@ -135,7 +145,7 @@ export function AdminLegalPage() {
                 <ul>
                   {missing.map((m) => (
                     <li key={`${m.label}-${m.audience}`}>
-                      {m.label} ({m.audience.toUpperCase()}): {m.missing.map((t) => LEGAL_DOC_TYPE_LABEL[t]).join(', ')}
+                      {m.types.includes('imprint') ? m.label : `${m.label} (${m.audience.toUpperCase()})`}: {m.missing.map((t) => LEGAL_DOC_TYPE_LABEL[t]).join(', ')}
                     </li>
                   ))}
                 </ul>
@@ -175,7 +185,14 @@ export function AdminLegalPage() {
                             <Pill tone={STATUS_TONE[d.status]}>{STATUS_LABEL[d.status]}</Pill>
                           </td>
                           <td>{formatDate(d.effectiveFrom)}</td>
-                          <td>{d.title}</td>
+                          <td>
+                            {d.title}
+                            {d.status === 'draft' && countReviewMarkers(d.content) + countReviewMarkers(d.checkboxLabel) > 0 && (
+                              <span className="legal-review-count" data-testid="legal-review-count" title="Offene [Prüfhinweis]-Markierungen – vor dem Veröffentlichen klären und entfernen">
+                                {countReviewMarkers(d.content) + countReviewMarkers(d.checkboxLabel)} Prüfhinweis{countReviewMarkers(d.content) + countReviewMarkers(d.checkboxLabel) === 1 ? '' : 'e'}
+                              </span>
+                            )}
+                          </td>
                           <td className="legal-actions">
                             {d.status === 'draft' ? (
                               <>
@@ -313,5 +330,132 @@ function LegalEditor({ initial, existingVersions, onClose, onSaved }: { initial:
         )}
       </div>
     </Dialog>
+  );
+}
+
+/* ------------------------------------------------------------------------------------------------ */
+/* Kündigungen & Widerrufe (über die Website eingegangen)                                           */
+/* ------------------------------------------------------------------------------------------------ */
+
+const DECL_STATUS: Record<AdminDeclarationRow['status'], { label: string; tone: 'ok' | 'dev' | 'neutral' | 'warn' }> = {
+  received: { label: 'Eingegangen', tone: 'dev' },
+  processed: { label: 'Automatisch gekündigt', tone: 'ok' },
+  needs_review: { label: 'Zu bearbeiten', tone: 'warn' },
+  done: { label: 'Erledigt', tone: 'neutral' },
+};
+
+export function AdminDeclarationsPage() {
+  usePageTitle('Kündigungen & Widerrufe');
+  const [rows, setRows] = useState<AdminDeclarationRow[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const load = useCallback(async () => {
+    try {
+      setRows(await cloudBackend().adminListDeclarations());
+      setError(null);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Fehler');
+    }
+  }, []);
+  useEffect(() => {
+    void load();
+  }, [load]);
+  const mark = async (id: string, status: 'needs_review' | 'done') => {
+    try {
+      await cloudBackend().adminSetDeclarationStatus(id, status);
+      notify(status === 'done' ? 'Als erledigt markiert.' : 'Wieder offen.');
+      await load();
+    } catch (e) {
+      notify(e instanceof Error ? e.message : 'Fehler', 'warning');
+    }
+  };
+  const open = (rows ?? []).filter((r) => r.status === 'needs_review' || r.status === 'received').length;
+  const dt = (iso: string | null) => (iso ? new Date(iso).toLocaleString('de-DE') : '–');
+  return (
+    <div className="page page--wide">
+      <PageHeader
+        eyebrow={
+          <>
+            <ShieldCheck size={13} /> Super-Admin
+          </>
+        }
+        title="Kündigungen & Widerrufe"
+        subtitle="Über „Verträge hier kündigen“ und „Vertrag widerrufen“ eingegangene Erklärungen. Ordentliche Kündigungen mit zugeordnetem Abo werden automatisch zum Periodenende wirksam; Widerrufe (Erstattung mit Wertersatz) und alles Übrige bearbeitest du in Stripe und markierst es hier als erledigt."
+        actions={
+          <Button icon={RefreshCcw} onClick={() => void load()}>
+            Aktualisieren
+          </Button>
+        }
+      />
+      <AdminTabs />
+      {error && <p className="ds-field__error">{error}</p>}
+      {rows && open > 0 && (
+        <p className="auth-note auth-note--warn" data-testid="declarations-open">
+          <CircleAlert size={15} /> {open} Vorgang{open === 1 ? '' : 'e'} zu bearbeiten.
+        </p>
+      )}
+      {rows === null ? (
+        <p className="muted">Wird geladen …</p>
+      ) : !rows.length ? (
+        <EmptyState icon={Inbox} title="Keine Erklärungen" text="Hier erscheinen Kündigungen und Widerrufe, die über die Website eingehen." />
+      ) : (
+        <div className="admin-table-wrap">
+          <table className="admin-table" data-testid="declarations-table">
+            <thead>
+              <tr>
+                <th>Eingang</th>
+                <th>Art</th>
+                <th>Kunde</th>
+                <th>Angaben</th>
+                <th>Status</th>
+                <th>E-Mails</th>
+                <th aria-label="Aktionen" />
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((r) => (
+                <tr key={r.id} data-testid="declaration-row" data-kind={r.kind} data-status={r.status}>
+                  <td>{dt(r.receivedAt)}</td>
+                  <td>
+                    {r.kind === 'withdrawal' ? 'Widerruf' : r.cancellationType === 'extraordinary' ? 'Kündigung (außerordentlich)' : 'Kündigung'}
+                    {r.customerType && <span className="admin-sub">{r.customerType === 'private' ? 'B2C' : 'B2B'}</span>}
+                  </td>
+                  <td>
+                    {r.name}
+                    <span className="admin-sub">{r.email}</span>
+                    {r.institutionName && <span className="admin-sub">{r.institutionName}</span>}
+                  </td>
+                  <td>
+                    {r.contractDetails ?? '–'}
+                    {r.reason && <span className="admin-sub">„{r.reason}“</span>}
+                    {r.stripeSubscriptionId && <span className="admin-sub mono">{r.stripeSubscriptionId}</span>}
+                    {r.unmatched && <span className="admin-sub">kein Abo zugeordnet</span>}
+                  </td>
+                  <td>
+                    <Pill tone={DECL_STATUS[r.status].tone}>{DECL_STATUS[r.status].label}</Pill>
+                    {r.cancelAt && <span className="admin-sub">endet zum {formatDate(r.cancelAt)}</span>}
+                    {r.handledAt && <span className="admin-sub">erledigt {dt(r.handledAt)}</span>}
+                  </td>
+                  <td>
+                    <span className="admin-sub">Bestätigung: {r.confirmationSentAt ? 'versendet' : 'nicht versendet'}</span>
+                    <span className="admin-sub">Hinweis an dich: {r.notifiedAt ? 'versendet' : 'nicht versendet'}</span>
+                  </td>
+                  <td className="legal-actions">
+                    {r.status === 'done' ? (
+                      <Button size="sm" variant="ghost" onClick={() => void mark(r.id, 'needs_review')}>
+                        Wieder öffnen
+                      </Button>
+                    ) : (
+                      <Button size="sm" variant="primary" onClick={() => void mark(r.id, 'done')} data-testid="declaration-done-btn">
+                        Erledigt
+                      </Button>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
   );
 }

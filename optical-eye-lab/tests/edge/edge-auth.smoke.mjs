@@ -84,6 +84,12 @@ const server = http.createServer((req, res) => {
       if (table === 'rpc/checkout_consent_check') return send(200, { ok: true, outdated: false, missing: [] });
       if (table === 'rpc/stripe_event_begin') return send(200, true);
       if (table === 'rpc/stripe_event_finish') return send(200, null);
+      // Rechtsbetrieb (consumer-request, mail-jobs)
+      if (table === 'rpc/consumer_declaration_record') return send(200, { id: '00000000-0000-4000-8000-000000000001', received_at: new Date().toISOString(), recent_count: 0, account: null, subscription: null });
+      if (table === 'rpc/consumer_declaration_update') return send(200, null);
+      if (table === 'rpc/system_mail_log') return send(200, true);
+      if (table === 'rpc/contract_confirmation_pending') return send(200, []);
+      if (table === 'rpc/renewal_reminder_candidates') return send(200, []);
       return send(404, { message: 'unknown ' + table });
     }
     send(404, {});
@@ -91,6 +97,56 @@ const server = http.createServer((req, res) => {
 });
 await new Promise((r) => server.listen(0, '127.0.0.1', r));
 BASE = `http://127.0.0.1:${server.address().port}`;
+
+/* ------------------------------ minimaler SMTP-Server (Klartext, AUTH PLAIN/LOGIN) ------------------------------ */
+async function startFakeSmtp() {
+  const net = await import('node:net');
+  const messages = [];
+  const state = { auth: false };
+  const srv = net.createServer((sock) => {
+    let buf = '';
+    let inData = false;
+    let cur = { rcpt: [], data: '' };
+    let authStep = 0;
+    const w = (l) => sock.write(l + '\r\n');
+    w('220 fake.smtp ESMTP');
+    sock.on('data', (d) => {
+      buf += d.toString('utf8');
+      let i;
+      while ((i = buf.indexOf('\r\n')) >= 0) {
+        const line = buf.slice(0, i);
+        buf = buf.slice(i + 2);
+        if (inData) {
+          if (line === '.') {
+            inData = false;
+            messages.push(cur);
+            cur = { rcpt: [], data: '' };
+            w('250 OK queued');
+          } else cur.data += line + '\n';
+          continue;
+        }
+        if (authStep === 1) { authStep = 2; w('334 UGFzc3dvcmQ6'); continue; }
+        if (authStep === 2) { authStep = 0; state.auth = true; w('235 Authentication successful'); continue; }
+        const cmd = line.slice(0, 4).toUpperCase();
+        if (cmd === 'EHLO') { w('250-fake.smtp'); w('250-AUTH PLAIN LOGIN'); w('250 8BITMIME'); }
+        else if (cmd === 'HELO') w('250 fake.smtp');
+        else if (cmd === 'AUTH') {
+          if (/^AUTH PLAIN \S+/i.test(line)) { state.auth = true; w('235 Authentication successful'); }
+          else if (/^AUTH LOGIN/i.test(line)) { authStep = 1; w('334 VXNlcm5hbWU6'); }
+          else w('334 ');
+        } else if (cmd === 'MAIL') w('250 OK');
+        else if (cmd === 'RCPT') { cur.rcpt.push(line); w('250 OK'); }
+        else if (cmd === 'DATA') { inData = true; w('354 End data with <CR><LF>.<CR><LF>'); }
+        else if (cmd === 'QUIT') { w('221 Bye'); sock.end(); }
+        else if (cmd === 'RSET' || cmd === 'NOOP') w('250 OK');
+        else w('502 Command not implemented');
+      }
+    });
+    sock.on('error', () => undefined);
+  });
+  await new Promise((r) => srv.listen(0, '127.0.0.1', r));
+  return { port: srv.address().port, messages, get auth() { return state.auth; }, close: () => srv.close() };
+}
 
 /* ------------------------------ Function unter Deno starten ------------------------------ */
 async function startFunction(name, port, extraEnv = {}) {
@@ -226,6 +282,30 @@ try {
   check('Webhook: DB-Anfragen nur mit Secret Key', restCalls().every((e) => e.apikey === SECRET));
   check('Webhook: Stripe nicht erreichbar → 500 + Ereignis als fehlgeschlagen markiert (Stripe wiederholt)', r.status === 500 && restCalls().some((e) => e.path === '/rest/v1/rpc/stripe_event_finish' && e.body.includes('failed')), `${r.status}`);
   fn.child.kill();
+
+  /* ---------- consumer-request (ohne JWT) + echter SMTP-Versand unter Deno ---------- */
+  const smtp = await startFakeSmtp();
+  fn = await startFunction('consumer-request', PORT, { SMTP_HOST: '127.0.0.1', SMTP_PORT: String(smtp.port), SMTP_USER: 'info@olo-vision.de', SMTP_PASSWORD: 'nicht-echt', MAIL_FROM: 'OLO Vision <info@olo-vision.de>' });
+  clearLog();
+  r = await call(PORT, { body: { kind: 'cancellation', name: 'Karla', email: 'karla@web.de' } });
+  check('Kündigungsbutton: ohne Anmeldung → 200', r.status === 200 && r.json?.ok === true, `${r.status} ${JSON.stringify(r.json)}`);
+  check('Kündigungsbutton: Erklärung über Admin-Client gespeichert', restCalls().some((e) => e.path === '/rest/v1/rpc/consumer_declaration_record') && restCalls().every((e) => e.apikey === SECRET));
+  if (process.env.SMTP_DEBUG) console.log(JSON.stringify(smtp.messages).slice(0, 3000));
+  check('SMTP (nodemailer unter Deno): Bestätigung + Hinweis versendet', smtp.messages.length === 2 && smtp.messages.some((m) => m.rcpt.join(' ').includes('karla@web.de') && m.data.includes('Vorgangsnummer')) && smtp.auth, `${smtp.messages.length} Mails, auth=${smtp.auth}`);
+  check('SMTP: Passwort nicht im Log', !fn.output().includes('nicht-echt'));
+  r = await call(PORT, { body: { kind: 'cancellation', name: '', email: 'x' } });
+  check('Kündigungsbutton: ungültige Eingaben → 422', r.status === 422);
+  fn.child.kill();
+  await new Promise((r2) => setTimeout(r2, 500));
+
+  /* ---------- mail-jobs (nur mit CRON_SECRET) ---------- */
+  fn = await startFunction('mail-jobs', PORT, { CRON_SECRET: 'edge-cron-secret-123456' });
+  r = await call(PORT, {});
+  check('Mail-Jobs ohne Secret → 401', r.status === 401);
+  r = await call(PORT, { headers: { 'x-cron-secret': 'edge-cron-secret-123456' } });
+  check('Mail-Jobs mit Secret → 200', r.status === 200 && r.json?.reminders?.checked === 0, `${r.status} ${JSON.stringify(r.json)}`);
+  fn.child.kill();
+  smtp.close();
 } catch (e) {
   check('Ablauf', false, String(e.message ?? e).split('\n').slice(0, 6).join(' | '));
 } finally {

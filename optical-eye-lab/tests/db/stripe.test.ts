@@ -320,6 +320,7 @@ describe('Sicherheit', () => {
     const before = await h.licenseOf(alice);
     await db.exec(readMigration('20260929090000_service_role_grants.sql'));
     await db.exec(readMigration('20260929120000_demo_billing_legal.sql'));
+    await db.exec(readMigration('20260930090000_legal_operations.sql'));
     expect(await h.licenseOf(alice)).toEqual(before);
   });
 });

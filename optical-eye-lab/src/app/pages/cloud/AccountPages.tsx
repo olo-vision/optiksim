@@ -9,7 +9,7 @@ import { Button, EmptyState, PageHeader, Pill, TextField } from '@/ui/ds';
 import { usePageTitle } from '../../usePageTitle';
 import { useCloud, cloudBackend } from '../../cloudSession';
 import { PlanCards } from './PlanCards';
-import { PublicShell } from './LegalPages';
+import { LegalFooterLinks, PublicShell } from './LegalPages';
 import { ACCESS_MESSAGE, canUseSimulator } from '@/cloud/access';
 import { BillingNotice, BillingSummary, CheckoutConfirmation } from './Billing';
 import { BILLING_INTERVAL_LABEL, CUSTOMER_KIND_LABEL, DEMO_PLAN, formatDate, INSTITUTION_TYPE_LABEL, LEGAL_DOC_TYPE_LABEL, LICENSE_SOURCE_LABEL, LICENSE_STATUS_LABEL, licenseLabel, PRODUCT_NAME, SUBSCRIPTION_STATUS_LABEL } from '@/cloud/plans';
@@ -157,6 +157,7 @@ export function LicensePage() {
           <PlanCards current={l?.plan} intent={intent} />
         </section>
       )}
+      <LegalFooterLinks compact />
     </div>
   );
 }
@@ -224,6 +225,13 @@ export function AccountPage() {
       )}
 
       <BillingSummary />
+
+      <section className="page-section" data-testid="account-legal">
+        <div className="page-section__head">
+          <h2 className="page-section__title">Verträge &amp; Rechtliches</h2>
+        </div>
+        <LegalFooterLinks compact />
+      </section>
 
       {p && (
         <section className="page-section">

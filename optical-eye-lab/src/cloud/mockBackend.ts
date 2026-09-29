@@ -20,6 +20,9 @@ import {
   CloudError,
   type AdminAccountRow,
   type AdminConsentRow,
+  type AdminDeclarationRow,
+  type ConsumerDeclarationInput,
+  type ConsumerDeclarationReceipt,
   type AdminLegalDocument,
   type AppRole,
   type BillingInterval,
@@ -45,7 +48,8 @@ import {
   type SubscriptionStatus,
 } from './types';
 import { hasActiveLicense } from './access';
-import { planAllowedFor } from './plans';
+import { B2B_COUNTRY_MESSAGE, planAllowedFor } from './plans';
+import { hasReviewMarkers } from './legal';
 
 const KEY = 'olo-mock-cloud';
 
@@ -88,6 +92,9 @@ interface MockDb {
   legalDocs: AdminLegalDocument[];
   consents: MockConsent[];
   demoGrants: MockDemoGrant[];
+  /** Rechtsbetrieb: Kündigungen/Widerrufe über die Website, versendete E-Mails (Nachbau) */
+  declarations: AdminDeclarationRow[];
+  mails: { kind: string; to: string; subject: string; relatedKey: string | null; at: string }[];
 }
 
 interface MockConsent {
@@ -198,6 +205,8 @@ const empty = (): MockDb => ({
   legalDocs: [],
   consents: [],
   demoGrants: [],
+  declarations: [],
+  mails: [],
 });
 const DAY = 86400000;
 const LIVE: SubscriptionStatus[] = ['active', 'trialing', 'past_due', 'unpaid', 'paused'];
@@ -399,10 +408,14 @@ export class MockBackend implements CloudBackend {
         status: 'active',
         created: now,
         currentPeriodEnd: new Date(now + (pc.interval === 'yearly' ? 365 : 30) * DAY).toISOString(),
-        cancelAtPeriodEnd: false,
+        // wie der Webhook: private Jahreslizenz verlängert sich nicht automatisch
+        cancelAtPeriodEnd: pc.plan === 'private' && pc.interval === 'yearly',
         endedAt: null,
       });
       syncLicense(db, pc.institutionId, now);
+      // wie der Webhook: Vertragsbestätigung einmal je Checkout-Session
+      const buyer = db.profiles.find((p) => p.institutionId === pc.institutionId && p.role !== 'user');
+      if (buyer && pc.sessionId) db.mails.push({ kind: 'contract_confirmation', to: buyer.email, subject: 'Vertragsbestätigung', relatedKey: pc.sessionId, at: new Date(now).toISOString() });
       changed = true;
     }
     if (changed) db.pendingCheckouts = db.pendingCheckouts.filter((p) => p.completeAt > now);
@@ -523,6 +536,7 @@ export class MockBackend implements CloudBackend {
     if (interval !== 'monthly' && interval !== 'yearly') throw new CloudError('Unbekanntes Abrechnungsintervall.', undefined, 'unknown_interval');
     if (!['private', 'business', 'education'].includes(plan)) throw new CloudError('Unbekannter Tarif.', undefined, 'unknown_plan');
     if (!planAllowedFor(inst.type, plan)) throw new CloudError('Dieser Tarif passt nicht zu deinem Kontotyp.', undefined, 'plan_mismatch');
+    if (inst.type !== 'private' && (inst.country ?? 'DE').toUpperCase() !== 'DE') throw new CloudError(B2B_COUNTRY_MESSAGE, undefined, 'b2b_country');
     if (lic?.source === 'manual' && lic.status === 'active') throw new CloudError('Für deine Institution ist eine Sonderlizenz freigeschaltet. Bitte wende dich an den Support.', undefined, 'manual_license');
     if (db.subscriptions.some((x) => x.institutionId === inst.id && LIVE.includes(x.status))) throw new CloudError('Es besteht bereits ein Abonnement. Du kannst es unter „Abonnement verwalten“ ändern.', undefined, 'subscription_exists');
     // wie die Edge Function: Zustimmungen prüfen, erst dann Kunde + Session, Protokoll mit Session-ID
@@ -615,6 +629,7 @@ export class MockBackend implements CloudBackend {
     if (!doc || doc.status !== 'draft') throw new CloudError('Nur Entwürfe können veröffentlicht werden.', undefined, '42501');
     if (doc.effectiveFrom && Date.parse(doc.effectiveFrom) > Date.now()) throw new CloudError('Das Datum „gültig ab“ liegt in der Zukunft. Bitte am Stichtag veröffentlichen.');
     if (!doc.content.trim() && !doc.type.startsWith('consent_')) throw new CloudError('Der Inhalt ist leer.');
+    if (hasReviewMarkers(doc.content) || hasReviewMarkers(doc.checkboxLabel)) throw new CloudError('Der Entwurf enthält noch [Prüfhinweis]-Markierungen. Bitte klären und entfernen, dann veröffentlichen.');
     const now = new Date().toISOString();
     for (const x of db.legalDocs) if (x.type === doc.type && x.audience === doc.audience && x.status === 'active') Object.assign(x, { status: 'archived', archivedAt: now });
     Object.assign(doc, { status: 'active', publishedAt: now, effectiveFrom: doc.effectiveFrom ?? now, contentHash: `mock-${doc.id.slice(0, 8)}` });
@@ -661,6 +676,76 @@ export class MockBackend implements CloudBackend {
         checkoutSessionId: c.checkoutSessionId,
         stripeSubscriptionId: c.checkoutSessionId ? db.subscriptions.find((x) => x.checkoutSessionId === c.checkoutSessionId)?.id ?? null : null,
       }));
+  }
+
+  /** wie Edge Function consumer-request: speichern, zuordnen, ggf. automatisch kündigen, bestätigen */
+  async submitConsumerDeclaration(input: ConsumerDeclarationInput): Promise<ConsumerDeclarationReceipt> {
+    await this.delay();
+    const receivedAt = new Date().toISOString();
+    if (input.website?.trim()) return { id: null, receivedAt, confirmationSent: false };
+    const name = input.name.trim();
+    const email = input.email.trim().toLowerCase();
+    if (!name) throw new CloudError('Bitte gib deinen Namen an.', 'name');
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email)) throw new CloudError('Bitte gib die E-Mail-Adresse deines Kundenkontos an.', 'email');
+    const cancellationType = input.kind === 'cancellation' ? input.cancellationType ?? 'ordinary' : null;
+    if (cancellationType === 'extraordinary' && !input.reason?.trim()) throw new CloudError('Bitte gib bei einer außerordentlichen Kündigung den Grund an.', 'reason');
+    const db = this.read();
+    const recent = db.declarations.filter((d) => d.email === email && Date.parse(d.receivedAt) > Date.now() - 3600_000).length;
+    const profile = db.profiles.find((p) => p.email.toLowerCase() === email);
+    const inst = profile ? db.institutions.find((i) => i.id === profile.institutionId) ?? null : null;
+    const sub = inst ? this.currentSub(db, inst.id) : undefined;
+    const live = sub && LIVE.includes(sub.status) ? sub : undefined;
+    const row: AdminDeclarationRow = {
+      id: uid(),
+      kind: input.kind,
+      cancellationType,
+      name,
+      email,
+      contractDetails: input.contract?.trim() || null,
+      reason: input.reason?.trim() || null,
+      customerType: inst?.type ?? null,
+      institutionName: inst?.name ?? null,
+      stripeSubscriptionId: live?.id ?? null,
+      status: 'needs_review',
+      cancelAt: null,
+      unmatched: !live,
+      confirmationSentAt: null,
+      notifiedAt: null,
+      handledAt: null,
+      receivedAt,
+    };
+    if (recent < 3) {
+      if (input.kind === 'cancellation' && cancellationType === 'ordinary' && live) {
+        live.cancelAtPeriodEnd = true;
+        row.status = 'processed';
+        row.cancelAt = live.currentPeriodEnd;
+      }
+      const to = profile?.email ?? email;
+      db.mails.push({ kind: `${input.kind}_confirmation`, to, subject: input.kind === 'withdrawal' ? 'Eingangsbestätigung deines Widerrufs' : 'Eingangsbestätigung deiner Kündigung', relatedKey: row.id, at: receivedAt });
+      db.mails.push({ kind: 'declaration_notice', to: 'info@olo-vision.de', subject: input.kind === 'withdrawal' ? 'Widerruf eingegangen' : 'Kündigung eingegangen', relatedKey: row.id, at: receivedAt });
+      row.confirmationSentAt = receivedAt;
+      row.notifiedAt = receivedAt;
+    }
+    db.declarations.push(row);
+    if (inst) syncLicense(db, inst.id);
+    this.write(db);
+    return { id: row.id, receivedAt, confirmationSent: recent < 3 };
+  }
+
+  async adminListDeclarations(): Promise<AdminDeclarationRow[]> {
+    const db = this.read();
+    this.requireSuperAdmin(db);
+    return [...db.declarations].reverse();
+  }
+
+  async adminSetDeclarationStatus(id: string, status: 'needs_review' | 'done') {
+    const db = this.read();
+    this.requireSuperAdmin(db);
+    const d = db.declarations.find((x) => x.id === id);
+    if (!d) throw new CloudError('Erklärung nicht gefunden.');
+    d.status = status;
+    d.handledAt = status === 'done' ? new Date().toISOString() : null;
+    this.write(db);
   }
 
   /** wie Edge Function create-customer-portal: nur der eigene Kunde */
@@ -736,12 +821,12 @@ export class MockBackend implements CloudBackend {
         this.write(db);
       },
       /** Rechtstext direkt veröffentlichen (Testdaten; im Produkt über das Vertragscenter) */
-      publishLegal: (type: LegalDocType, audience: LegalAudience, version: string, checkboxLabel: string | null = null) => {
+      publishLegal: (type: LegalDocType, audience: LegalAudience, version: string, checkboxLabel: string | null = null, content: string | null = null) => {
         const db = this.read();
         const now = new Date().toISOString();
         for (const x of db.legalDocs) if (x.type === type && x.audience === audience && x.status === 'active') Object.assign(x, { status: 'archived', archivedAt: now });
         const id = uid();
-        db.legalDocs.push({ id, type, audience, version, title: `${type} ${version}`, content: `# ${type}\n\nPlatzhaltertext Version ${version}.`, checkboxLabel, status: 'active', effectiveFrom: now, publishedAt: now, archivedAt: null, contentHash: `mock-${id.slice(0, 8)}`, createdAt: now, updatedAt: now });
+        db.legalDocs.push({ id, type, audience, version, title: `${type} ${version}`, content: content ?? `# ${type}\n\nPlatzhaltertext Version ${version}.`, checkboxLabel, status: 'active', effectiveFrom: now, publishedAt: now, archivedAt: null, contentHash: `mock-${id.slice(0, 8)}`, createdAt: now, updatedAt: now });
         this.write(db);
         return id;
       },

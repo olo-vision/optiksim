@@ -11,3 +11,12 @@ verify_jwt = true
 # Stripe sendet kein Supabase-JWT. Die Funktion prüft stattdessen zwingend die Stripe-Signatur.
 [functions.stripe-webhook]
 verify_jwt = false
+
+# Kündigungs-/Widerrufsbutton: öffentlich ohne Anmeldung (§ 312k / § 356a BGB). Schutz: Validierung,
+# Honeypot, Begrenzung je E-Mail-Adresse; Antwort verrät nie, ob ein Konto existiert.
+[functions.consumer-request]
+verify_jwt = false
+
+# Zeitgesteuerte E-Mails (pg_cron → pg_net); geschützt über den Header x-cron-secret (Secret CRON_SECRET).
+[functions.mail-jobs]
+verify_jwt = false

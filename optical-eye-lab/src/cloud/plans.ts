@@ -58,10 +58,23 @@ export const PLANS: PlanInfo[] = [
 export const planInfo = (id: LicensePlan | null | undefined) => PLANS.find((p) => p.id === id);
 
 /** Preis eines Pakets im gewählten Intervall */
-export function planPrice(plan: PlanInfo, interval: BillingInterval): { label: string; unit: string; note: string } {
-  return interval === 'yearly'
-    ? { label: plan.yearlyPriceLabel, unit: '/ Jahr', note: 'jährliche Abrechnung' }
-    : { label: plan.priceLabel, unit: '/ Monat', note: 'monatliche Abrechnung' };
+/** B2B vorerst nur mit Sitz in Deutschland (gleicher Text wie in der Edge Function) */
+export const B2B_COUNTRY_MESSAGE =
+  'Buchungen für Unternehmen und Bildungseinrichtungen sind derzeit nur mit Sitz in Deutschland möglich. Bitte wende dich für ein Angebot an info@olo-vision.de.';
+
+/** Alle Preise sind Endpreise inkl. 19 % USt. */
+export const VAT_NOTE = 'inkl. 19 % USt.';
+
+/**
+ * Private Jahreslizenzen verlängern sich nicht automatisch (§ 309 Nr. 9 BGB); der Server setzt das Abo
+ * direkt nach dem Kauf auf „endet zum Periodenende“. B2B-Jahresabos verlängern sich jährlich.
+ */
+export const endsAutomatically = (plan: LicensePlan, interval: BillingInterval) => plan === 'private' && interval === 'yearly';
+
+export function planPrice(plan: PlanInfo, interval: BillingInterval): { label: string; unit: string; note: string; term: string } {
+  if (interval === 'monthly') return { label: plan.priceLabel, unit: '/ Monat', note: `monatliche Abrechnung · ${VAT_NOTE}`, term: 'monatlich kündbar' };
+  if (endsAutomatically(plan.id, interval)) return { label: plan.yearlyPriceLabel, unit: '/ 12 Monate', note: `einmalige Zahlung · ${VAT_NOTE}`, term: 'endet automatisch nach 12 Monaten – keine Verlängerung' };
+  return { label: plan.yearlyPriceLabel, unit: '/ Jahr', note: `jährliche Abrechnung · ${VAT_NOTE}`, term: 'verlängert sich jährlich, jederzeit zum Laufzeitende kündbar' };
 }
 
 export const BILLING_INTERVAL_LABEL: Record<BillingInterval, string> = { monthly: 'monatlich', yearly: 'jährlich' };
@@ -89,14 +102,15 @@ export function formatCountdown(ms: number): string {
 }
 
 export const LEGAL_DOC_TYPE_LABEL: Record<LegalDocType, string> = {
+  imprint: 'Impressum',
   terms: 'AGB',
   privacy: 'Datenschutzerklärung',
   withdrawal: 'Widerrufsbelehrung',
   withdrawal_form: 'Muster-Widerrufsformular',
   license_terms: 'Lizenz- und Nutzungsbedingungen',
-  b2b_terms: 'Vertragsbedingungen für Unternehmen',
-  consent_immediate_performance: 'Einwilligung: sofortiger Leistungsbeginn',
-  consent_withdrawal_loss: 'Hinweis: Auswirkungen auf das Widerrufsrecht',
+  b2b_terms: 'B2B-Zusatzbedingungen',
+  consent_immediate_performance: 'Verlangen des sofortigen Leistungsbeginns',
+  consent_withdrawal_loss: 'Hinweis zum Wertersatz bei Widerruf',
   other: 'Weiteres Dokument',
 };
 

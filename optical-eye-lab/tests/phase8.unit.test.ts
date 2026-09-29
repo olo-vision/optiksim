@@ -87,7 +87,8 @@ describe('Preise & Kundentyp', () => {
     expect(PLANS.map((p) => planPrice(p, 'yearly').label)).toEqual(['199,00 €', '399,00 €', '999,00 €']);
     expect(PLANS.map((p) => p.yearlyPriceCents)).toEqual([19900, 39900, 99900]);
     expect(planPrice(PLANS[0], 'monthly').unit).toBe('/ Monat');
-    expect(planPrice(PLANS[0], 'yearly').unit).toBe('/ Jahr');
+    expect(planPrice(PLANS[0], 'yearly').unit).toBe('/ 12 Monate');
+    expect(planPrice(PLANS[1], 'yearly').unit).toBe('/ Jahr');
     expect(PLANS.map((p) => planPrice(p, 'monthly').label)).toEqual(PLANS.map((p) => p.priceLabel));
   });
   it('Privat = B2C, Betrieb/Bildung = B2B', () => {
@@ -143,7 +144,7 @@ describe('Rechtstexte im Browser', () => {
   it('Markdown: Überschriften, Listen, fett – HTML bleibt Text', () => {
     const b = parseMarkdown('# Titel\n\nZeile eins\nZeile zwei\n\n- a\n- **b**\n1. x\n2) y\n\n<script>alert(1)</script>');
     expect(b.map((x) => x.kind)).toEqual(['h1', 'p', 'ul', 'ol', 'p']);
-    expect(b[1]).toEqual({ kind: 'p', inline: [{ text: 'Zeile eins Zeile zwei' }] });
+    expect(b[1]).toEqual({ kind: 'p', inline: [{ text: 'Zeile eins' }, { text: '', br: true }, { text: 'Zeile zwei' }] });
     expect(b[2]).toEqual({ kind: 'ul', items: [[{ text: 'a' }], [{ text: 'b', bold: true }]] });
     expect(b[4]).toEqual({ kind: 'p', inline: [{ text: '<script>alert(1)</script>' }] });
     expect(parseInline('x **y** z')).toEqual([{ text: 'x ' }, { text: 'y', bold: true }, { text: ' z' }]);

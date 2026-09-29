@@ -11,7 +11,7 @@ import { Toasts } from '@/ui/overlays/HudOverlays';
 import { useCloud } from '../../cloudSession';
 import { AUTH_MODE } from '@/cloud/config';
 import { CloudError, type InstitutionType, type RegistrationInput } from '@/cloud/types';
-import { BILLING_INTERVAL_LABEL, DEMO_PLAN, PRODUCT_NAME, planInfo, planPrice } from '@/cloud/plans';
+import { B2B_COUNTRY_MESSAGE, BILLING_INTERVAL_LABEL, DEMO_PLAN, PRODUCT_NAME, planInfo, planPrice } from '@/cloud/plans';
 import { intentQuery, loadIntent, parseIntent, saveIntent, type PlanIntent } from '@/cloud/intent';
 import { allConsentsGiven, requiredDocs } from '@/cloud/legal';
 import { LegalConsentList, useConsentState, useRequiredLegalDocs } from './LegalConsents';
@@ -325,6 +325,11 @@ export function RegisterPage() {
               <SelectField label="Land" value={f.country ?? 'DE'} options={COUNTRIES.map(([value, label]) => ({ value, label }))} onChange={(v) => set('country', v)} autoComplete="country" />
               <TextField label="USt-IdNr." optional value={f.vatId} onChange={(e) => set('vatId', e.target.value)} placeholder="z. B. DE123456789" error={fe('vatId')} />
             </div>
+            {(f.country ?? 'DE') !== 'DE' && (
+              <p className="auth-note auth-note--warn" data-testid="register-country-note">
+                <Info size={13} /> {B2B_COUNTRY_MESSAGE} Die kostenlose Demo kannst du trotzdem nutzen.
+              </p>
+            )}
             <p className="login__org-hint">
               <Info size={13} /> {f.institutionType === 'business' ? 'Die Lizenz gilt für einen Betriebsstandort.' : 'Die Lizenz gilt für einen Bildungsstandort.'}
             </p>
