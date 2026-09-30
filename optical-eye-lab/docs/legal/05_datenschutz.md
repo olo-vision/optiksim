@@ -16,7 +16,7 @@ Ein Datenschutzbeauftragter ist nicht bestellt, da hierzu keine gesetzliche Pfli
 
 OLO-LAB3D ist eine browserbasierte Simulations- und Lernsoftware. Wir verarbeiten nur die Daten, die für Kundenkonto, Lizenz, Zahlung, Nachweise und den sicheren Betrieb erforderlich sind. Wir setzen **keine Analyse-, Tracking-, Werbe- oder Chatdienste** ein und binden keine externen Schriftarten oder Inhalte Dritter ein.
 
-Ihre **Simulationen, Vorlagen und Einstellungen** werden lokal in Ihrem Browser gespeichert und nicht an uns übertragen (siehe Ziffer 9).
+Ihre **Simulationen, Vorlagen und Einstellungen** werden in Ihrem Kundenkonto gespeichert, damit sie Ihnen auf jedem Gerät zur Verfügung stehen (siehe Ziffer 9).
 
 ## 3. Aufruf der Website und Hosting
 
@@ -71,25 +71,31 @@ Wenn Sie über „Verträge hier kündigen“ oder „Vertrag widerrufen“ eine
 
 [Prüfhinweis: Genaue Firmierung und Auftragsverarbeitungsvertrag von united-domains prüfen und ergänzen.]
 
-## 9. Speicherung im Browser
+## 9. Gespeicherte Inhalte und Speicherung im Browser
 
-9.1 OLO-LAB3D speichert im lokalen Speicher Ihres Browsers (Local Storage):
+9.1 **Inhalte im Kundenkonto:** Ihre Simulationen (einschließlich Vorschaubild), eigenen Vorlagen und kontobezogenen Einstellungen speichern wir bei Supabase (Ziffer 4.3) und ordnen sie Ihrem Konto zu. Zugriff hat nur Ihr Konto; technisch ist dies durch Zugriffsregeln der Datenbank abgesichert. Rechtsgrundlage ist Art. 6 Abs. 1 lit. b DSGVO. Bitte legen Sie in Simulationen keine personenbezogenen Daten Dritter ab.
+
+9.2 **Im Browser** (Local Storage) speichert OLO-LAB3D:
 - die Anmeldesitzung,
-- Ihre Simulationen, Vorlagen und Einstellungen,
+- gerätebezogene Darstellungseinstellungen (z. B. Grafikqualität, Panelbreiten),
+- nicht gespeicherte Zwischenstände zur Absturzsicherung,
+- übergangsweise Inhalte aus früheren Versionen von OLO-LAB3D, die nach der Übernahme in Ihr Konto höchstens 30 Tage als Sicherung auf dem Gerät verbleiben,
 - vorübergehend (höchstens 24 Stunden) den auf der Preisseite gewählten Tarif, damit er nach der Registrierung übernommen werden kann.
 
-9.2 Diese Speicherung ist unbedingt erforderlich, um die von Ihnen ausdrücklich gewünschte Anwendung bereitzustellen (§ 25 Abs. 2 Nr. 2 TDDDG). Eine Einwilligung ist dafür nicht erforderlich. Wir setzen keine Cookies zu Analyse- oder Werbezwecken ein.
-
-9.3 Simulationen werden nicht an uns übertragen. Wir haben keinen Zugriff darauf und übernehmen keine Datensicherung. Sie können die Daten jederzeit über die Einstellungen Ihres Browsers löschen.
+9.3 Diese Speicherung im Browser ist unbedingt erforderlich, um die von Ihnen ausdrücklich gewünschte Anwendung bereitzustellen (§ 25 Abs. 2 Nr. 2 TDDDG). Eine Einwilligung ist dafür nicht erforderlich. Wir setzen keine Cookies zu Analyse- oder Werbezwecken ein.
 
 ## 10. Speicherdauer
 
-- **Kundenkonto:** bis zur Löschung auf Ihren Antrag, spätestens 12 Monate nach Ende des letzten Vertrags bzw. nach der letzten relevanten Anmeldung, sofern keine gesetzlichen Aufbewahrungspflichten oder berechtigten Nachweisinteressen eine längere Speicherung erfordern.
+- **Kundenkonto und gespeicherte Inhalte:** bis Sie das Konto löschen, spätestens 12 Monate nach Ende des letzten Vertrags bzw. nach der letzten relevanten Anmeldung. Das Ende einer Lizenz führt nicht zur sofortigen Löschung, damit Sie Ihre Inhalte nach einer erneuten Buchung weiter nutzen können.
+- **Geschlossenes Konto:** 12 Monate ab Schließung; in dieser Zeit können Sie das Konto wieder öffnen. Danach wird es gelöscht.
+- **Nachweis einer Kontolöschung:** Kennung des gelöschten Kontos, Zeitpunkt und ein nicht umkehrbarer Hashwert der E-Mail-Adresse für 3 Jahre (Art. 6 Abs. 1 lit. c und f DSGVO, Nachweis der Erfüllung Ihres Löschverlangens).
 - **Zustimmungs- und Vertragsnachweise, Kündigungs- und Widerrufserklärungen:** 3 Jahre nach Ende des Vertrags (Ende des Kalenderjahres, regelmäßige Verjährungsfrist), soweit keine längeren gesetzlichen Pflichten bestehen.
 - **Rechnungs-, Buchungs- und Steuerunterlagen:** nach den gesetzlichen Aufbewahrungsfristen, insbesondere § 147 AO.
 - **Server-Logdaten:** nach den Vorgaben der Hosting-Dienstleister.
 
-Die Löschung erfolgt derzeit auf Antrag per E-Mail an info@olo-vision.de.
+Sie können Ihr Konto jederzeit selbst in der Kontoverwaltung schließen oder endgültig löschen; alternativ genügt eine E-Mail an info@olo-vision.de. Bei der endgültigen Löschung werden Konto, Profil, Simulationen, Vorlagen und Einstellungen sofort gelöscht; Einrichtungsdaten werden anonymisiert, soweit sie nicht für Rechnungen aufbewahrt werden müssen. Rechnungen und die für sie nötigen Daten bleiben bei Stripe bis zum Ablauf der gesetzlichen Fristen gespeichert.
+
+[Prüfhinweis: Die automatische Löschung nach Ablauf der 12 Monate ist derzeit als Admin-Vorgang umgesetzt (Übersicht fälliger Konten). Vor Veröffentlichung festlegen, ob sie automatisch erfolgen soll, und den Text ggf. anpassen.]
 
 ## 11. Übermittlung in Drittländer
 

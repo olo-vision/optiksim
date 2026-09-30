@@ -50,7 +50,7 @@
 
 6.2 Bei leicht fahrlässiger Verletzung einer wesentlichen Vertragspflicht ist die Haftung auf den vertragstypischen, bei Vertragsschluss vorhersehbaren Schaden begrenzt. Im Übrigen ist die Haftung für leichte Fahrlässigkeit ausgeschlossen.
 
-6.3 Für den Verlust von Daten haftet OLO Vision im Rahmen der vorstehenden Regelungen nur in dem Umfang, der auch bei ordnungsgemäßer Datensicherung durch den B2B-Kunden eingetreten wäre. Simulationen werden derzeit lokal im Browser gespeichert; OLO Vision übernimmt hierfür keine Datensicherung.
+6.3 Für den Verlust von Daten haftet OLO Vision im Rahmen der vorstehenden Regelungen nur in dem Umfang, der auch bei ordnungsgemäßer Datensicherung durch den B2B-Kunden eingetreten wäre. Simulationen werden im Kundenkonto gespeichert (Ziffer 9 der Lizenzbedingungen); eine gesonderte Datensicherung für den B2B-Kunden schuldet OLO Vision nicht.
 
 [Prüfhinweis: Eine zusätzliche summenmäßige Haftungshöchstgrenze (z. B. auf die Vergütung der letzten 12 Monate) wurde bewusst nicht aufgenommen, weil pauschale Höchstbeträge in AGB auch gegenüber Unternehmern häufig unwirksam sind. Ob und in welcher Höhe eine Höchstgrenze angemessen ist, sollte anwaltlich geprüft werden.]
 
@@ -58,7 +58,9 @@
 
 7.1 OLO Vision verarbeitet die Daten des Kundenkontos (insbesondere Name und E-Mail-Adresse der registrierenden Person, Einrichtungs- und Rechnungsdaten) als Verantwortlicher; Einzelheiten ergeben sich aus der Datenschutzerklärung.
 
-7.2 Die Simulationsdaten werden derzeit ausschließlich lokal im Browser gespeichert und nicht an OLO Vision übermittelt. Soweit OLO Vision künftig im Auftrag des B2B-Kunden personenbezogene Daten verarbeitet, schließen die Parteien auf Anfrage einen Vertrag über die Auftragsverarbeitung nach Art. 28 DSGVO.
+7.2 Simulationen, Vorlagen und Einstellungen werden im Kundenkonto gespeichert. Sie sollen keine personenbezogenen Daten Dritter (z. B. Namen von Kundinnen, Patienten oder Lernenden) enthalten. Soweit OLO Vision im Auftrag des B2B-Kunden personenbezogene Daten verarbeitet, schließen die Parteien auf Anfrage einen Vertrag über die Auftragsverarbeitung nach Art. 28 DSGVO.
+
+[Prüfhinweis: Mit der Cloud-Speicherung (Version 0.10) können Kunden frei benannte Inhalte ablegen. Prüfen lassen, ob ein AV-Vertrag standardmäßig angeboten werden sollte.]
 
 [Prüfhinweis: Die Rollenverteilung (Verantwortlicher / Auftragsverarbeiter), insbesondere bei öffentlichen Schulen und bei gemeinsamer Nutzung eines Logins, anwaltlich bzw. datenschutzrechtlich prüfen lassen.]
 

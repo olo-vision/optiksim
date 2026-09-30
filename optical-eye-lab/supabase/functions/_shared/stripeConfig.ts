@@ -176,6 +176,6 @@ export function priceLine(plan: LicensePlan, interval: BillingInterval): string 
  * Die Beschriftung des Buttons selbst („Abonnieren“) gibt Stripe vor.
  */
 export function checkoutSubmitMessage(plan: LicensePlan, interval: BillingInterval, b2c: boolean): string {
-  const docs = b2c ? 'die AGB sowie die Lizenz- und Nutzungsbedingungen; die Widerrufsbelehrung hast du vor der Bestellung erhalten' : 'die AGB, die B2B-Zusatzbedingungen sowie die Lizenz- und Nutzungsbedingungen';
-  return `Mit Klick auf „Abonnieren“ bestellst du ${PLAN_NAMES[plan]} zahlungspflichtig: ${priceLine(plan, interval)}; ${termNote(plan, interval)}. Es gelten ${docs} von ${PROVIDER_NAME}.`.slice(0, 1200);
+  const docs = b2c ? 'die AGB sowie die Lizenz- und Nutzungsbedingungen; die Widerrufsbelehrung haben Sie vor der Bestellung erhalten' : 'die AGB, die B2B-Zusatzbedingungen sowie die Lizenz- und Nutzungsbedingungen';
+  return `Mit Klick auf „Abonnieren“ bestellen Sie ${PLAN_NAMES[plan]} zahlungspflichtig: ${priceLine(plan, interval)}; ${termNote(plan, interval)}. Es gelten ${docs} von ${PROVIDER_NAME}.`.slice(0, 1200);
 }

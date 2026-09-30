@@ -7,7 +7,7 @@ import { createClient, type SupabaseClient, type User as SbUser } from '@supabas
 import type { CloudBackend } from './backend';
 import { translateError } from './errors';
 import { registrationMetadata, validateRegistration } from './validation';
-import type { AdminAccountRow, AdminConsentRow, AdminDeclarationRow, ConsumerDeclarationInput, ConsumerDeclarationReceipt, AdminLegalDocument, BillingInterval, BillingStatus, CloudAccount, CloudInstitution, CloudLicense, CloudProfile, CloudUser, InstitutionType, LegalConsentContext, LegalDocRef, LegalDocSummary, LegalDocument, LegalDraftInput, LicensePlan, LicenseSource, LicenseStatus, SubscriptionStatus } from './types';
+import type { AccountOverview, CloudSimulationFull, CloudSimulationPatch, CloudSimulationRow, CloudTemplateRow, NewCloudSimulation, AdminAccountRow, AdminConsentRow, AdminDeclarationRow, ConsumerDeclarationInput, ConsumerDeclarationReceipt, AdminLegalDocument, BillingInterval, BillingStatus, CloudAccount, CloudInstitution, CloudLicense, CloudProfile, CloudUser, InstitutionType, LegalConsentContext, LegalDocRef, LegalDocSummary, LegalDocument, LegalDraftInput, LicensePlan, LicenseSource, LicenseStatus, SubscriptionStatus } from './types';
 import { CloudError } from './types';
 
 const toUser = (u: SbUser | null | undefined): CloudUser | null => (u ? { id: u.id, email: u.email ?? '' } : null);
@@ -24,6 +24,9 @@ export const mapProfile = (r: Row): CloudProfile => ({
   email: String(r.email ?? ''),
   role: r.role as CloudProfile['role'],
   createdAt: String(r.created_at ?? ''),
+  accountStatus: r.account_status === 'closed' ? 'closed' : 'active',
+  closedAt: r.closed_at ? String(r.closed_at) : null,
+  deletionDueAt: r.deletion_due_at ? String(r.deletion_due_at) : null,
 });
 export const mapInstitution = (r: Row): CloudInstitution => ({
   id: String(r.id),
@@ -102,6 +105,74 @@ async function functionError(error: unknown, fallback: string): Promise<CloudErr
   }
   return new CloudError(fallback);
 }
+
+
+/* ------------------------------ Cloud-Inhalte (0.10.0) ------------------------------ */
+
+/** Spalten für Listen (ohne Dokument und Vorschaubild – klein und schnell) */
+const SIM_LIST_COLUMNS =
+  'id, owner_user_id, institution_id, visibility, name, description, category, tags, favorite, archived, template_id, module_id, summary, schema_version, doc_revision, has_thumbnail, created_at, updated_at, last_opened_at';
+
+export const mapSimRow = (r: Row): CloudSimulationRow => ({
+  id: String(r.id),
+  ownerUserId: String(r.owner_user_id),
+  institutionId: String(r.institution_id),
+  visibility: r.visibility === 'institution' ? 'institution' : 'private',
+  name: String(r.name ?? ''),
+  description: String(r.description ?? ''),
+  category: String(r.category ?? 'other'),
+  tags: Array.isArray(r.tags) ? (r.tags as unknown[]).map(String) : [],
+  favorite: r.favorite === true,
+  archived: r.archived === true,
+  templateId: r.template_id ? String(r.template_id) : null,
+  moduleId: r.module_id ? String(r.module_id) : null,
+  summary: r.summary ?? {},
+  schemaVersion: Number(r.schema_version ?? 1),
+  docRevision: Number(r.doc_revision ?? 1),
+  hasThumbnail: r.has_thumbnail === true,
+  createdAt: String(r.created_at),
+  updatedAt: String(r.updated_at),
+  lastOpenedAt: r.last_opened_at ? String(r.last_opened_at) : null,
+});
+
+/** Änderung → Tabellenspalten (nur übergebene Felder) */
+export function simPatchRow(p: CloudSimulationPatch): Row {
+  const row: Row = {};
+  const set = (k: string, v: unknown) => {
+    if (v !== undefined) row[k] = v;
+  };
+  set('name', p.name);
+  set('description', p.description);
+  set('category', p.category);
+  set('tags', p.tags);
+  set('favorite', p.favorite);
+  set('archived', p.archived);
+  set('template_id', p.templateId);
+  set('module_id', p.moduleId);
+  set('summary', p.summary);
+  set('schema_version', p.schemaVersion);
+  set('doc', p.doc);
+  set('last_opened_at', p.lastOpenedAt);
+  if (p.thumbnail !== undefined) {
+    row.thumbnail = p.thumbnail;
+    row.has_thumbnail = !!p.thumbnail;
+  }
+  return row;
+}
+
+const mapOverview = (r: Row): AccountOverview => ({
+  accountStatus: r.account_status === 'closed' ? 'closed' : 'active',
+  closedAt: r.closed_at ? String(r.closed_at) : null,
+  deletionDueAt: r.deletion_due_at ? String(r.deletion_due_at) : null,
+  simulations: Number(r.simulations ?? 0),
+  templates: Number(r.templates ?? 0),
+  liveSubscription: r.live_subscription === true,
+  subscriptionStatus: r.subscription_status ? String(r.subscription_status) : null,
+  cancelAtPeriodEnd: r.cancel_at_period_end === true,
+  currentPeriodEnd: r.current_period_end ? String(r.current_period_end) : null,
+  canClose: r.can_close === true,
+  canDelete: r.can_delete === true,
+});
 
 export class SupabaseBackend implements CloudBackend {
   readonly kind = 'supabase' as const;
@@ -240,7 +311,7 @@ export class SupabaseBackend implements CloudBackend {
     // nur interner Tarif + Intervall + bestätigte Dokument-IDs – Price ID, Kunde, Institution und Pflicht-
     // Zustimmungen bestimmt/prüft die Edge Function
     const { data, error } = await this.client.functions.invoke('create-checkout-session', { body: { plan, interval, consents: consentDocumentIds } });
-    if (error) throw await functionError(error, 'Die Zahlungsseite konnte nicht geöffnet werden. Bitte versuche es später erneut.');
+    if (error) throw await functionError(error, 'Die Zahlungsseite konnte nicht geöffnet werden. Bitte versuchen Sie es später erneut.');
     const url = (data as { url?: string } | null)?.url;
     if (!url || !/^https:\/\//.test(url)) throw new CloudError('Die Zahlungsseite konnte nicht geöffnet werden.');
     return url;
@@ -250,7 +321,7 @@ export class SupabaseBackend implements CloudBackend {
     const { data, error } = await this.client.functions.invoke('consumer-request', {
       body: { kind: input.kind, cancellationType: input.cancellationType, name: input.name, email: input.email, contract: input.contract ?? '', reason: input.reason ?? '', website: input.website ?? '' },
     });
-    if (error) throw await functionError(error, 'Deine Erklärung konnte gerade nicht übermittelt werden. Bitte sende sie per E-Mail an info@olo-vision.de.');
+    if (error) throw await functionError(error, 'Ihre Erklärung konnte gerade nicht übermittelt werden. Bitte senden Sie sie per E-Mail an info@olo-vision.de.');
     const r = (data ?? {}) as Row;
     return { id: r.id ? String(r.id) : null, receivedAt: String(r.receivedAt ?? new Date().toISOString()), confirmationSent: r.confirmationSent === true };
   }
@@ -376,9 +447,167 @@ export class SupabaseBackend implements CloudBackend {
     }));
   }
 
+  /* ------------------------------ Cloud-Inhalte (0.10.0) ------------------------------ */
+
+  private async sessionUser(): Promise<{ id: string; email: string }> {
+    const { data } = await this.client.auth.getSession();
+    const u = data.session?.user;
+    if (!u) throw new CloudError('Ihre Sitzung ist abgelaufen. Bitte melden Sie sich erneut an.', undefined, 'session');
+    return { id: u.id, email: u.email ?? '' };
+  }
+
+  async listSimulations(): Promise<CloudSimulationRow[]> {
+    const { data, error } = await this.client.from('user_simulations').select(SIM_LIST_COLUMNS).order('updated_at', { ascending: false });
+    if (error) throw translateError(error);
+    return ((data ?? []) as Row[]).map(mapSimRow);
+  }
+
+  async getSimulation(id: string): Promise<CloudSimulationFull | null> {
+    const { data, error } = await this.client.from('user_simulations').select(`${SIM_LIST_COLUMNS}, doc`).eq('id', id).maybeSingle();
+    if (error) throw translateError(error);
+    return data ? { ...mapSimRow(data as Row), doc: (data as Row).doc } : null;
+  }
+
+  async insertSimulation(sim: NewCloudSimulation): Promise<CloudSimulationRow> {
+    const row = {
+      id: sim.id,
+      ...simPatchRow(sim),
+      created_at: sim.createdAt,
+      updated_at: sim.updatedAt,
+      origin: sim.origin ?? null,
+      // Besitzer und Institution setzt der Server (Trigger); Platzhalter erfüllen nur die Pflichtspalten
+      institution_id: '00000000-0000-0000-0000-000000000000',
+    };
+    const { data, error } = await this.client.from('user_simulations').insert(row).select(SIM_LIST_COLUMNS).single();
+    if (error) {
+      if (error.code === '23505') throw new CloudError('Diese Simulation existiert bereits.', undefined, 'exists');
+      throw translateError(error);
+    }
+    return mapSimRow(data as Row);
+  }
+
+  async updateSimulation(id: string, patch: CloudSimulationPatch, expectedRevision?: number | null): Promise<CloudSimulationRow | null> {
+    let q = this.client.from('user_simulations').update(simPatchRow(patch)).eq('id', id);
+    if (expectedRevision != null) q = q.eq('doc_revision', expectedRevision);
+    const { data, error } = await q.select(SIM_LIST_COLUMNS);
+    if (error) throw translateError(error);
+    const rows = (data ?? []) as Row[];
+    return rows.length ? mapSimRow(rows[0]) : null;
+  }
+
+  async deleteSimulation(id: string) {
+    const { error } = await this.client.from('user_simulations').delete().eq('id', id);
+    if (error) throw translateError(error);
+  }
+
+  async getSimulationThumbnail(id: string) {
+    const { data, error } = await this.client.from('user_simulations').select('thumbnail').eq('id', id).maybeSingle();
+    if (error) throw translateError(error);
+    return (data as Row | null)?.thumbnail ? String((data as Row).thumbnail) : null;
+  }
+
+  async listTemplates(): Promise<CloudTemplateRow[]> {
+    const { data, error } = await this.client.from('user_templates').select('id, owner_user_id, visibility, name, description, category, tags, doc, created_at').order('created_at');
+    if (error) throw translateError(error);
+    return ((data ?? []) as Row[]).map((r) => ({
+      id: String(r.id),
+      ownerUserId: String(r.owner_user_id),
+      visibility: r.visibility === 'institution' ? 'institution' : 'private',
+      name: String(r.name ?? ''),
+      description: String(r.description ?? ''),
+      category: String(r.category ?? 'other'),
+      tags: Array.isArray(r.tags) ? (r.tags as unknown[]).map(String) : [],
+      doc: r.doc,
+      createdAt: String(r.created_at),
+    }));
+  }
+
+  async saveTemplate(t: Omit<CloudTemplateRow, 'ownerUserId'>) {
+    const row = { id: t.id, visibility: t.visibility, name: t.name, description: t.description, category: t.category, tags: t.tags, doc: t.doc, created_at: t.createdAt, institution_id: '00000000-0000-0000-0000-000000000000' };
+    const { error } = await this.client.from('user_templates').upsert(row, { onConflict: 'id' });
+    if (error) throw translateError(error);
+  }
+
+  async deleteTemplate(id: string) {
+    const { error } = await this.client.from('user_templates').delete().eq('id', id);
+    if (error) throw translateError(error);
+  }
+
+  async getPreferences() {
+    const { data, error } = await this.client.from('user_preferences').select('prefs').maybeSingle();
+    if (error) throw translateError(error);
+    return ((data as Row | null)?.prefs as Record<string, unknown> | undefined) ?? null;
+  }
+
+  async savePreferences(prefs: Record<string, unknown>) {
+    const u = await this.sessionUser();
+    const { error } = await this.client.from('user_preferences').upsert({ user_id: u.id, prefs }, { onConflict: 'user_id' });
+    if (error) throw translateError(error);
+  }
+
+  /* ------------------------------------ Konto (0.10.0) ------------------------------------ */
+
+  async accountOverview(): Promise<AccountOverview> {
+    const { data, error } = await this.client.rpc('my_account_overview');
+    if (error) throw translateError(error);
+    return mapOverview((data ?? {}) as Row);
+  }
+
+  async closeAccount(): Promise<AccountOverview> {
+    const { data, error } = await this.client.rpc('close_my_account');
+    if (error) throw translateError(error);
+    return mapOverview((data ?? {}) as Row);
+  }
+
+  async reopenAccount(): Promise<AccountOverview> {
+    const { data, error } = await this.client.rpc('reopen_my_account');
+    if (error) throw translateError(error);
+    return mapOverview((data ?? {}) as Row);
+  }
+
+  async reauthenticate(password: string) {
+    const u = await this.sessionUser();
+    const { error } = await this.client.auth.signInWithPassword({ email: u.email, password });
+    if (error) {
+      const e = translateError(error);
+      throw e.code === 'invalid_credentials' || e.field === 'password' ? new CloudError('Das aktuelle Passwort ist nicht korrekt.', 'password', 'invalid_credentials') : e;
+    }
+  }
+
+  async changeEmail(newEmail: string, redirectTo: string) {
+    const email = newEmail.trim().toLowerCase();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email)) throw new CloudError('Bitte geben Sie eine gültige E-Mail-Adresse ein.', 'email');
+    const { error } = await this.client.auth.updateUser({ email }, { emailRedirectTo: redirectTo });
+    if (error) throw translateError(error);
+  }
+
+  async changePassword(currentPassword: string, newPassword: string) {
+    await this.reauthenticate(currentPassword);
+    const { error } = await this.client.auth.updateUser({ password: newPassword });
+    if (error) throw translateError(error);
+  }
+
+  async deleteAccount(confirm: string, targetUserId?: string) {
+    const { error } = await this.client.functions.invoke('delete-account', { body: { confirm, ...(targetUserId ? { targetUserId } : {}) } });
+    if (error) throw await functionError(error, 'Die Löschung konnte gerade nicht abgeschlossen werden. Bitte versuchen Sie es erneut.');
+  }
+
+  async adminClosedAccounts() {
+    const { data, error } = await this.client.rpc('admin_closed_accounts');
+    if (error) throw translateError(error);
+    return ((data ?? []) as Row[]).map((r) => ({
+      userId: String(r.user_id),
+      email: String(r.email ?? ''),
+      institutionName: String(r.institution_name ?? ''),
+      closedAt: r.closed_at ? String(r.closed_at) : null,
+      deletionDueAt: r.deletion_due_at ? String(r.deletion_due_at) : null,
+      simulations: Number(r.simulations ?? 0),
+    }));
+  }
+
   async openCustomerPortal() {
     const { data, error } = await this.client.functions.invoke('create-customer-portal', { body: {} });
-    if (error) throw await functionError(error, 'Die Abo-Verwaltung ist gerade nicht erreichbar. Bitte versuche es später erneut.');
+    if (error) throw await functionError(error, 'Die Abo-Verwaltung ist gerade nicht erreichbar. Bitte versuchen Sie es später erneut.');
     const url = (data as { url?: string } | null)?.url;
     if (!url || !/^https:\/\//.test(url)) throw new CloudError('Die Abo-Verwaltung konnte nicht geöffnet werden.');
     return url;

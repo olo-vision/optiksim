@@ -20,7 +20,7 @@ import { DEFAULT_PRICE_IDS } from '../../supabase/functions/_shared/stripeConfig
 
 type Obj = Record<string, any>; // eslint-disable-line @typescript-eslint/no-explicit-any
 const WHSEC = 'whsec_grants';
-const TABLES = ['profiles', 'institutions', 'licenses', 'subscriptions', 'audit_logs', 'plan_catalog', 'billing_customers', 'stripe_events', 'demo_grants', 'legal_documents', 'legal_consents'];
+const TABLES = ['profiles', 'institutions', 'licenses', 'subscriptions', 'audit_logs', 'plan_catalog', 'billing_customers', 'stripe_events', 'demo_grants', 'legal_documents', 'legal_consents', 'consumer_declarations', 'system_mails', 'user_simulations', 'user_templates', 'user_preferences', 'deleted_accounts'];
 
 describe.each([
   ['aktuelle Supabase-Standardrechte', false],
@@ -128,6 +128,18 @@ describe.each([
       'plan_catalog:SELECT',
       'profiles:SELECT',
       'subscriptions:SELECT',
+      // 0.10.0: eigene Inhalte (RLS: nur Besitzer; Schreiben nur mit aktiver Lizenz – Trigger)
+      'user_preferences:INSERT',
+      'user_preferences:SELECT',
+      'user_preferences:UPDATE',
+      'user_simulations:DELETE',
+      'user_simulations:INSERT',
+      'user_simulations:SELECT',
+      'user_simulations:UPDATE',
+      'user_templates:DELETE',
+      'user_templates:INSERT',
+      'user_templates:SELECT',
+      'user_templates:UPDATE',
     ]);
   });
 

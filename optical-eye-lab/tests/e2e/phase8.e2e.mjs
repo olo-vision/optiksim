@@ -170,7 +170,7 @@ await safe('Demo', async () => {
   check('Kurz vor Ende: Hinweisfarbe', await vis('[data-testid="demo-timer"].is-ending', 3000));
   await page.waitForURL(/\/license\?demo=ended/, { timeout: 15000 });
   check('Nach Ablauf aus dem geschützten Bereich entfernt', path() === '/license');
-  check('Seite „Demo beendet“', (await text('[data-testid="demo-ended"]')).includes('Deine OLO-LAB Demo ist beendet.') && (await text('[data-testid="demo-ended"]')).includes('Vielen Dank fürs Testen. Wähle jetzt eine Lizenz, um OLO-LAB weiter zu nutzen.'));
+  check('Seite „Demo beendet“', (await text('[data-testid="demo-ended"]')).includes('Ihre OLO-LAB Demo ist beendet.') && (await text('[data-testid="demo-ended"]')).includes('Vielen Dank fürs Testen. Wählen Sie jetzt eine Lizenz, um OLO-LAB weiter zu nutzen.'));
   check('Kein automatisches Abo nach der Demo', !(await db()).subscriptions.some((s) => s.institutionId === p.institutionId));
   check('Demo nicht erneut startbar', (await text('[data-testid="demo-start"]')).includes('Demo bereits genutzt') && (await page.locator('[data-testid="demo-start"]').isDisabled()));
   await shot('08_demo_ended');

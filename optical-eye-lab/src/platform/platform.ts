@@ -10,6 +10,7 @@ import { Repositories } from './repositories';
 import { KEYS, LocalStorageProvider, type StorageProvider } from './storage';
 import { LEGACY_DEFAULT_PREFS_KEY, migrateLegacyData, type MigrationReport } from './migration';
 import { seedDemoData } from './seed';
+import type { ContentRepository } from './content';
 import { normalizePrefs, prefsFromLegacy, type UserPreferences } from './preferences';
 import type { Preferences } from '@/state/persistence';
 
@@ -17,7 +18,10 @@ export interface Platform {
   storage: StorageProvider;
   repos: Repositories;
   auth: AuthProvider;
-  library: LibraryService;
+  /** Bibliothek über den aktuellen Inhaltsspeicher (lokal oder Cloud-Konto) */
+  readonly library: LibraryService;
+  /** Inhaltsspeicher wechseln (null = wieder lokal). Cloud-Modus: nach der Anmeldung. */
+  useContent(content: ContentRepository | null): void;
   accounts: AccountService;
   init(options?: { seedDemo?: boolean }): Promise<InitResult>;
   loadPrefs(userId: string): Promise<UserPreferences>;
@@ -32,6 +36,8 @@ export interface InitResult {
 export function createPlatform(storage: StorageProvider = new LocalStorageProvider()): Platform {
   const repos = new Repositories(storage);
   let initRun: Promise<InitResult> | null = null;
+  const localLibrary = new LibraryService(repos);
+  let library = localLibrary;
 
   async function runInit(seedDemo: boolean): Promise<InitResult> {
     const meta = await repos.getMeta();
@@ -53,7 +59,12 @@ export function createPlatform(storage: StorageProvider = new LocalStorageProvid
     storage,
     repos,
     auth: new LocalAuthProvider(repos),
-    library: new LibraryService(repos),
+    get library() {
+      return library;
+    },
+    useContent(content) {
+      library = content && content !== repos ? new LibraryService(content) : localLibrary;
+    },
     accounts: new AccountService(repos),
 
     init(options) {

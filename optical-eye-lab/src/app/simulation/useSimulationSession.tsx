@@ -5,12 +5,14 @@ import { useAppStore, configureStoreHooks } from '@/state/store';
 import type { SceneDocument } from '@/model/types';
 import type { SimulationMetadata } from '@/platform/models';
 import { captureViewportThumbnail } from '@/scene/thumbnail';
-import { choiceDialog, promptDialog } from '@/ui/ds/modals';
+import { choiceDialog, confirmDialog, promptDialog } from '@/ui/ds/modals';
+import { ContentConflictError } from '@/platform/content';
+import { CloudError } from '@/cloud/types';
 import { migrateDocument } from '@/state/persistence';
 import { useSession, errorMessage, currentUser } from '../session';
 import { platform } from '../platformInstance';
 
-export type LoadState = { status: 'loading' } | { status: 'missing' } | { status: 'ready'; meta: SimulationMetadata };
+export type LoadState = { status: 'loading' } | { status: 'missing' } | { status: 'error'; message: string } | { status: 'ready'; meta: SimulationMetadata };
 
 /**
  * Sitzung einer Bibliothekssimulation (Phase 5 aus SimulatorPage herausgelöst): Laden in den Simulator-Store,
@@ -31,6 +33,8 @@ export function useSimulationSession(id: string, opts: SessionOptions = {}) {
   const [recovery, setRecovery] = useState<{ savedAt: string } | null>(null);
   const metaRef = useRef<SimulationMetadata | null>(null);
   const skipGuard = useRef(false);
+  const [attempt, setAttempt] = useState(0);
+  const retryLoad = useCallback(() => setAttempt((n) => n + 1), []);
 
   /* ------------------------------ Laden ------------------------------ */
   useEffect(() => {
@@ -40,7 +44,13 @@ export function useSimulationSession(id: string, opts: SessionOptions = {}) {
     skipGuard.current = false;
     void (async () => {
       const user = currentUser();
-      const rec = await platform.library.get(user, id);
+      let rec: Awaited<ReturnType<typeof platform.library.get>>;
+      try {
+        rec = await platform.library.get(user, id);
+      } catch (e) {
+        if (alive) setState({ status: 'error', message: errorMessage(e) });
+        return;
+      }
       if (!alive) return;
       if (!rec) {
         setState({ status: 'missing' });
@@ -57,23 +67,89 @@ export function useSimulationSession(id: string, opts: SessionOptions = {}) {
     return () => {
       alive = false;
     };
-  }, [id]);
+  }, [id, attempt]);
 
   /* ----------------------- Speichern (Hooks) ----------------------- */
+  const retryTimer = useRef<number | undefined>(undefined);
+  const offlineNotified = useRef(false);
+  useEffect(() => () => window.clearTimeout(retryTimer.current), [id]);
+
+  /**
+   * Neuerer Stand auf einem anderen Gerät/in einem anderen Fenster (nur Cloud):
+   * als Kopie speichern (nichts geht verloren) oder bewusst überschreiben.
+   */
+  const resolveConflict = useCallback(
+    async (doc: SceneDocument, conflict: ContentConflictError, thumb: string | null): Promise<boolean> => {
+      const user = currentUser();
+      if (conflict.remoteDeleted) {
+        const ok = await confirmDialog({
+          title: 'Simulation wurde gelöscht',
+          message: `„${doc.name}“ wurde inzwischen auf einem anderen Gerät gelöscht. Möchten Sie Ihren aktuellen Stand als neue Simulation speichern?`,
+          confirmLabel: 'Als neue Simulation speichern',
+        });
+        if (!ok) return false;
+      } else {
+        const choice = await choiceDialog({
+          title: 'Neuerer Stand vorhanden',
+          message: `„${doc.name}“ wurde inzwischen auf einem anderen Gerät oder in einem anderen Fenster gespeichert. Wie möchten Sie Ihren Stand speichern?`,
+          confirmLabel: 'Als Kopie speichern',
+          altLabel: 'Überschreiben',
+        });
+        if (choice === 'cancel') return false;
+        if (choice === 'alt') {
+          metaRef.current = await platform.library.save(user, id, doc, thumb, { force: true });
+          void useSession.getState().refreshLibrary();
+          return true;
+        }
+      }
+      const names = useSession.getState().sims.map((m) => m.name);
+      const name = names.includes(`${doc.name} (Kopie)`) ? `${doc.name} (Kopie ${new Date().toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })})` : `${doc.name} (Kopie)`;
+      const rec = await platform.library.saveAs(user, { ...doc, name }, name, metaRef.current ?? undefined, thumb);
+      await platform.repos.clearDraft(id);
+      await useSession.getState().refreshLibrary();
+      useAppStore.getState().notify(`Als „${name}“ gespeichert`, 'success');
+      // Kopie öffnen (gleiche Ansicht: Simulator oder Modul)
+      skipGuard.current = true;
+      useAppStore.setState({ dirty: false });
+      navigate(window.location.pathname.replace(id, rec.meta.id), { replace: true });
+      return true;
+    },
+    [id, navigate],
+  );
+
   const save = useCallback(
     async (doc: SceneDocument) => {
+      const thumb = captureViewportThumbnail();
       try {
-        const thumb = captureViewportThumbnail();
         const meta = await platform.library.save(currentUser(), id, doc, thumb);
         metaRef.current = meta;
+        offlineNotified.current = false;
         void useSession.getState().refreshLibrary();
         return true;
       } catch (e) {
+        try {
+          if (e instanceof ContentConflictError) return await resolveConflict(doc, e, thumb);
+        } catch (e2) {
+          e = e2;
+        }
+        if (e instanceof CloudError && e.code === 'network') {
+          // Stand ist als Entwurf auf diesem Gerät gesichert; in 20 s erneut versuchen
+          window.clearTimeout(retryTimer.current);
+          retryTimer.current = window.setTimeout(() => {
+            const st = useAppStore.getState();
+            if (st.dirty && st.simId === id) void st.saveCurrent({ silent: true });
+          }, 20_000);
+          if (!offlineNotified.current) {
+            offlineNotified.current = true;
+            useAppStore.getState().notify('Keine Verbindung zum Server. Ihre Änderungen sind auf diesem Gerät gesichert und werden automatisch gespeichert, sobald die Verbindung wieder besteht.', 'warning');
+          }
+          return false;
+        }
         useAppStore.getState().notify(`Speichern fehlgeschlagen: ${errorMessage(e)}`, 'warning');
         return false;
       }
     },
-    [id],
+    [id, resolveConflict],
   );
 
   useEffect(() => {
@@ -173,7 +249,7 @@ export function useSimulationSession(id: string, opts: SessionOptions = {}) {
     [navigate],
   );
 
-  return { state, recovery, setRecovery, metaRef, skipGuard, leaveWithoutGuard };
+  return { state, recovery, setRecovery, metaRef, skipGuard, leaveWithoutGuard, retryLoad };
 }
 
 /** Hinweis „ungespeicherte Änderungen wiederherstellen?“ (Absturzsicherung) */

@@ -17,7 +17,9 @@ import { isPlan, LIVE_SUBSCRIPTION_STATUSES, type InstitutionType, type LicenseP
 import { verifyStripeSignature } from './stripeSignature.ts';
 import { idOf, snapshotFromSubscription, subscriptionIdFromInvoice, type SubscriptionSnapshot } from './stripeObjects.ts';
 import { afterCheckoutCompleted, enforceNoAutoRenewal, type OpsDb } from './legalOps.ts';
+import { isPortalNotConfigured, isResourceMissing, StripeError } from './stripeError.ts';
 import type { Mailer } from './mailer.ts';
+import type { AccountDb } from './accountOps.ts';
 
 // deno-lint-ignore no-explicit-any
 type Obj = Record<string, any>;
@@ -56,8 +58,8 @@ export interface StripeApi {
 
 export interface Deps {
   env: EnvGetter;
-  /** Benutzer aus dem Authorization-Header (von Supabase Auth geprüft) oder null */
-  authUser(req: Request): Promise<{ id: string; email: string } | null>;
+  /** Benutzer aus dem Authorization-Header (von Supabase Auth geprüft) oder null; issuedAt = iat des JWT (s) */
+  authUser(req: Request): Promise<{ id: string; email: string; issuedAt?: number } | null>;
   db: BillingDb;
   stripe: StripeApi;
   now?: () => number;
@@ -65,6 +67,8 @@ export interface Deps {
   /** Rechtsbetrieb: Erklärungen, Vertragsbestätigung, E-Mail-Protokoll (optional – ohne: keine E-Mails) */
   ops?: OpsDb;
   mailer?: Mailer;
+  /** Kontoverwaltung (Edge Function delete-account) */
+  accountDb?: AccountDb;
 }
 
 /** Steuersatz „19 % DE, inklusive“ aus dem Stripe-Dashboard (Function Secret STRIPE_TAX_RATE_ID) */
@@ -74,7 +78,7 @@ export const taxRateId = (env: EnvGetter) => {
 };
 
 export const B2B_COUNTRY_MESSAGE =
-  'Buchungen für Unternehmen und Bildungseinrichtungen sind derzeit nur mit Sitz in Deutschland möglich. Bitte wende dich für ein Angebot an info@olo-vision.de.';
+  'Buchungen für Unternehmen und Bildungseinrichtungen sind derzeit nur mit Sitz in Deutschland möglich. Bitte wenden Sie sich für ein Angebot an info@olo-vision.de.';
 
 const json = (body: unknown, status: number, headers: Record<string, string> = {}) =>
   new Response(JSON.stringify(body), { status, headers: { ...headers, 'Content-Type': 'application/json' } });
@@ -94,7 +98,7 @@ function guarded(name: string, fn: (req: Request, deps: Deps) => Promise<Respons
       return await fn(req, deps);
     } catch (e) {
       deps.log?.(`${name}: ${errMsg(e)}`);
-      return json({ error: 'Interner Fehler. Bitte versuche es später erneut.', code: 'internal' }, 500, name === 'stripe-webhook' ? {} : corsHeaders(req.headers.get('Origin'), deps.env));
+      return json({ error: 'Interner Fehler. Bitte versuchen Sie es später erneut.', code: 'internal' }, 500, name === 'stripe-webhook' ? {} : corsHeaders(req.headers.get('Origin'), deps.env));
     }
   };
 }
@@ -103,10 +107,10 @@ function guarded(name: string, fn: (req: Request, deps: Deps) => Promise<Respons
 async function authorize(req: Request, deps: Deps, cors: Record<string, string>): Promise<{ account: BillingAccount } | { response: Response }> {
   if (req.method !== 'POST') return { response: json({ error: 'Methode nicht erlaubt.' }, 405, cors) };
   const user = await deps.authUser(req).catch(() => null);
-  if (!user) return { response: json({ error: 'Bitte melde dich an.', code: 'unauthenticated' }, 401, cors) };
+  if (!user) return { response: json({ error: 'Bitte melden Sie sich an.', code: 'unauthenticated' }, 401, cors) };
   const account = await deps.db.getAccount(user.id);
-  if (!account) return { response: json({ error: 'Zu deinem Konto gibt es kein Profil.', code: 'no_profile' }, 403, cors) };
-  if (!ADMIN_ROLES.has(account.role)) return { response: json({ error: 'Nur die Administration deiner Institution kann das Abonnement verwalten.', code: 'forbidden' }, 403, cors) };
+  if (!account) return { response: json({ error: 'Zu Ihrem Konto gibt es kein Profil.', code: 'no_profile' }, 403, cors) };
+  if (!ADMIN_ROLES.has(account.role)) return { response: json({ error: 'Nur die Administration Ihres Kundenkontos kann das Abonnement verwalten.', code: 'forbidden' }, 403, cors) };
   if (!deps.env('STRIPE_SECRET_KEY')) return { response: json({ error: 'Die Online-Zahlung ist noch nicht eingerichtet.', code: 'stripe_not_configured' }, 503, cors) };
   return { account };
 }
@@ -142,19 +146,19 @@ async function checkout(req: Request, deps: Deps): Promise<Response> {
   const consentIds = Array.isArray(body?.consents) ? body.consents.filter((x): x is string => typeof x === 'string' && UUID_RE.test(x)).slice(0, 20) : [];
 
   if (account.license?.source === 'manual' && account.license.status === 'active') {
-    return json({ error: 'Für deine Institution ist eine Sonderlizenz freigeschaltet. Bitte wende dich an den Support.', code: 'manual_license' }, 409, cors);
+    return json({ error: 'Für Ihr Konto ist eine Sonderlizenz freigeschaltet. Bitte wenden Sie sich an info@olo-vision.de.', code: 'manual_license' }, 409, cors);
   }
   const live = await deps.db.getLiveSubscription(account.institutionId);
   if (live) {
-    return json({ error: 'Es besteht bereits ein Abonnement. Du kannst es unter „Abonnement verwalten“ ändern.', code: 'subscription_exists' }, 409, cors);
+    return json({ error: 'Es besteht bereits ein Abonnement. Sie können es unter „Abonnement verwalten“ ändern.', code: 'subscription_exists' }, 409, cors);
   }
 
   // Rechtliche Zustimmungen: serverseitig gegen die aktuell gültigen Dokumentversionen prüfen
   const consent = await deps.db.checkCheckoutConsents(account.userId, consentIds);
   if (!consent.ok) {
     return consent.outdated
-      ? json({ error: 'Die Rechtstexte wurden inzwischen aktualisiert. Bitte prüfe sie und bestätige erneut.', code: 'consents_outdated' }, 409, cors)
-      : json({ error: 'Bitte bestätige alle erforderlichen Rechtstexte.', code: 'consents_missing', missing: consent.missing }, 422, cors);
+      ? json({ error: 'Die Rechtstexte wurden inzwischen aktualisiert. Bitte prüfen Sie sie und bestätigen Sie erneut.', code: 'consents_outdated' }, 409, cors)
+      : json({ error: 'Bitte bestätigen Sie alle erforderlichen Rechtstexte.', code: 'consents_missing', missing: consent.missing }, 422, cors);
   }
 
   let sessionId = '';
@@ -166,7 +170,7 @@ async function checkout(req: Request, deps: Deps): Promise<Response> {
     const existing = await deps.stripe.request('GET', 'subscriptions', { customer: customerId, status: 'all', limit: '20' });
     const list: Obj[] = Array.isArray(existing?.data) ? existing.data : [];
     if (list.some((x) => LIVE_SUBSCRIPTION_STATUSES.includes(x?.status))) {
-      return json({ error: 'Es besteht bereits ein Abonnement. Du kannst es unter „Abonnement verwalten“ ändern.', code: 'subscription_exists' }, 409, cors);
+      return json({ error: 'Es besteht bereits ein Abonnement. Sie können es unter „Abonnement verwalten“ ändern.', code: 'subscription_exists' }, 409, cors);
     }
     const site = resolveSiteUrl(origin, deps.env);
     const bucket = Math.floor((deps.now?.() ?? Date.now()) / 60000);
@@ -214,7 +218,7 @@ async function checkout(req: Request, deps: Deps): Promise<Response> {
     sessionUrl = session.url;
   } catch (e) {
     deps.log?.(`create-checkout-session: ${errMsg(e)}`);
-    return json({ error: 'Die Zahlungsseite konnte nicht geöffnet werden. Bitte versuche es später erneut.', code: 'stripe_error' }, 502, cors);
+    return json({ error: 'Die Zahlungsseite konnte nicht geöffnet werden. Bitte versuchen Sie es später erneut.', code: 'stripe_error' }, 502, cors);
   }
 
   // Zustimmungen mit der konkreten Checkout-Session protokollieren. Scheitert das (z. B. Dokument wurde
@@ -227,8 +231,8 @@ async function checkout(req: Request, deps: Deps): Promise<Response> {
     const outdated = (e as { code?: string })?.code === 'OLC02';
     return json(
       outdated
-        ? { error: 'Die Rechtstexte wurden inzwischen aktualisiert. Bitte prüfe sie und bestätige erneut.', code: 'consents_outdated' }
-        : { error: 'Die Bestellung konnte nicht vorbereitet werden. Bitte versuche es erneut.', code: 'consents_failed' },
+        ? { error: 'Die Rechtstexte wurden inzwischen aktualisiert. Bitte prüfen Sie sie und bestätigen Sie erneut.', code: 'consents_outdated' }
+        : { error: 'Die Bestellung konnte nicht vorbereitet werden. Bitte versuchen Sie es erneut.', code: 'consents_failed' },
       409,
       cors,
     );
@@ -275,22 +279,83 @@ async function portal(req: Request, deps: Deps): Promise<Response> {
 
   // ausschließlich der Customer der EIGENEN Institution (Body wird nicht ausgewertet)
   const customerId = await deps.db.getCustomerId(account.institutionId);
-  if (!customerId) return json({ error: 'Für dein Konto gibt es noch kein Abonnement.', code: 'no_customer' }, 404, cors);
+  if (!customerId) {
+    return json({ error: 'Für Ihr Konto besteht noch kein Abonnement. Die Abo-Verwaltung steht nach Ihrer ersten Buchung zur Verfügung.', code: 'no_customer' }, 404, cors);
+  }
+  const site = resolveSiteUrl(origin, deps.env);
+
+  // 1) Kunde bei Stripe prüfen (fehlt z. B., wenn er im Testmodus angelegt wurde und jetzt der Live-Schlüssel gilt)
   try {
-    const params: Record<string, string> = {
-      customer: customerId,
-      return_url: `${resolveSiteUrl(origin, deps.env)}/account`,
-      locale: 'de',
-    };
-    const configuration = deps.env('STRIPE_PORTAL_CONFIGURATION_ID');
-    if (configuration && /^bpc_[A-Za-z0-9]+$/.test(configuration)) params.configuration = configuration;
-    const portal = await deps.stripe.request('POST', 'billing_portal/sessions', params);
-    if (typeof portal.url !== 'string') throw new Error('Portal-Session ohne URL');
-    return json({ url: portal.url }, 200, cors);
+    const customer = await deps.stripe.request('GET', `customers/${encodeURIComponent(customerId)}`);
+    if (customer?.deleted === true) throw new StripeError(404, 'invalid_request_error', 'resource_missing', 'customer deleted');
+  } catch (e) {
+    if (isResourceMissing(e)) {
+      deps.log?.(`create-customer-portal: Stripe-Kunde ${customerId} nicht gefunden (gelöscht oder anderer Stripe-Modus: Test/Live?)`);
+      return json({ error: 'Ihr Kundenkonto wurde beim Zahlungsdienstleister nicht gefunden. Bitte wenden Sie sich an info@olo-vision.de.', code: 'customer_missing' }, 404, cors);
+    }
+    deps.log?.(`create-customer-portal: Kunde prüfen – ${errMsg(e)}`);
+    return json({ error: 'Die Abo-Verwaltung ist gerade nicht erreichbar. Bitte versuchen Sie es in einigen Minuten erneut.', code: 'stripe_error' }, 502, cors);
+  }
+
+  // 2) Portal-Sitzung; fehlt die Standard-Konfiguration im Stripe-Dashboard, eine eigene anlegen/verwenden
+  const params: Record<string, string> = { customer: customerId, return_url: `${site}/account`, locale: 'de' };
+  const configured = deps.env('STRIPE_PORTAL_CONFIGURATION_ID');
+  if (configured && /^bpc_[A-Za-z0-9]+$/.test(configured)) params.configuration = configured;
+  try {
+    let session: Obj;
+    try {
+      session = await deps.stripe.request('POST', 'billing_portal/sessions', params);
+    } catch (e) {
+      if (!isPortalNotConfigured(e) || params.configuration) throw e;
+      deps.log?.('create-customer-portal: keine Standard-Konfiguration des Kundenportals – verwende OLO-LAB3D-Konfiguration');
+      params.configuration = await ensurePortalConfiguration(site, deps);
+      session = await deps.stripe.request('POST', 'billing_portal/sessions', params);
+    }
+    if (typeof session.url !== 'string') throw new Error('Portal-Session ohne URL');
+    return json({ url: session.url }, 200, cors);
   } catch (e) {
     deps.log?.(`create-customer-portal: ${errMsg(e)}`);
-    return json({ error: 'Das Kundenportal konnte nicht geöffnet werden. Bitte versuche es später erneut.', code: 'stripe_error' }, 502, cors);
+    if (isPortalNotConfigured(e)) {
+      return json({ error: 'Die Abo-Verwaltung ist noch nicht eingerichtet. Bitte wenden Sie sich an info@olo-vision.de.', code: 'portal_not_configured' }, 503, cors);
+    }
+    return json({ error: 'Die Abo-Verwaltung ist gerade nicht erreichbar. Bitte versuchen Sie es in einigen Minuten erneut.', code: 'stripe_error' }, 502, cors);
   }
+}
+
+/** Kennzeichen der von OLO-LAB3D angelegten Portal-Konfiguration (Metadaten) */
+export const PORTAL_CONFIG_MARKER = 'olo-lab3d-default';
+
+/**
+ * Portal-Konfiguration für OLO-LAB3D: vorhandene (Metadaten-Kennzeichen) wiederverwenden, sonst anlegen.
+ * Funktionen: Rechnungen, Zahlungsmittel, Rechnungsadresse/USt-IdNr., Kündigung zum Periodenende.
+ * Tarifwechsel bleibt aus (Tarif = Kundentyp; Wechsel über Kündigung und Neubuchung).
+ */
+export async function ensurePortalConfiguration(site: string, deps: Deps): Promise<string> {
+  const list = await deps.stripe.request('GET', 'billing_portal/configurations', { active: 'true', limit: '100' });
+  const found = (Array.isArray(list?.data) ? list.data : []).find((c: Obj) => c?.metadata?.olo === PORTAL_CONFIG_MARKER && typeof c.id === 'string');
+  if (found) return found.id;
+  const p: Record<string, string> = {
+    'metadata[olo]': PORTAL_CONFIG_MARKER,
+    'business_profile[headline]': 'OLO-LAB3D – Abonnement verwalten',
+    default_return_url: `${site}/account`,
+    'features[invoice_history][enabled]': 'true',
+    'features[payment_method_update][enabled]': 'true',
+    'features[customer_update][enabled]': 'true',
+    'features[customer_update][allowed_updates][0]': 'address',
+    'features[customer_update][allowed_updates][1]': 'tax_id',
+    'features[customer_update][allowed_updates][2]': 'name',
+    'features[subscription_cancel][enabled]': 'true',
+    'features[subscription_cancel][mode]': 'at_period_end',
+    'features[subscription_cancel][proration_behavior]': 'none',
+    'features[subscription_update][enabled]': 'false',
+  };
+  if (/^https:\/\//.test(site)) {
+    p['business_profile[privacy_policy_url]'] = `${site}/legal/privacy`;
+    p['business_profile[terms_of_service_url]'] = `${site}/legal/terms`;
+  }
+  const created = await deps.stripe.request('POST', 'billing_portal/configurations', p, `portal-config-${PORTAL_CONFIG_MARKER}`);
+  if (typeof created?.id !== 'string') throw new Error('Portal-Konfiguration ohne ID');
+  return created.id;
 }
 
 /* ------------------------------------------------------------------------------------------------ */

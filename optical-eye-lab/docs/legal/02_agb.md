@@ -125,7 +125,9 @@ Es gelten die gesetzlichen Mängelrechte. Für Verbraucher gelten insbesondere d
 
 13.3 Im Übrigen ist die Haftung für leichte Fahrlässigkeit ausgeschlossen.
 
-13.4 Simulationen und Einstellungen speichert OLO-LAB3D derzeit **lokal im Browser** des jeweiligen Geräts. OLO Vision übernimmt hierfür keine serverseitige Speicherung oder Datensicherung. Der Kunde ist dafür verantwortlich, wichtige Arbeiten über die Exportfunktion zu sichern. Die Haftung nach Ziffer 13.1 bleibt unberührt.
+13.4 Simulationen, eigene Vorlagen und Einstellungen speichert OLO-LAB3D im Kundenkonto auf Servern in der EU; sie stehen nach der Anmeldung auf jedem unterstützten Gerät zur Verfügung. Endet der Vertrag, bleiben die gespeicherten Inhalte bis zum Ablauf der in der Datenschutzerklärung genannten Speicherdauer erhalten und können nach einer erneuten Buchung weiter genutzt werden; lesen und exportieren ist auch ohne aktive Lizenz möglich. OLO Vision schuldet keine gesonderte Datensicherung für den Kunden; es wird empfohlen, wichtige Arbeiten zusätzlich über die Exportfunktion zu sichern. Die Haftung nach Ziffer 13.1 bleibt unberührt.
+
+[Prüfhinweis: Formulierung zur Datensicherung nach Umstellung auf die Cloud-Speicherung (Version 0.10) anwaltlich prüfen lassen.]
 
 ## 14. Speicherung des Vertragstexts und Vertragssprache
 

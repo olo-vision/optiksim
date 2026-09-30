@@ -60,7 +60,7 @@ export const planInfo = (id: LicensePlan | null | undefined) => PLANS.find((p) =
 /** Preis eines Pakets im gewählten Intervall */
 /** B2B vorerst nur mit Sitz in Deutschland (gleicher Text wie in der Edge Function) */
 export const B2B_COUNTRY_MESSAGE =
-  'Buchungen für Unternehmen und Bildungseinrichtungen sind derzeit nur mit Sitz in Deutschland möglich. Bitte wende dich für ein Angebot an info@olo-vision.de.';
+  'Buchungen für Unternehmen und Bildungseinrichtungen sind derzeit nur mit Sitz in Deutschland möglich. Bitte wenden Sie sich für ein Angebot an info@olo-vision.de.';
 
 /** Alle Preise sind Endpreise inkl. 19 % USt. */
 export const VAT_NOTE = 'inkl. 19 % USt.';

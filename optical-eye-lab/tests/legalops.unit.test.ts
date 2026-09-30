@@ -36,7 +36,7 @@ describe('Preise und Laufzeit: Server und Browser stimmen überein', () => {
   });
   it('Hinweis am Stripe-Button nennt Zahlungspflicht, Preis, Laufzeit und Bedingungen', () => {
     const b2c = checkoutSubmitMessage('private', 'monthly', true);
-    expect(b2c).toMatch(/^Mit Klick auf „Abonnieren“ bestellst du OLO-LAB3D Private zahlungspflichtig: 19,90 € pro Monat inkl\. 19 % USt\./);
+    expect(b2c).toMatch(/^Mit Klick auf „Abonnieren“ bestellen Sie OLO-LAB3D Private zahlungspflichtig: 19,90 € pro Monat inkl\. 19 % USt\./);
     expect(b2c).toContain('Widerrufsbelehrung');
     const b2b = checkoutSubmitMessage('education', 'yearly', false);
     expect(b2b).toContain('999,00 € pro Jahr');
@@ -87,7 +87,7 @@ describe('E-Mail-Texte', () => {
     const base = { id: 'd1', cancellationType: 'ordinary' as const, name: 'Karla', email: 'kunde@web.de', contractDetails: 'Private', reason: null, receivedAt: '2026-10-05T08:30:00Z' };
     const c = cancellationConfirmationMail({ ...base, kind: 'cancellation', endsAt: '2026-11-01T10:00:00Z' });
     expect(c.text).toContain('am 05.10.2026, 10:30 Uhr');
-    expect(c.text).toContain('Dein Vertrag endet zum 1. November 2026');
+    expect(c.text).toContain('Ihr Vertrag endet zum 1. November 2026');
     expect(cancellationConfirmationMail({ ...base, kind: 'cancellation', cancellationType: 'extraordinary', reason: 'Umzug' }).text).toContain('außerordentliche Kündigung');
     expect(withdrawalConfirmationMail({ ...base, kind: 'withdrawal', cancellationType: null }).text).toContain('Wertersatz');
   });
@@ -155,6 +155,8 @@ describe('Rechtstexte 1.0 (docs/legal)', () => {
     expect(text('06_widerrufsbelehrung.md')).toContain('einen angemessenen Betrag zu zahlen');
     expect(text('09_hinweis_wertersatz.md')).not.toMatch(/erlischt (sofort|mit Beginn)/);
     const lic = text('03_lizenzbedingungen.md');
-    for (const s of ['eine Betriebsstätte unter einer konkreten Geschäftsanschrift', 'Homeoffice', 'kein Medizinprodukt', 'keine serverseitige Speicherung', 'einmalig für 2 Stunden']) expect(lic).toContain(s);
+    for (const s of ['eine Betriebsstätte unter einer konkreten Geschäftsanschrift', 'Homeoffice', 'kein Medizinprodukt', 'an das Kundenkonto gebunden, nicht an die Lizenz', 'endgültig löschen', 'einmalig für 2 Stunden']) expect(lic).toContain(s);
+    // 0.10.0: Cloud-Speicherung – keine veralteten Aussagen zur reinen Browser-Speicherung
+    for (const f of ['02_agb.md', '03_lizenzbedingungen.md', '04_b2b_bedingungen.md', '05_datenschutz.md']) expect(text(f)).not.toMatch(/derzeit (\*\*)?(ausschließlich )?lokal im Browser/);
   });
 });

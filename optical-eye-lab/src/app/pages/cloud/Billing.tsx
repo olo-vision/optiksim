@@ -23,26 +23,39 @@ import { useAppStore } from '@/state/store';
 export function ManageSubscriptionButton({ variant = 'secondary', size }: { variant?: 'primary' | 'secondary' | 'ghost'; size?: 'sm' | 'md' }) {
   const canManage = useCloud((s) => s.account?.billing?.canManage ?? false);
   const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   if (!canManage) return null;
   return (
-    <Button
-      variant={variant}
-      size={size}
-      icon={CreditCard}
-      loading={busy}
-      data-testid="manage-subscription"
-      onClick={async () => {
-        setBusy(true);
-        try {
-          window.location.assign(await cloudBackend().openCustomerPortal());
-        } catch (e) {
-          useAppStore.getState().notify(e instanceof Error ? e.message : 'Abo-Verwaltung nicht erreichbar', 'warning');
-          setBusy(false);
-        }
-      }}
-    >
-      Abonnement verwalten
-    </Button>
+    <span className="portal-action">
+      <Button
+        variant={variant}
+        size={size}
+        icon={CreditCard}
+        loading={busy}
+        data-testid="manage-subscription"
+        onClick={async () => {
+          if (busy) return;
+          setBusy(true);
+          setError(null);
+          try {
+            window.location.assign(await cloudBackend().openCustomerPortal());
+          } catch (e) {
+            // verständliche Meldung der Edge Function (kein Kunde, Portal nicht eingerichtet, Stripe nicht erreichbar)
+            const msg = e instanceof Error && e.message ? e.message : 'Die Abo-Verwaltung ist gerade nicht erreichbar.';
+            setError(msg);
+            useAppStore.getState().notify(msg, 'warning');
+            setBusy(false);
+          }
+        }}
+      >
+        Abonnement verwalten
+      </Button>
+      {error && (
+        <span className="ds-field__error" role="alert" data-testid="portal-error">
+          {error}
+        </span>
+      )}
+    </span>
   );
 }
 
@@ -60,6 +73,24 @@ export function BillingNotice() {
 }
 
 /* ------------------------------ Abo-Übersicht ------------------------------ */
+
+/** Erklärt, wo Rechnungen, Zahlungsmittel und Kündigung zu finden sind (auch ohne Stripe-Kunde) */
+function PortalHint() {
+  const b = useCloud((s) => s.account?.billing);
+  const role = useCloud((s) => s.account?.profile?.role);
+  const source = useCloud((s) => s.account?.license?.source);
+  if (source === 'manual') return null;
+  const text = b?.canManage
+    ? 'Rechnungen, Zahlungsmittel, Rechnungsanschrift und Kündigung verwalten Sie sicher im Stripe-Kundenportal.'
+    : b?.hasCustomer && role === 'user'
+      ? 'Das Abonnement verwaltet die Administration Ihres Kundenkontos.'
+      : 'Rechnungen, Zahlungsmittel und Kündigung können Sie nach Ihrer ersten Buchung hier über „Abonnement verwalten“ einsehen und ändern.';
+  return (
+    <p className="account-section__desc" data-testid="portal-hint">
+      {text}
+    </p>
+  );
+}
 
 export function BillingSummary() {
   const account = useCloud((s) => s.account);
@@ -128,6 +159,7 @@ export function BillingSummary() {
         )}
       </dl>
       <BillingNotice />
+      <PortalHint />
       <div className="form-actions">
         <ManageSubscriptionButton variant={l.status === 'past_due' || l.status === 'suspended' ? 'primary' : 'secondary'} />
       </div>
@@ -185,8 +217,8 @@ export function CheckoutConfirmation({ onDone }: { onDone: () => void }) {
       <div className="checkout-confirm is-done" data-testid="checkout-confirm" data-phase="done">
         <BadgeCheck size={20} />
         <div>
-          <strong>Willkommen bei {PRODUCT_NAME} – deine Lizenz ist aktiv.</strong>
-          <span>Vielen Dank für deinen Kauf! Die Zahlung ist bestätigt, alle Funktionen sind freigeschaltet. Die Rechnung erhältst du per E-Mail von Stripe.</span>
+          <strong>Willkommen bei {PRODUCT_NAME} – Ihre Lizenz ist aktiv.</strong>
+          <span>Vielen Dank für Ihren Kauf! Die Zahlung ist bestätigt, alle Funktionen sind freigeschaltet. Die Rechnung erhalten Sie per E-Mail von Stripe.</span>
         </div>
         <Button size="sm" variant="primary" iconRight={ArrowRight} onClick={() => navigate('/dashboard')} data-testid="checkout-start">
           {PRODUCT_NAME} starten
@@ -202,7 +234,7 @@ export function CheckoutConfirmation({ onDone }: { onDone: () => void }) {
         <CalendarClock size={20} />
         <div>
           <strong>Die Bestätigung dauert länger als üblich.</strong>
-          <span>Stripe hat die Zahlung noch nicht an uns gemeldet. Sobald das passiert, wird deine Lizenz automatisch aktiviert – du musst nicht erneut bezahlen.</span>
+          <span>Stripe hat die Zahlung noch nicht an uns gemeldet. Sobald das passiert, wird Ihre Lizenz automatisch aktiviert – Sie müssen nicht erneut bezahlen.</span>
         </div>
         <Button
           size="sm"

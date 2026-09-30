@@ -33,6 +33,7 @@ import { CloudLoginPage, ForgotPasswordPage, RegisterPage, ResetPasswordPage } f
 import { AccountPage, CloudAdminPage, HomePage, LicensePage, PricingPage } from './pages/cloud/AccountPages';
 import { ImprintPage, LegalDocumentPage, LegalTypePage } from './pages/cloud/LegalPages';
 import { AdminDeclarationsPage, AdminLegalPage } from './pages/cloud/AdminLegalPage';
+import { AdminAccountsPage } from './pages/cloud/AdminAccountsPage';
 import { CancellationPage, WithdrawalPage } from './pages/cloud/ConsumerPages';
 import { cloudLandingPath } from './pages/cloud/cloudLanding';
 
@@ -114,6 +115,8 @@ function RequireLicense({ children }: { children: ReactNode }) {
   if (!CLOUD_ENABLED) return <>{children}</>;
   // Demo abgelaufen → sofort aus dem geschützten Bereich auf die Abschlussseite
   if (access === 'demo-ended') return <Navigate to="/license?demo=ended" replace />;
+  // Konto geschlossen → Kontoseite (dort: wieder öffnen oder endgültig löschen)
+  if (access === 'account-closed') return <Navigate to="/account" replace />;
   if (!canUseSimulator(access)) return <Navigate to="/license" replace />;
   if (!user) return <Splash message="Arbeitsbereich wird vorbereitet …" />;
   return <>{children}</>;
@@ -174,7 +177,7 @@ function RouteError() {
       <EmptyState
         icon={AlertTriangle}
         title="Hier ist etwas schiefgelaufen"
-        text={<>Die Ansicht konnte nicht angezeigt werden ({msg}). Deine gespeicherten Daten sind davon nicht betroffen.</>}
+        text={<>Die Ansicht konnte nicht angezeigt werden ({msg}). Ihre gespeicherten Daten sind davon nicht betroffen.</>}
         action={
           <Button variant="primary" onClick={() => (window.location.href = '/dashboard')}>
             Zum Dashboard
@@ -227,6 +230,7 @@ export const router = createBrowserRouter([
           { path: 'admin', element: <CloudOnly><RequireSuperAdmin><CloudAdminPage /></RequireSuperAdmin></CloudOnly> },
           { path: 'admin/legal', element: <CloudOnly><RequireSuperAdmin><AdminLegalPage /></RequireSuperAdmin></CloudOnly> },
           { path: 'admin/declarations', element: <CloudOnly><RequireSuperAdmin><AdminDeclarationsPage /></RequireSuperAdmin></CloudOnly> },
+          { path: 'admin/accounts', element: <CloudOnly><RequireSuperAdmin><AdminAccountsPage /></RequireSuperAdmin></CloudOnly> },
           // lokale Verwaltung (Phase 3) – im SaaS-Modus ersetzt durch /admin
           {
             path: 'admin/users',

@@ -6,7 +6,7 @@ import type { SceneDocument } from '@/model/types';
 import { SCHEMA_VERSION } from '@/model/types';
 import { applyConstraints } from '@/model/derived/contactSeat';
 import { createId } from '@/core/ids';
-import type { Repositories } from './repositories';
+import { ContentConflictError, type CommitOptions, type ContentRepository } from './content';
 import type { SimulationCategory, SimulationMetadata, SimulationRecord, Template, TemplateVisibility, User } from './models';
 import { can, GUEST_SIMULATION_LIMIT } from './permissions';
 import { guessCategory, summarizeDocument } from './summary';
@@ -87,7 +87,12 @@ export interface CreateInput {
 }
 
 export class LibraryService {
-  constructor(private repos: Repositories) {}
+  constructor(private repos: ContentRepository) {}
+
+  /** Speicherort der Inhalte ('local' = Browser, 'cloud' = Konto) */
+  get storageKind() {
+    return this.repos.contentKind;
+  }
 
   async list(user: User): Promise<SimulationMetadata[]> {
     return (await this.repos.listSimMeta()).filter((m) => isVisibleTo(user, m));
@@ -100,22 +105,22 @@ export class LibraryService {
   }
 
   private async assertCanCreate(user: User, count = 1) {
-    if (!can(user, 'simulations.create')) throw new LibraryError('Deine Rolle darf keine Simulationen anlegen.');
+    if (!can(user, 'simulations.create')) throw new LibraryError('Ihre Rolle darf keine Simulationen anlegen.');
     if (user.role === 'guest') {
       const own = (await this.repos.listSimMeta()).filter((m) => m.ownerId === user.id).length;
       if (own + count > GUEST_SIMULATION_LIMIT)
-        throw new LibraryError(`Im Gastzugang sind höchstens ${GUEST_SIMULATION_LIMIT} Simulationen möglich. Lege ein Konto an, um unbegrenzt zu speichern.`);
+        throw new LibraryError(`Im Gastzugang sind höchstens ${GUEST_SIMULATION_LIMIT} Simulationen möglich. Legen Sie ein Konto an, um unbegrenzt zu speichern.`);
     }
   }
 
   private async assertModify(user: User, id: string): Promise<SimulationMetadata> {
     const m = await this.repos.getSimMeta(id);
     if (!m) throw new LibraryError('Die Simulation existiert nicht mehr.');
-    if (!canModify(user, m)) throw new LibraryError('Du darfst diese Simulation nicht ändern.');
+    if (!canModify(user, m)) throw new LibraryError('Sie dürfen diese Simulation nicht ändern.');
     return m;
   }
 
-  async create(user: User, input: CreateInput): Promise<SimulationRecord> {
+  async create(user: User, input: CreateInput, thumbnail?: string | null): Promise<SimulationRecord> {
     await this.assertCanCreate(user);
     const now = new Date().toISOString();
     const name = input.name.trim() || 'Neue Simulation';
@@ -138,8 +143,8 @@ export class LibraryService {
       hasThumbnail: false,
       schemaVersion: SCHEMA_VERSION,
     };
-    await this.repos.saveSim(meta, doc);
-    return { meta, doc };
+    const saved = await this.repos.createSim(meta, doc, thumbnail);
+    return { meta: saved, doc };
   }
 
   async createFromTemplate(user: User, templateId: string, name?: string, description?: string): Promise<SimulationRecord> {
@@ -149,37 +154,24 @@ export class LibraryService {
     return this.create(user, { name: name?.trim() || t.name, description: description ?? t.description, category: t.category, tags: [...t.tags], templateId: t.id, doc });
   }
 
-  /** Speichert das Dokument einer bestehenden Simulation (Name des Dokuments = Name der Simulation). */
-  async save(user: User, id: string, docIn: SceneDocument, thumbnail?: string | null): Promise<SimulationMetadata> {
+  /**
+   * Speichert das Dokument einer bestehenden Simulation (Name des Dokuments = Name der Simulation).
+   * Cloud: wirft ContentConflictError, wenn inzwischen ein anderes Gerät gespeichert hat (außer force).
+   */
+  async save(user: User, id: string, docIn: SceneDocument, thumbnail?: string | null, opts?: CommitOptions): Promise<SimulationMetadata> {
+    // Inzwischen gelöscht (anderes Gerät/Fenster)? → als Konflikt melden, damit der Stand als Kopie gesichert werden kann
+    if (!(await this.repos.getSimMeta(id))) throw new ContentConflictError('Diese Simulation wurde inzwischen an anderer Stelle gelöscht.', true);
     const m = await this.assertModify(user, id);
     const now = new Date().toISOString();
     const doc = { ...docIn, name: docIn.name.trim() || m.name, updatedAt: now };
-    let hasThumbnail = m.hasThumbnail;
-    if (thumbnail) {
-      try {
-        await this.repos.saveThumb(id, thumbnail);
-        hasThumbnail = true;
-      } catch {
-        /* Vorschaubild ist optional – Speicherplatzmangel darf das Speichern nicht verhindern */
-      }
-    }
-    await this.repos.saveSimDoc(id, doc);
-    const next = await this.repos.patchSimMeta(id, (cur) => ({ ...cur, name: doc.name, updatedAt: now, summary: summarizeDocument(doc), hasThumbnail, schemaVersion: SCHEMA_VERSION }));
+    const next = await this.repos.commitSim(id, doc, (cur) => ({ ...cur, name: doc.name, updatedAt: now, summary: summarizeDocument(doc), schemaVersion: SCHEMA_VERSION }), thumbnail, opts);
+    if (!next) throw new LibraryError('Die Simulation existiert nicht mehr.');
     await this.repos.clearDraft(id);
-    return next ?? m;
+    return next;
   }
 
-  async saveAs(user: User, doc: SceneDocument, name: string, from?: SimulationMetadata, thumbnail?: string | null): Promise<SimulationRecord> {
-    const rec = await this.create(user, { name, description: from?.description, category: from?.category, tags: from ? [...from.tags] : [], templateId: from?.templateId, doc });
-    if (thumbnail) {
-      try {
-        await this.repos.saveThumb(rec.meta.id, thumbnail);
-        rec.meta = (await this.repos.patchSimMeta(rec.meta.id, (m) => ({ ...m, hasThumbnail: true }))) ?? rec.meta;
-      } catch {
-        /* optional */
-      }
-    }
-    return rec;
+  saveAs(user: User, doc: SceneDocument, name: string, from?: SimulationMetadata, thumbnail?: string | null): Promise<SimulationRecord> {
+    return this.create(user, { name, description: from?.description, category: from?.category, tags: from ? [...from.tags] : [], templateId: from?.templateId, doc }, thumbnail);
   }
 
   async updateDetails(user: User, id: string, patch: Partial<Pick<SimulationMetadata, 'name' | 'description' | 'category' | 'tags' | 'favorite' | 'archived'>>) {
@@ -191,10 +183,7 @@ export class LibraryService {
     }
     const next = await this.repos.patchSimMeta(id, (m) => ({ ...m, ...clean, updatedAt: patch.favorite !== undefined && Object.keys(patch).length === 1 ? m.updatedAt : new Date().toISOString() }));
     // Name auch im Dokument führen (Simulator-Anzeige)
-    if (clean.name !== undefined) {
-      const rec = await this.repos.getSim(id);
-      if (rec) await this.repos.saveSimDoc(id, { ...rec.doc, name: clean.name });
-    }
+    if (clean.name !== undefined) await this.repos.renameSimDoc(id, clean.name);
     return next;
   }
 
@@ -206,24 +195,19 @@ export class LibraryService {
     const rec = await this.get(user, id);
     if (!rec) throw new LibraryError('Die Simulation existiert nicht mehr.');
     const names = (await this.list(user)).map((m) => m.name);
-    const copy = await this.create(user, {
-      name: uniqueName(rec.meta.name, names),
-      description: rec.meta.description,
-      category: rec.meta.category,
-      tags: [...rec.meta.tags],
-      templateId: rec.meta.templateId,
-      doc: structuredClone(rec.doc),
-    });
-    const thumb = await this.repos.getThumb(id);
-    if (thumb) {
-      try {
-        await this.repos.saveThumb(copy.meta.id, thumb);
-        copy.meta = (await this.repos.patchSimMeta(copy.meta.id, (m) => ({ ...m, hasThumbnail: true }))) ?? copy.meta;
-      } catch {
-        /* optional */
-      }
-    }
-    return copy;
+    const thumb = await this.repos.getThumb(id).catch(() => null);
+    return this.create(
+      user,
+      {
+        name: uniqueName(rec.meta.name, names),
+        description: rec.meta.description,
+        category: rec.meta.category,
+        tags: [...rec.meta.tags],
+        templateId: rec.meta.templateId,
+        doc: structuredClone(rec.doc),
+      },
+      thumb,
+    );
   }
 
   async remove(user: User, id: string) {
@@ -231,8 +215,9 @@ export class LibraryService {
     await this.repos.deleteSim(id);
   }
 
+  /** „Zuletzt geöffnet“ – rein informativ; Fehler (z. B. ohne aktive Lizenz) werden ignoriert. */
   async markOpened(id: string) {
-    await this.repos.patchSimMeta(id, (m) => ({ ...m, lastOpenedAt: new Date().toISOString() }));
+    await this.repos.patchSimMeta(id, (m) => ({ ...m, lastOpenedAt: new Date().toISOString() })).catch(() => null);
   }
 
   thumbnail(id: string) {
@@ -253,10 +238,10 @@ export class LibraryService {
   }
 
   async saveAsTemplate(user: User, doc: SceneDocument, input: { name: string; description?: string; category: SimulationCategory; tags?: string[]; visibility: Exclude<TemplateVisibility, 'builtin'> }): Promise<Template> {
-    if (!can(user, 'templates.create')) throw new LibraryError('Deine Rolle darf keine Vorlagen anlegen.');
-    if (input.visibility === 'organization' && !can(user, 'templates.publishOrganization')) throw new LibraryError('Deine Rolle darf keine Vorlagen für die Organisation veröffentlichen.');
+    if (!can(user, 'templates.create')) throw new LibraryError('Ihre Rolle darf keine Vorlagen anlegen.');
+    if (input.visibility === 'organization' && !can(user, 'templates.publishOrganization')) throw new LibraryError('Ihre Rolle darf keine Vorlagen für die Organisation veröffentlichen.');
     const name = input.name.trim();
-    if (!name) throw new LibraryError('Bitte einen Namen für die Vorlage eingeben.');
+    if (!name) throw new LibraryError('Bitte geben Sie einen Namen für die Vorlage ein.');
     const t: Template = {
       id: createId('tpl'),
       name,
@@ -276,7 +261,7 @@ export class LibraryService {
   async deleteTemplate(user: User, id: string) {
     const t = (await this.repos.listCustomTemplates()).find((x) => x.id === id);
     if (!t) throw new LibraryError('Eingebaute Vorlagen können nicht gelöscht werden.');
-    if (t.createdBy !== user.id && user.role !== 'admin') throw new LibraryError('Du darfst diese Vorlage nicht löschen.');
+    if (t.createdBy !== user.id && user.role !== 'admin') throw new LibraryError('Sie dürfen diese Vorlage nicht löschen.');
     await this.repos.deleteTemplate(id);
   }
 

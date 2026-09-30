@@ -9,7 +9,7 @@
  */
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { NavLink } from 'react-router';
-import { Archive, CircleAlert, Eye, FilePlus2, FileText, Inbox, PencilLine, RefreshCcw, Rocket, ShieldCheck, Trash2, Users } from 'lucide-react';
+import { Archive, CircleAlert, Eye, FilePlus2, FileText, Inbox, PencilLine, RefreshCcw, Rocket, ShieldCheck, Trash2, Users, UserX } from 'lucide-react';
 import { Button, EmptyState, PageHeader, Pill, SelectField, TextArea, TextField } from '@/ui/ds';
 import { Dialog } from '@/ui/common/overlays';
 import { confirmDialog } from '@/ui/ds/modals';
@@ -35,6 +35,9 @@ export function AdminTabs() {
       </NavLink>
       <NavLink to="/admin/declarations" className={({ isActive }) => (isActive ? 'is-active' : '')} data-testid="admin-tab-declarations">
         <Inbox size={14} /> Kündigungen &amp; Widerrufe
+      </NavLink>
+      <NavLink to="/admin/accounts" className={({ isActive }) => (isActive ? 'is-active' : '')} data-testid="admin-tab-accounts">
+        <UserX size={14} /> Kontoschließung &amp; Löschung
       </NavLink>
     </nav>
   );

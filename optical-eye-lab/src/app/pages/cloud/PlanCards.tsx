@@ -104,8 +104,8 @@ export function PlanCards({ current, intent, showDemo = true }: { current?: Lice
               data-testid={`plan-${p.id}`}
               data-fits={user ? String(fits) : undefined}
             >
-              {isCurrent && <span className="plan-card__badge">Dein Tarif</span>}
-              {recommended && <span className="plan-card__badge">Passend zu deinem Konto</span>}
+              {isCurrent && <span className="plan-card__badge">Ihr Tarif</span>}
+              {recommended && <span className="plan-card__badge">Passend zu Ihrem Konto</span>}
               <h3 className="plan-card__name">{p.name}</h3>
               <p className="plan-card__price">
                 <strong data-testid={`price-${p.id}`}>{price.label}</strong>

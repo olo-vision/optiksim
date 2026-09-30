@@ -25,8 +25,10 @@ import type { SubscriptionSnapshot } from './stripeObjects.ts';
 import { LIVE_SUBSCRIPTION_STATUSES } from './licenseStatus.ts';
 import { bearerToken, resolvePublishableKey, resolveServerKey, SERVER_CLIENT_OPTIONS } from './supabaseKeys.ts';
 import type { OpsDb } from './legalOps.ts';
+import type { AccountDb } from './accountOps.ts';
 import type { ContractData } from './mailTemplates.ts';
 import { mailerFromEnv } from './smtpMailer.ts';
+import { StripeError } from './stripeError.ts';
 
 export const env: EnvGetter = (name) => Deno.env.get(name) ?? undefined;
 
@@ -58,8 +60,19 @@ function identityClient(): SupabaseClient {
   return createClient(supabaseUrl(), resolvePublishableKey(env), SERVER_CLIENT_OPTIONS);
 }
 
-/** Benutzer-JWT prüfen → { id, email } oder null */
-async function authUser(req: Request): Promise<{ id: string; email: string } | null> {
+/** iat (Ausstellungszeit, Sekunden) aus einem bereits geprüften JWT */
+function issuedAtOf(token: string): number | undefined {
+  try {
+    const part = token.split('.')[1] ?? '';
+    const payload = JSON.parse(atob(part.replace(/-/g, '+').replace(/_/g, '/').padEnd(Math.ceil(part.length / 4) * 4, '=')));
+    return typeof payload.iat === 'number' ? payload.iat : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/** Benutzer-JWT prüfen → { id, email, issuedAt } oder null */
+async function authUser(req: Request): Promise<{ id: string; email: string; issuedAt?: number } | null> {
   const token = bearerToken(req);
   if (!token) return null;
   // a) lokal gegen die JWKS (aktuelle asymmetrische JWT-Signaturschlüssel)
@@ -67,7 +80,7 @@ async function authUser(req: Request): Promise<{ id: string; email: string } | n
     const { data, error } = await verifyCredentials({ token, apikey: null }, { auth: 'user' });
     if (!error && data?.userClaims?.id) {
       if (data.userClaims.role !== 'authenticated') return null;
-      return { id: data.userClaims.id, email: data.userClaims.email ?? '' };
+      return { id: data.userClaims.id, email: data.userClaims.email ?? '', issuedAt: issuedAtOf(token) };
     }
   } catch {
     /* JWKS nicht verfügbar → Rückfall */
@@ -76,7 +89,7 @@ async function authUser(req: Request): Promise<{ id: string; email: string } | n
   const { data, error } = await identityClient().auth.getUser(token);
   if (error || !data.user) return null;
   if (data.user.role && data.user.role !== 'authenticated') return null;
-  return { id: data.user.id, email: data.user.email ?? '' };
+  return { id: data.user.id, email: data.user.email ?? '', issuedAt: issuedAtOf(token) };
 }
 
 /* ------------------------------------------------------------------------------------------------ */
@@ -221,6 +234,27 @@ function opsDb(admin: SupabaseClient): OpsDb {
   };
 }
 
+/** Kontoverwaltung (Migration 20261001090000_cloud_content_accounts.sql) */
+function accountDb(admin: SupabaseClient): AccountDb {
+  return {
+    async getProfile(userId) {
+      const { data, error } = await admin.from('profiles').select('role, email, first_name, last_name, institution_id').eq('user_id', userId).maybeSingle();
+      fail(error);
+      return (data ?? null) as Awaited<ReturnType<AccountDb['getProfile']>>;
+    },
+    async deleteAccountData(userId, initiatedBy) {
+      const { data, error } = await admin.rpc('delete_account_data', { p_user: userId, p_initiated_by: initiatedBy });
+      fail(error);
+      return (data ?? { ok: true }) as Awaited<ReturnType<AccountDb['deleteAccountData']>>;
+    },
+    async deleteAuthUser(userId) {
+      const { error } = await admin.auth.admin.deleteUser(userId);
+      // bereits gelöscht → in Ordnung (wiederholter Aufruf)
+      if (error && !/not.?found/i.test(error.message)) throw new DbError(error.message);
+    },
+  };
+}
+
 /* ------------------------------------------------------------------------------------------------ */
 /* Stripe                                                                                           */
 /* ------------------------------------------------------------------------------------------------ */
@@ -246,8 +280,8 @@ const stripe: StripeApi = {
     const res = await fetch(url, { method, headers, body });
     const data = (await res.json().catch(() => ({}))) as Record<string, unknown>;
     if (!res.ok) {
-      const err = (data.error ?? {}) as { type?: string; code?: string; message?: string };
-      throw new Error(`Stripe ${res.status} ${err.type ?? ''} ${err.code ?? ''}: ${err.message ?? 'Fehler'}`.slice(0, 300));
+      const err = (data.error ?? {}) as { type?: string; code?: string; message?: string; param?: string };
+      throw new StripeError(res.status, err.type ?? '', err.code ?? '', err.message ?? 'Fehler', err.param ?? null);
     }
     return data;
   },
@@ -280,6 +314,12 @@ export function realDeps(): Deps {
     markRenewal: (...a) => lazyOps().markRenewal(...a),
     pendingContractConfirmations: (...a) => lazyOps().pendingContractConfirmations(...a),
   };
+  const lazyAccounts = (): AccountDb => accountDb((admin ??= createServerAdminClient()));
+  const accounts: AccountDb = {
+    getProfile: (...a) => lazyAccounts().getProfile(...a),
+    deleteAccountData: (...a) => lazyAccounts().deleteAccountData(...a),
+    deleteAuthUser: (...a) => lazyAccounts().deleteAuthUser(...a),
+  };
   const log = (m: string) => console.error(m);
-  return { env, authUser, db, stripe, log, ops, mailer: mailerFromEnv(env, log) };
+  return { env, authUser, db, stripe, log, ops, mailer: mailerFromEnv(env, log), accountDb: accounts };
 }

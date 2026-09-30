@@ -59,7 +59,7 @@ export function CheckoutDialog({ plan, interval, onClose }: { plan: LicensePlan;
   return (
     <Dialog
       title="Bestellung prüfen"
-      subtitle="Im nächsten Schritt gibst du deine Zahlungsdaten sicher bei Stripe ein."
+      subtitle="Im nächsten Schritt geben Sie Ihre Zahlungsdaten sicher bei Stripe ein."
       onClose={onClose}
       width={560}
       footer={
@@ -104,7 +104,7 @@ export function CheckoutDialog({ plan, interval, onClose }: { plan: LicensePlan;
           </li>
           {isB2B(type) && (
             <li>
-              <CircleCheck size={14} /> Rechnungsanschrift und USt-IdNr. gibst du bei Stripe an – sie erscheinen auf deiner Rechnung (derzeit nur mit Sitz in Deutschland)
+              <CircleCheck size={14} /> Rechnungsanschrift und USt-IdNr. geben Sie bei Stripe an – sie erscheinen auf Ihrer Rechnung (derzeit nur mit Sitz in Deutschland)
             </li>
           )}
         </ul>
@@ -127,7 +127,7 @@ export function CheckoutDialog({ plan, interval, onClose }: { plan: LicensePlan;
         <p className="purchase__order-note" data-testid="checkout-order-note">
           <Lock size={13} />
           <span>
-            Mit „Weiter zur sicheren Zahlung“ gelangst du zur Bestellseite von Stripe. Dort gibst du deine Zahlungsdaten ein; <strong>zahlungspflichtig bestellt ist erst mit dem Klick auf „Abonnieren“</strong> auf der Stripe-Seite. Bis dahin kannst du alle Angaben ändern oder abbrechen.
+            Mit „Weiter zur sicheren Zahlung“ gelangen Sie zur Bestellseite von Stripe. Dort geben Sie Ihre Zahlungsdaten ein; <strong>zahlungspflichtig bestellt ist erst mit dem Klick auf „Abonnieren“</strong> auf der Stripe-Seite. Bis dahin können Sie alle Angaben ändern oder abbrechen.
           </span>
         </p>
         <p className="purchase__secure">
@@ -213,7 +213,7 @@ export function useDemoStart() {
   const [busy, setBusy] = useState(false);
   const started = useCallback(() => {
     setPending(null);
-    notify(`Deine Demo läuft – ${DEMO_PLAN.durationLabel} voller Zugriff.`, 'success');
+    notify(`Ihre Demo läuft – ${DEMO_PLAN.durationLabel} voller Zugriff.`, 'success');
     navigate('/dashboard', { replace: true });
   }, [navigate]);
   const begin = useCallback(async () => {

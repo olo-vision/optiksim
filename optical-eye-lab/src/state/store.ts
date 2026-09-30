@@ -464,12 +464,16 @@ export const useAppStore = create<AppState>()((set, get) => ({
 
   togglePanel: (side) => {
     const s = get();
+    // Schmale Bildschirme (Tablet, Smartphone): Panels liegen über der Szene – immer nur eines geöffnet
+    const compact = isCompactLayout();
     if (side === 'left') {
-      set({ leftPanelOpen: !s.leftPanelOpen });
-      s.setPrefs({ leftPanelOpen: !s.leftPanelOpen });
+      const open = !s.leftPanelOpen;
+      set({ leftPanelOpen: open, ...(open && compact ? { rightPanelOpen: false } : {}) });
+      s.setPrefs({ leftPanelOpen: open, ...(open && compact ? { rightPanelOpen: false } : {}) });
     } else {
-      set({ rightPanelOpen: !s.rightPanelOpen });
-      s.setPrefs({ rightPanelOpen: !s.rightPanelOpen });
+      const open = !s.rightPanelOpen;
+      set({ rightPanelOpen: open, ...(open && compact ? { leftPanelOpen: false } : {}) });
+      s.setPrefs({ rightPanelOpen: open, ...(open && compact ? { leftPanelOpen: false } : {}) });
     }
   },
   openDialog: (dialog) => set({ dialog }),
@@ -488,6 +492,12 @@ export const useAppStore = create<AppState>()((set, get) => ({
     set(patch);
   },
 }));
+
+/** Kompakte Simulator-Ansicht (Panels als Overlay, nur eines gleichzeitig) – gleiche Grenze wie in app.css */
+export const COMPACT_LAYOUT_QUERY = '(max-width: 1024px)';
+export function isCompactLayout(): boolean {
+  return typeof window !== 'undefined' && typeof window.matchMedia === 'function' && window.matchMedia(COMPACT_LAYOUT_QUERY).matches;
+}
 
 /* ------------------- Absturzsicherung (Entwurf) -------------------- */
 

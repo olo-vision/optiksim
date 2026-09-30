@@ -83,7 +83,7 @@ export function RetinoscopyPanel() {
             data-testid="sweep"
           />
         </div>
-        <p className="wb-hint">Im Bild ziehen oder den Regler bewegen, um das Lichtband über die Pupille zu schwenken. Beobachte, ob der Reflex mit oder gegen das Lichtband läuft.</p>
+        <p className="wb-hint">Im Bild ziehen oder den Regler bewegen, um das Lichtband über die Pupille zu schwenken. Beobachten Sie, ob der Reflex mit oder gegen das Lichtband läuft.</p>
       </section>
 
       <section className="wb-col">

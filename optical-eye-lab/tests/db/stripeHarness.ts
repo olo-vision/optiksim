@@ -9,7 +9,9 @@ import type { BillingDb, StripeApi } from '../../supabase/functions/_shared/hand
 import { DEFAULT_PRICE_IDS } from '../../supabase/functions/_shared/stripeConfig';
 import type { SubscriptionSnapshot } from '../../supabase/functions/_shared/stripeObjects';
 import type { OpsDb } from '../../supabase/functions/_shared/legalOps';
+import type { AccountDb } from '../../supabase/functions/_shared/accountOps';
 import type { Mailer, MailMessage } from '../../supabase/functions/_shared/mailer';
+import { StripeError } from '../../supabase/functions/_shared/stripeError';
 
 type Obj = Record<string, any>; // eslint-disable-line @typescript-eslint/no-explicit-any
 const DAY = 86400;
@@ -20,6 +22,15 @@ const nowSec = () => Math.floor(Date.now() / 1000);
 export class FakeStripe implements StripeApi {
   n = 0;
   calls: { method: string; path: string; params: Record<string, string>; key?: string }[] = [];
+  /** Kundenportal im Stripe-Dashboard gespeichert? (Standard wie ein frisch eingerichtetes Konto: ja) */
+  portalDefaultConfigured = true;
+  portalConfigs: Obj[] = [];
+  /** bei Stripe vorhandene Kunden (angelegte + addCustomer); nur bei strictCustomers geprüft */
+  customerIds = new Set<string>();
+  strictCustomers = false;
+  addCustomer(id: string) {
+    this.customerIds.add(id);
+  }
   subs = new Map<string, Obj>();
   invoices = new Map<string, Obj>();
   private idem = new Map<string, Obj>();
@@ -28,19 +39,36 @@ export class FakeStripe implements StripeApi {
     this.calls.push({ method, path, params, key });
     if (key && this.idem.has(key)) return this.idem.get(key)!;
     let res: Obj;
-    if (method === 'POST' && path === 'customers') res = { id: `cus_${++this.n}`, email: params.email, metadata: { institution_id: params['metadata[institution_id]'] } };
+    if (method === 'POST' && path === 'customers') {
+      res = { id: `cus_${++this.n}`, email: params.email, metadata: { institution_id: params['metadata[institution_id]'] } };
+      this.customerIds.add(res.id);
+    }
     else if (method === 'POST' && path === 'checkout/sessions') res = { id: `cs_${++this.n}`, url: `https://checkout.stripe.test/cs_${this.n}`, customer: params.customer };
     else if (method === 'POST' && /^checkout\/sessions\/[^/]+\/expire$/.test(path)) res = { id: path.split('/')[2], status: 'expired' };
-    else if (method === 'POST' && path === 'billing_portal/sessions') res = { id: `bps_${++this.n}`, url: `https://billing.stripe.test/p/${params.customer}` };
+    else if (method === 'POST' && path === 'billing_portal/sessions') {
+      // wie Stripe: ohne gespeicherte Standard-Konfiguration nur mit ausdrücklicher configuration
+      if (!this.portalDefaultConfigured && !params.configuration)
+        throw new StripeError(400, 'invalid_request_error', '', 'No configuration provided and your test mode default configuration has not been created. Provide a configuration or create your default by saving your customer portal settings in test mode at https://dashboard.stripe.com/test/settings/billing/portal.');
+      res = { id: `bps_${++this.n}`, url: `https://billing.stripe.test/p/${params.customer}` };
+    } else if (method === 'GET' && path === 'billing_portal/configurations') res = { object: 'list', data: structuredClone(this.portalConfigs) };
+    else if (method === 'POST' && path === 'billing_portal/configurations') {
+      const cfg = { id: `bpc_${++this.n}`, active: true, metadata: { olo: params['metadata[olo]'] }, params };
+      this.portalConfigs.push(cfg);
+      res = cfg;
+    } else if (/^customers\/[^/]+$/.test(path)) {
+      const id = decodeURIComponent(path.slice(10));
+      if (this.strictCustomers && !this.customerIds.has(id)) throw new StripeError(404, 'invalid_request_error', 'resource_missing', `No such customer: '${id}'`);
+      res = { id, object: 'customer', metadata: method === 'POST' ? params : {} };
+    }
     else if (method === 'GET' && path === 'subscriptions') res = { object: 'list', data: [...this.subs.values()].filter((x) => x.customer === params.customer).map((x) => structuredClone(x)) };
     else if (method === 'GET' && path.startsWith('subscriptions/')) {
       const s = this.subs.get(decodeURIComponent(path.slice(14)));
-      if (!s) throw new Error('Stripe 404 invalid_request_error resource_missing: No such subscription');
+      if (!s) throw new StripeError(404, 'invalid_request_error', 'resource_missing', 'No such subscription');
       res = structuredClone(s);
     } else if (method === 'POST' && /^subscriptions\/[^/]+$/.test(path)) {
       // Abo ändern (z. B. cancel_at_period_end) – wie Stripe: liefert das aktualisierte Abo
       const s = this.subs.get(decodeURIComponent(path.slice(14)));
-      if (!s) throw new Error('Stripe 404 invalid_request_error resource_missing: No such subscription');
+      if (!s) throw new StripeError(404, 'invalid_request_error', 'resource_missing', 'No such subscription');
       if (params.cancel_at_period_end !== undefined) {
         s.cancel_at_period_end = params.cancel_at_period_end === 'true';
         s.cancel_at = s.cancel_at_period_end ? s.items?.data?.[0]?.current_period_end ?? null : null;
@@ -169,4 +197,23 @@ export class FakeMailer implements Mailer {
     }
     this.sent.push(m);
   }
+}
+
+/* ------------------------------ Kontoverwaltung als service_role ------------------------------ */
+
+export function pgAccountDb(db: PGlite, h: ReturnType<typeof helpers>): AccountDb {
+  const q = <T = Obj>(sql: string, params: unknown[] = []) => h.asService(async () => (await db.query<T>(sql, params)).rows);
+  return {
+    async getProfile(userId) {
+      return ((await q<Obj>('select role, email, first_name, last_name, institution_id from public.profiles where user_id = $1', [userId]))[0] ?? null) as never;
+    },
+    async deleteAccountData(userId, by) {
+      return (await q<{ r: Obj }>('select public.delete_account_data($1, $2) as r', [userId, by]))[0].r as never;
+    },
+    async deleteAuthUser(userId) {
+      // wie auth.admin.deleteUser (Supabase-intern, außerhalb der API-Rollen)
+      await db.exec('reset role');
+      await db.query('delete from auth.users where id = $1', [userId]);
+    },
+  };
 }

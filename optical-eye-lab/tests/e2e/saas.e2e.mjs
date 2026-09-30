@@ -107,10 +107,11 @@ await safe('Registrierung Business', async () => {
   check('Hinweis „noch nicht aktiv“', (await page.textContent('h1')).includes('noch nicht aktiv'));
   await shot('02_license_pending');
   await page.goto(url('account'));
-  const details = await page.textContent('[data-testid="account-details"]');
+  await vis('[data-testid="account-institution"]');
+  const details = await page.textContent('.account-page');
   check('Konto: Name, E-Mail, Typ, Firma', details.includes('Anna Auge') && details.includes('anna@optik.de') && details.includes('Betrieb / Business') && details.includes('Optik Auge GmbH'), details.slice(0, 160));
   check('Konto: „Business-Lizenz – 1 Betriebsstandort“', (await page.textContent('[data-testid="account-license"]')) === 'Business-Lizenz – 1 Betriebsstandort');
-  check('Konto: „Deine Lizenz ist noch nicht aktiviert.“', await vis('[data-testid="pending-note"]'));
+  check('Konto: „Ihre Lizenz ist noch nicht aktiviert.“', await vis('[data-testid="pending-note"]'));
   await shot('03_account');
 });
 
@@ -256,7 +257,7 @@ await safe('E-Mail-Bestätigung', async () => {
   await register({ type: 'private', first: 'Emil', last: 'Einstein', email: 'emil@privat.de' });
   check('Hinweis „E-Mail bestätigen“', await vis('[data-testid="confirm-notice"]'));
   await login('emil@privat.de');
-  check('Unbestätigt: Anmeldung verweigert', await vis('text=bestätige zuerst deine E-Mail-Adresse'));
+  check('Unbestätigt: Anmeldung verweigert', await vis('text=bestätigen Sie zuerst Ihre E-Mail-Adresse'));
   await mock('confirmEmail', 'emil@privat.de');
   await login('emil@privat.de');
   await page.waitForURL(/\/license/);

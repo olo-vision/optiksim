@@ -20,6 +20,12 @@ import {
   CloudError,
   type AdminAccountRow,
   type AdminConsentRow,
+  type AccountOverview,
+  type CloudSimulationFull,
+  type CloudSimulationPatch,
+  type CloudSimulationRow,
+  type CloudTemplateRow,
+  type NewCloudSimulation,
   type AdminDeclarationRow,
   type ConsumerDeclarationInput,
   type ConsumerDeclarationReceipt,
@@ -95,6 +101,15 @@ interface MockDb {
   /** Rechtsbetrieb: Kündigungen/Widerrufe über die Website, versendete E-Mails (Nachbau) */
   declarations: AdminDeclarationRow[];
   mails: { kind: string; to: string; subject: string; relatedKey: string | null; at: string }[];
+  /** 0.10.0: Cloud-Inhalte je Benutzer (Nachbau von user_simulations/user_templates/user_preferences + RLS) */
+  sims: (CloudSimulationFull & { thumbnail: string | null; origin: string | null })[];
+  templates: CloudTemplateRow[];
+  prefs: Record<string, Record<string, unknown>>;
+  deletedAccounts: { formerUserId: string; emailHash: string; deletedAt: string }[];
+  /** Zeitpunkt der letzten (Neu-)Anmeldung – Nachbau des JWT-iat für die Löschung */
+  authAt: number;
+  /** E-Mail-Änderung, die noch bestätigt werden muss (Testhaken confirmEmailChange) */
+  pendingEmail?: { userId: string; email: string } | null;
 }
 
 interface MockConsent {
@@ -162,10 +177,10 @@ function requiredDocsOf(db: MockDb, context: LegalConsentContext, type: Institut
 function recordConsents(db: MockDb, userId: string, context: LegalConsentContext, ids: string[], extra: { sessionId?: string | null; plan?: string | null; interval?: BillingInterval | null } = {}) {
   const p = db.profiles.find((x) => x.userId === userId)!;
   const inst = db.institutions.find((i) => i.id === p.institutionId)!;
-  if (ids.some((id) => db.legalDocs.find((d) => d.id === id)?.status !== 'active')) throw new CloudError('Die Rechtstexte wurden inzwischen aktualisiert. Bitte prüfe sie und bestätige erneut.', undefined, 'OLC02');
+  if (ids.some((id) => db.legalDocs.find((d) => d.id === id)?.status !== 'active')) throw new CloudError('Die Rechtstexte wurden inzwischen aktualisiert. Bitte prüfen Sie sie und bestätigen Sie erneut.', undefined, 'OLC02');
   const req = requiredDocsOf(db, context, inst.type).filter((d) => d.required);
   const already = (docId: string) => context !== 'checkout' && db.consents.some((c) => c.userId === userId && c.documentId === docId);
-  if (req.some((d) => !ids.includes(d.id) && !already(d.id))) throw new CloudError('Bitte bestätige alle erforderlichen Rechtstexte.', undefined, 'OLC01');
+  if (req.some((d) => !ids.includes(d.id) && !already(d.id))) throw new CloudError('Bitte bestätigen Sie alle erforderlichen Rechtstexte.', undefined, 'OLC01');
   for (const d of req) {
     if (!ids.includes(d.id) || already(d.id)) continue;
     const doc = db.legalDocs.find((x) => x.id === d.id)!;
@@ -207,6 +222,11 @@ const empty = (): MockDb => ({
   demoGrants: [],
   declarations: [],
   mails: [],
+  sims: [],
+  templates: [],
+  prefs: {},
+  deletedAccounts: [],
+  authAt: 0,
 });
 const DAY = 86400000;
 const LIVE: SubscriptionStatus[] = ['active', 'trialing', 'past_due', 'unpaid', 'paused'];
@@ -250,17 +270,29 @@ export class MockBackend implements CloudBackend {
   readonly kind = 'mock' as const;
   private listeners = new Set<(e: AuthEvent, u: CloudUser | null) => void>();
 
-  constructor(private storage: Pick<Storage, 'getItem' | 'setItem' | 'removeItem'> = window.localStorage) {}
+  /** Tests: eigene Sitzung je Instanz (mehrere Geräte/Konten gegen denselben „Server“) */
+  private own: { sessionUserId: string | null; authAt: number } | null;
+
+  constructor(
+    private storage: Pick<Storage, 'getItem' | 'setItem' | 'removeItem'> = window.localStorage,
+    opts: { isolatedSession?: boolean } = {},
+  ) {
+    this.own = opts.isolatedSession ? { sessionUserId: null, authAt: 0 } : null;
+  }
 
   private read(): MockDb {
+    let db: MockDb;
     try {
       const raw = this.storage.getItem(KEY);
-      return raw ? { ...empty(), ...(JSON.parse(raw) as MockDb) } : empty();
+      db = raw ? { ...empty(), ...(JSON.parse(raw) as MockDb) } : empty();
     } catch {
-      return empty();
+      db = empty();
     }
+    if (this.own) Object.assign(db, this.own);
+    return db;
   }
   private write(db: MockDb) {
+    if (this.own) this.own = { sessionUserId: db.sessionUserId, authAt: db.authAt };
     this.storage.setItem(KEY, JSON.stringify(db));
   }
   private emit(e: AuthEvent, u: CloudUser | null) {
@@ -329,8 +361,9 @@ export class MockBackend implements CloudBackend {
     const db = this.read();
     const u = db.users.find((x) => x.email === emailRaw.trim().toLowerCase());
     if (!u || u.password !== password) throw new CloudError('E-Mail oder Passwort ist nicht korrekt.', 'password');
-    if (!u.confirmed) throw new CloudError('Bitte bestätige zuerst deine E-Mail-Adresse (Link in der Bestätigungs-E-Mail).');
+    if (!u.confirmed) throw new CloudError('Bitte bestätigen Sie zuerst Ihre E-Mail-Adresse (Link in der Bestätigungs-E-Mail).');
     db.sessionUserId = u.id;
+    db.authAt = Date.now();
     this.write(db);
     this.emit('SIGNED_IN', this.asUser(u));
     return this.asUser(u);
@@ -352,7 +385,7 @@ export class MockBackend implements CloudBackend {
   async updatePassword(password: string) {
     const db = this.read();
     const u = db.users.find((x) => x.id === db.sessionUserId);
-    if (!u) throw new CloudError('Deine Sitzung ist abgelaufen. Bitte melde dich erneut an.');
+    if (!u) throw new CloudError('Ihre Sitzung ist abgelaufen. Bitte melden Sie sich erneut an.');
     if (password.length < 8) throw new CloudError('Das Passwort muss mindestens 8 Zeichen haben.', 'password');
     u.password = password;
     this.write(db);
@@ -522,8 +555,8 @@ export class MockBackend implements CloudBackend {
 
   private sessionAccount(db: MockDb) {
     const p = db.profiles.find((x) => x.userId === db.sessionUserId);
-    if (!p) throw new CloudError('Bitte melde dich an.', undefined, 'unauthenticated');
-    if (p.role !== 'institution_admin' && p.role !== 'super_admin') throw new CloudError('Nur die Administration deiner Institution kann das Abonnement verwalten.', undefined, 'forbidden');
+    if (!p) throw new CloudError('Bitte melden Sie sich an.', undefined, 'unauthenticated');
+    if (p.role !== 'institution_admin' && p.role !== 'super_admin') throw new CloudError('Nur die Administration Ihrer Institution kann das Abonnement verwalten.', undefined, 'forbidden');
     const inst = db.institutions.find((i) => i.id === p.institutionId)!;
     return { p, inst, lic: db.licenses.find((l) => l.institutionId === inst.id) ?? null };
   }
@@ -535,10 +568,10 @@ export class MockBackend implements CloudBackend {
     const { p, inst, lic } = this.sessionAccount(db);
     if (interval !== 'monthly' && interval !== 'yearly') throw new CloudError('Unbekanntes Abrechnungsintervall.', undefined, 'unknown_interval');
     if (!['private', 'business', 'education'].includes(plan)) throw new CloudError('Unbekannter Tarif.', undefined, 'unknown_plan');
-    if (!planAllowedFor(inst.type, plan)) throw new CloudError('Dieser Tarif passt nicht zu deinem Kontotyp.', undefined, 'plan_mismatch');
+    if (!planAllowedFor(inst.type, plan)) throw new CloudError('Dieser Tarif passt nicht zu Ihrem Kontotyp.', undefined, 'plan_mismatch');
     if (inst.type !== 'private' && (inst.country ?? 'DE').toUpperCase() !== 'DE') throw new CloudError(B2B_COUNTRY_MESSAGE, undefined, 'b2b_country');
-    if (lic?.source === 'manual' && lic.status === 'active') throw new CloudError('Für deine Institution ist eine Sonderlizenz freigeschaltet. Bitte wende dich an den Support.', undefined, 'manual_license');
-    if (db.subscriptions.some((x) => x.institutionId === inst.id && LIVE.includes(x.status))) throw new CloudError('Es besteht bereits ein Abonnement. Du kannst es unter „Abonnement verwalten“ ändern.', undefined, 'subscription_exists');
+    if (lic?.source === 'manual' && lic.status === 'active') throw new CloudError('Für Ihre Institution ist eine Sonderlizenz freigeschaltet. Bitte wenden Sie sich an den Support.', undefined, 'manual_license');
+    if (db.subscriptions.some((x) => x.institutionId === inst.id && LIVE.includes(x.status))) throw new CloudError('Es besteht bereits ein Abonnement. Sie können es unter „Abonnement verwalten“ ändern.', undefined, 'subscription_exists');
     // wie die Edge Function: Zustimmungen prüfen, erst dann Kunde + Session, Protokoll mit Session-ID
     const probe = structuredClone(db);
     recordConsents(probe, p.userId, 'checkout', consentDocumentIds, {});
@@ -685,10 +718,10 @@ export class MockBackend implements CloudBackend {
     if (input.website?.trim()) return { id: null, receivedAt, confirmationSent: false };
     const name = input.name.trim();
     const email = input.email.trim().toLowerCase();
-    if (!name) throw new CloudError('Bitte gib deinen Namen an.', 'name');
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email)) throw new CloudError('Bitte gib die E-Mail-Adresse deines Kundenkontos an.', 'email');
+    if (!name) throw new CloudError('Bitte geben Sie Ihren Namen an.', 'name');
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email)) throw new CloudError('Bitte geben Sie die E-Mail-Adresse Ihres Kundenkontos an.', 'email');
     const cancellationType = input.kind === 'cancellation' ? input.cancellationType ?? 'ordinary' : null;
-    if (cancellationType === 'extraordinary' && !input.reason?.trim()) throw new CloudError('Bitte gib bei einer außerordentlichen Kündigung den Grund an.', 'reason');
+    if (cancellationType === 'extraordinary' && !input.reason?.trim()) throw new CloudError('Bitte geben Sie bei einer außerordentlichen Kündigung den Grund an.', 'reason');
     const db = this.read();
     const recent = db.declarations.filter((d) => d.email === email && Date.parse(d.receivedAt) > Date.now() - 3600_000).length;
     const profile = db.profiles.find((p) => p.email.toLowerCase() === email);
@@ -721,7 +754,7 @@ export class MockBackend implements CloudBackend {
         row.cancelAt = live.currentPeriodEnd;
       }
       const to = profile?.email ?? email;
-      db.mails.push({ kind: `${input.kind}_confirmation`, to, subject: input.kind === 'withdrawal' ? 'Eingangsbestätigung deines Widerrufs' : 'Eingangsbestätigung deiner Kündigung', relatedKey: row.id, at: receivedAt });
+      db.mails.push({ kind: `${input.kind}_confirmation`, to, subject: input.kind === 'withdrawal' ? 'Eingangsbestätigung Ihres Widerrufs' : 'Eingangsbestätigung Ihrer Kündigung', relatedKey: row.id, at: receivedAt });
       db.mails.push({ kind: 'declaration_notice', to: 'info@olo-vision.de', subject: input.kind === 'withdrawal' ? 'Widerruf eingegangen' : 'Kündigung eingegangen', relatedKey: row.id, at: receivedAt });
       row.confirmationSentAt = receivedAt;
       row.notifiedAt = receivedAt;
@@ -748,12 +781,262 @@ export class MockBackend implements CloudBackend {
     this.write(db);
   }
 
+  /* ------------------------------ Cloud-Inhalte (0.10.0) – Nachbau mit RLS-Regeln ------------------------------ */
+
+  private contentUser(db: MockDb) {
+    const p = db.profiles.find((x) => x.userId === db.sessionUserId);
+    if (!p) throw new CloudError('Ihre Sitzung ist abgelaufen. Bitte melden Sie sich erneut an.', undefined, 'session');
+    return p;
+  }
+  /** wie content_write_allowed(): Konto aktiv und Lizenz aktiv (inkl. Demo/Frist) */
+  private assertCanWrite(db: MockDb) {
+    const p = this.contentUser(db);
+    const acc: CloudAccount = { userId: p.userId, email: p.email, profile: p, institution: db.institutions.find((i) => i.id === p.institutionId) ?? null, license: db.licenses.find((l) => l.institutionId === p.institutionId) ?? null };
+    if (p.accountStatus === 'closed' || !hasActiveLicense(acc)) throw new CloudError('Zum Speichern ist eine aktive Lizenz erforderlich. Ihre bereits gespeicherten Inhalte bleiben erhalten.', undefined, 'OLL01');
+    return p;
+  }
+  private simRow(r: MockDb['sims'][number]): CloudSimulationRow {
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const { doc: _d, thumbnail: _t, origin: _o, ...row } = r;
+    return structuredClone(row);
+  }
+
+  async listSimulations() {
+    await this.delay();
+    const db = this.read();
+    const p = this.contentUser(db);
+    return db.sims.filter((r) => r.ownerUserId === p.userId).map((r) => this.simRow(r));
+  }
+
+  async getSimulation(id: string): Promise<CloudSimulationFull | null> {
+    const db = this.read();
+    const p = this.contentUser(db);
+    const r = db.sims.find((x) => x.id === id && x.ownerUserId === p.userId);
+    return r ? { ...this.simRow(r), doc: structuredClone(r.doc) } : null;
+  }
+
+  async insertSimulation(sim: NewCloudSimulation) {
+    await this.delay();
+    const db = this.read();
+    const p = this.assertCanWrite(db);
+    if (db.sims.some((x) => x.id === sim.id)) throw new CloudError('Diese Simulation existiert bereits.', undefined, 'exists');
+    const now = new Date().toISOString();
+    const created = sim.createdAt && sim.createdAt < now ? sim.createdAt : now;
+    const row: MockDb['sims'][number] = {
+      id: sim.id,
+      ownerUserId: p.userId,
+      institutionId: p.institutionId,
+      visibility: 'private',
+      name: sim.name,
+      description: sim.description,
+      category: sim.category,
+      tags: [...sim.tags],
+      favorite: sim.favorite,
+      archived: sim.archived,
+      templateId: sim.templateId,
+      moduleId: sim.moduleId,
+      summary: sim.summary,
+      schemaVersion: sim.schemaVersion,
+      docRevision: 1,
+      hasThumbnail: !!sim.thumbnail,
+      createdAt: created,
+      updatedAt: sim.updatedAt && sim.updatedAt < now ? (sim.updatedAt > created ? sim.updatedAt : created) : now,
+      lastOpenedAt: sim.lastOpenedAt,
+      doc: structuredClone(sim.doc),
+      thumbnail: sim.thumbnail,
+      origin: sim.origin ?? null,
+    };
+    db.sims.push(row);
+    this.write(db);
+    return this.simRow(row);
+  }
+
+  async updateSimulation(id: string, patch: CloudSimulationPatch, expectedRevision?: number | null) {
+    const db = this.read();
+    const p = this.assertCanWrite(db);
+    const r = db.sims.find((x) => x.id === id && x.ownerUserId === p.userId);
+    if (!r) return null;
+    if (expectedRevision != null && r.docRevision !== expectedRevision) return null;
+    const docChanged = patch.doc !== undefined && JSON.stringify(patch.doc) !== JSON.stringify(r.doc);
+    const contentChanged = docChanged || ['name', 'description', 'category', 'tags', 'archived', 'summary'].some((k) => (patch as Record<string, unknown>)[k] !== undefined && JSON.stringify((patch as Record<string, unknown>)[k]) !== JSON.stringify((r as unknown as Record<string, unknown>)[k]));
+    for (const [k, v] of Object.entries(patch)) {
+      if (v === undefined) continue;
+      if (k === 'thumbnail') {
+        r.thumbnail = v as string | null;
+        r.hasThumbnail = !!v;
+      } else (r as unknown as Record<string, unknown>)[k] = structuredClone(v);
+    }
+    if (docChanged) r.docRevision += 1;
+    if (contentChanged) r.updatedAt = new Date().toISOString();
+    this.write(db);
+    return this.simRow(r);
+  }
+
+  async deleteSimulation(id: string) {
+    const db = this.read();
+    const p = this.contentUser(db);
+    db.sims = db.sims.filter((x) => !(x.id === id && x.ownerUserId === p.userId));
+    this.write(db);
+  }
+
+  async getSimulationThumbnail(id: string) {
+    const db = this.read();
+    const p = this.contentUser(db);
+    return db.sims.find((x) => x.id === id && x.ownerUserId === p.userId)?.thumbnail ?? null;
+  }
+
+  async listTemplates() {
+    const db = this.read();
+    const p = this.contentUser(db);
+    return structuredClone(db.templates.filter((t) => t.ownerUserId === p.userId));
+  }
+
+  async saveTemplate(t: Omit<CloudTemplateRow, 'ownerUserId'>) {
+    const db = this.read();
+    const p = this.assertCanWrite(db);
+    const other = db.templates.find((x) => x.id === t.id && x.ownerUserId !== p.userId);
+    if (other) throw new CloudError('Dafür fehlen die Berechtigungen.');
+    db.templates = [...db.templates.filter((x) => x.id !== t.id), { ...structuredClone(t), ownerUserId: p.userId }];
+    this.write(db);
+  }
+
+  async deleteTemplate(id: string) {
+    const db = this.read();
+    const p = this.contentUser(db);
+    db.templates = db.templates.filter((x) => !(x.id === id && x.ownerUserId === p.userId));
+    this.write(db);
+  }
+
+  async getPreferences() {
+    const db = this.read();
+    const p = this.contentUser(db);
+    return db.prefs[p.userId] ? structuredClone(db.prefs[p.userId]) : null;
+  }
+
+  async savePreferences(prefs: Record<string, unknown>) {
+    const db = this.read();
+    const p = this.contentUser(db);
+    db.prefs[p.userId] = structuredClone(prefs);
+    this.write(db);
+  }
+
+  /* ------------------------------------ Konto (0.10.0) ------------------------------------ */
+
+  private overview(db: MockDb): AccountOverview {
+    const p = this.contentUser(db);
+    const sub = this.currentSub(db, p.institutionId);
+    const live = !!sub && LIVE.includes(sub.status);
+    return {
+      accountStatus: p.accountStatus === 'closed' ? 'closed' : 'active',
+      closedAt: p.closedAt ?? null,
+      deletionDueAt: p.deletionDueAt ?? null,
+      simulations: db.sims.filter((x) => x.ownerUserId === p.userId).length,
+      templates: db.templates.filter((x) => x.ownerUserId === p.userId).length,
+      liveSubscription: live,
+      subscriptionStatus: live ? sub!.status : null,
+      cancelAtPeriodEnd: live ? sub!.cancelAtPeriodEnd : false,
+      currentPeriodEnd: live ? sub!.currentPeriodEnd : null,
+      canClose: !live || sub!.cancelAtPeriodEnd,
+      canDelete: !live || sub!.cancelAtPeriodEnd,
+    };
+  }
+
+  async accountOverview() {
+    await this.delay();
+    return this.overview(this.read());
+  }
+
+  async closeAccount() {
+    await this.delay();
+    const db = this.read();
+    const p = this.contentUser(db);
+    if (!this.overview(db).canClose) throw new CloudError('Bitte kündigen Sie zuerst Ihr Abonnement. Danach können Sie Ihr Konto schließen.', undefined, 'OLA01');
+    p.accountStatus = 'closed';
+    p.closedAt ??= new Date().toISOString();
+    p.deletionDueAt ??= new Date(Date.now() + 365 * DAY).toISOString();
+    this.write(db);
+    return this.overview(db);
+  }
+
+  async reopenAccount() {
+    await this.delay();
+    const db = this.read();
+    const p = this.contentUser(db);
+    p.accountStatus = 'active';
+    p.closedAt = null;
+    p.deletionDueAt = null;
+    this.write(db);
+    return this.overview(db);
+  }
+
+  async reauthenticate(password: string) {
+    await this.delay();
+    const db = this.read();
+    const u = db.users.find((x) => x.id === db.sessionUserId);
+    if (!u) throw new CloudError('Ihre Sitzung ist abgelaufen. Bitte melden Sie sich erneut an.');
+    if (u.password !== password) throw new CloudError('Das aktuelle Passwort ist nicht korrekt.', 'password', 'invalid_credentials');
+    db.authAt = Date.now();
+    this.write(db);
+  }
+
+  async changeEmail(newEmail: string) {
+    await this.delay();
+    const email = newEmail.trim().toLowerCase();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email)) throw new CloudError('Bitte geben Sie eine gültige E-Mail-Adresse ein.', 'email');
+    const db = this.read();
+    const u = db.users.find((x) => x.id === db.sessionUserId);
+    if (!u) throw new CloudError('Ihre Sitzung ist abgelaufen. Bitte melden Sie sich erneut an.');
+    if (u.email === email) throw new CloudError('Die neue E-Mail-Adresse entspricht der bisherigen.', 'email');
+    if (db.users.some((x) => x.email === email)) throw new CloudError('Für diese E-Mail-Adresse existiert bereits ein Konto.', 'email');
+    // Nachbau: Bestätigungslink sofort „geklickt“ (in Supabase erst nach Bestätigung wirksam)
+    db.pendingEmail = { userId: u.id, email };
+    this.write(db);
+  }
+
+  async changePassword(currentPassword: string, newPassword: string) {
+    await this.reauthenticate(currentPassword);
+    await this.updatePassword(newPassword);
+  }
+
+  async deleteAccount(confirm: string, targetUserId?: string) {
+    await this.delay();
+    const db = this.read();
+    const caller = this.contentUser(db);
+    if (confirm.trim().toUpperCase() !== 'LÖSCHEN') throw new CloudError('Bitte bestätigen Sie die Löschung mit dem Wort „LÖSCHEN“.', undefined, 'confirm_required');
+    if (Date.now() - db.authAt > 10 * 60 * 1000) throw new CloudError('Bitte bestätigen Sie die Löschung mit Ihrem Passwort.', 'password', 'reauth_required');
+    const target = targetUserId && targetUserId !== caller.userId ? targetUserId : caller.userId;
+    if (target !== caller.userId && caller.role !== 'super_admin') throw new CloudError('Nicht erlaubt.', undefined, 'forbidden');
+    const p = db.profiles.find((x) => x.userId === target);
+    if (!p) return;
+    const sub = this.currentSub(db, p.institutionId);
+    if (sub && LIVE.includes(sub.status) && !sub.cancelAtPeriodEnd) throw new CloudError('Es besteht noch ein laufendes Abonnement. Bitte kündigen Sie es zuerst – danach ist die Löschung möglich.', undefined, 'subscription_active');
+    db.deletedAccounts.push({ formerUserId: target, emailHash: `sha256:${p.email.length}`, deletedAt: new Date().toISOString() });
+    db.sims = db.sims.filter((x) => x.ownerUserId !== target);
+    db.templates = db.templates.filter((x) => x.ownerUserId !== target);
+    delete db.prefs[target];
+    const inst = db.institutions.find((i) => i.id === p.institutionId);
+    if (inst && !db.profiles.some((x) => x.institutionId === inst.id && x.userId !== target)) Object.assign(inst, { name: 'Gelöschtes Konto', contactName: null, addressLine1: null, addressLine2: null, postalCode: null, city: null, vatId: null, contactPosition: null });
+    db.profiles = db.profiles.filter((x) => x.userId !== target);
+    db.users = db.users.filter((x) => x.id !== target);
+    db.mails.push({ kind: 'account_deleted', to: p.email, subject: 'Ihr OLO-LAB3D-Konto wurde gelöscht', relatedKey: target, at: new Date().toISOString() });
+    if (db.sessionUserId === target) db.sessionUserId = null;
+    this.write(db);
+  }
+
+  async adminClosedAccounts() {
+    const db = this.read();
+    this.requireSuperAdmin(db);
+    return db.profiles
+      .filter((p) => p.accountStatus === 'closed')
+      .map((p) => ({ userId: p.userId, email: p.email, institutionName: db.institutions.find((i) => i.id === p.institutionId)?.name ?? '', closedAt: p.closedAt ?? null, deletionDueAt: p.deletionDueAt ?? null, simulations: db.sims.filter((x) => x.ownerUserId === p.userId).length }));
+  }
+
   /** wie Edge Function create-customer-portal: nur der eigene Kunde */
   async openCustomerPortal(): Promise<string> {
     await this.delay();
     const db = this.read();
     const { inst } = this.sessionAccount(db);
-    if (!db.customers[inst.id]) throw new CloudError('Für dein Konto gibt es noch kein Abonnement.', undefined, 'no_customer');
+    if (!db.customers[inst.id]) throw new CloudError('Für Ihr Konto besteht noch kein Abonnement. Die Abo-Verwaltung steht nach Ihrer ersten Buchung zur Verfügung.', undefined, 'no_customer');
     const origin = typeof window !== 'undefined' ? window.location.origin : '';
     return `${origin}/account?mock_portal=${encodeURIComponent(db.customers[inst.id])}`;
   }
@@ -797,6 +1080,27 @@ export class MockBackend implements CloudBackend {
         this.write(db);
         this.emit('PASSWORD_RECOVERY', this.asUser(u));
       },
+      /** simuliert den Klick auf den Bestätigungslink der E-Mail-Änderung (wie Supabase: danach gilt die neue Adresse) */
+      confirmEmailChange: () => {
+        const db = this.read();
+        const pend = db.pendingEmail;
+        if (!pend) throw new Error('keine E-Mail-Änderung offen');
+        const u = db.users.find((x) => x.id === pend.userId)!;
+        u.email = pend.email;
+        const p = db.profiles.find((x) => x.userId === pend.userId);
+        if (p) p.email = pend.email; // Trigger handle_user_email_change
+        db.pendingEmail = null;
+        this.write(db);
+        this.emit('USER_UPDATED', this.asUser(u));
+        return pend.email;
+      },
+      /** Anzahl gespeicherter Cloud-Simulationen eines Kontos (Tests) */
+      cloudSimCount: (email: string) => {
+        const db = this.read();
+        const { u } = byEmail(db, email);
+        return db.sims.filter((x) => x.ownerUserId === u.id).length;
+      },
+      pendingEmail: () => this.read().pendingEmail?.email ?? null,
       reset: () => this.storage.removeItem(KEY),
       /** Verzögerung des simulierten Webhooks nach dem Checkout */
       setWebhookDelay: (ms: number) => {

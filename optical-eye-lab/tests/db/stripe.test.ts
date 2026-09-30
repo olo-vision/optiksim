@@ -316,11 +316,10 @@ describe('Sicherheit', () => {
 
   it('Migration ist wiederholbar (idempotent)', async () => {
     // Wiederholt eingespielt wird jeweils die neueste Migration (ältere Dateien werden von neueren
-    // Funktionsversionen abgelöst). Phase 7.1 und Phase 8 müssen gefahrlos erneut laufen.
+    // Funktionsversionen abgelöst). Rechte-Migration (7.1) und die neueste müssen gefahrlos erneut laufen.
     const before = await h.licenseOf(alice);
     await db.exec(readMigration('20260929090000_service_role_grants.sql'));
-    await db.exec(readMigration('20260929120000_demo_billing_legal.sql'));
-    await db.exec(readMigration('20260930090000_legal_operations.sql'));
+    await db.exec(readMigration('20261001090000_cloud_content_accounts.sql'));
     expect(await h.licenseOf(alice)).toEqual(before);
   });
 });

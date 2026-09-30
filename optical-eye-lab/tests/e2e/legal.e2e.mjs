@@ -172,7 +172,7 @@ await safe('Kündigungsbutton', async () => {
   check('Pflichtfelder werden geprüft', (await page.locator('.ds-field__error').count()) >= 2);
   const form = page.locator('[data-testid="declaration-form"]');
   await form.getByLabel('Vor- und Nachname').fill('Moni Monat');
-  await form.getByLabel('E-Mail-Adresse deines Kundenkontos').fill('MONI@web.de');
+  await form.getByLabel('E-Mail-Adresse Ihres Kundenkontos').fill('MONI@web.de');
   await form.getByPlaceholder('z. B. Private monatlich').fill('Private monatlich');
   await page.click('[data-testid="declaration-next"]');
   check('Bestätigungsseite mit Zusammenfassung', (await vis('[data-testid="declaration-confirm"]')) && (await text('[data-testid="declaration-summary"]')).includes('Ordentliche Kündigung zum nächstmöglichen Zeitpunkt'));
@@ -190,7 +190,7 @@ await safe('Kündigungsbutton', async () => {
   await open('kuendigen');
   const f2 = page.locator('[data-testid="declaration-form"]');
   await f2.getByLabel('Vor- und Nachname').fill('Niemand');
-  await f2.getByLabel('E-Mail-Adresse deines Kundenkontos').fill('niemand@example.org');
+  await f2.getByLabel('E-Mail-Adresse Ihres Kundenkontos').fill('niemand@example.org');
   await page.click('[data-testid="declaration-next"]');
   await page.click('[data-testid="declaration-submit"]');
   check('Unbekannte Adresse: gleiche Eingangsbestätigung (kein Hinweis auf Konto)', (await vis('[data-testid="declaration-done"]')) && !(await text('[data-testid="declaration-done"]')).match(/kein Konto|nicht gefunden/i));
@@ -201,11 +201,11 @@ await safe('Widerrufsbutton & Admin', async () => {
   await open('widerrufen');
   const form = page.locator('[data-testid="declaration-form"]');
   await form.getByLabel('Vor- und Nachname').fill('Karla Kunde');
-  await form.getByLabel('E-Mail-Adresse deines Kundenkontos').fill('karla@web.de');
+  await form.getByLabel('E-Mail-Adresse Ihres Kundenkontos').fill('karla@web.de');
   await page.click('[data-testid="declaration-next"]');
   check('Button „Widerruf bestätigen“', (await text('[data-testid="declaration-submit"]')) === 'Widerruf bestätigen');
   await page.click('[data-testid="declaration-submit"]');
-  check('Widerruf eingegangen', (await text('[data-testid="declaration-done"]')).includes('Dein Widerruf ist eingegangen'));
+  check('Widerruf eingegangen', (await text('[data-testid="declaration-done"]')).includes('Ihr Widerruf ist eingegangen'));
   check('Widerrufsbestätigung versendet', (await db()).mails.some((m) => m.kind === 'withdrawal_confirmation' && m.to === 'karla@web.de'));
 
   await login('karla@web.de');

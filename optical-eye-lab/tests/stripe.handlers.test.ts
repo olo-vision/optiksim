@@ -124,6 +124,7 @@ function setup(opts: { user?: string | null; customers?: Record<string, string>;
       if (path === 'checkout/sessions') return { id: 'cs_1', url: 'https://checkout.stripe.test/cs_1' };
       if (path.endsWith('/expire')) return { id: 'cs_1', status: 'expired' };
       if (path === 'billing_portal/sessions') return { url: `https://portal.test/${params.customer}` };
+      if (method === 'GET' && path.startsWith('customers/')) return { id: decodeURIComponent(path.slice(10)) };
       if (path.startsWith('subscriptions/')) return { id: path.split('/')[1], customer: 'cus_1', status: 'active', items: { data: [] } };
       if (path === 'subscriptions') return { data: (opts.stripeLive ?? []).includes(params.customer) ? [{ id: 'sub_live', status: 'active' }] : [{ id: 'sub_old', status: 'canceled' }] };
       throw new Error(path);
@@ -233,7 +234,9 @@ describe('create-customer-portal', () => {
     const res = await handlePortal(req({ customer: 'cus_foreign' }), t.deps);
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ url: 'https://portal.test/cus_own' });
-    expect(t.calls[0].params).toMatchObject({ customer: 'cus_own', return_url: 'http://localhost:5173/account' });
+    // zuerst den eigenen Kunden bei Stripe prüfen, dann die Portal-Sitzung für genau diesen Kunden
+    expect(t.calls.map((c) => `${c.method} ${c.path}`)).toEqual(['GET customers/cus_own', 'POST billing_portal/sessions']);
+    expect(t.calls[1].params).toMatchObject({ customer: 'cus_own', return_url: 'http://localhost:5173/account' });
   });
   it('ohne eigenen Customer 404 (auch wenn andere existieren), ohne Anmeldung 401', async () => {
     const t = setup({ user: 'u_private', customers: { inst_b: 'cus_own' } });
@@ -344,7 +347,7 @@ describe('Unerwartete Fehler', () => {
     const res = await handleCheckout(req({ plan: 'business' }), t.deps);
     expect(res.status).toBe(500);
     expect(res.headers.get('Access-Control-Allow-Origin')).toBe('http://localhost:5173');
-    expect(await res.json()).toEqual({ error: 'Interner Fehler. Bitte versuche es später erneut.', code: 'internal' });
+    expect(await res.json()).toEqual({ error: 'Interner Fehler. Bitte versuchen Sie es später erneut.', code: 'internal' });
     expect(logs).toEqual(['create-checkout-session: permission denied for table profiles']);
     expect((await handlePortal(req({}), t.deps)).status).toBe(500);
   });

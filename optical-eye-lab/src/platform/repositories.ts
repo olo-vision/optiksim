@@ -5,6 +5,7 @@
 import type { SceneDocument } from '@/model/types';
 import { KEYS, type StorageProvider } from './storage';
 import type { Organization, Session, SimulationMetadata, SimulationRecord, Template, User } from './models';
+import type { ContentRepository } from './content';
 import type { DemoCredential } from './demoCredentials';
 import { normalizePrefs, type UserPreferences } from './preferences';
 import { migrateDocument } from '@/state/persistence';
@@ -31,7 +32,8 @@ export interface DraftRecord {
 
 const arr = <T,>(v: T[] | null) => (Array.isArray(v) ? v : []);
 
-export class Repositories {
+export class Repositories implements ContentRepository {
+  readonly contentKind = 'local' as const;
   constructor(readonly storage: StorageProvider) {}
 
   /**
@@ -171,6 +173,38 @@ export class Repositories {
       return next;
     });
   }
+  /* ContentRepository (lokal) */
+  async createSim(meta: SimulationMetadata, doc: SceneDocument, thumbnail?: string | null): Promise<SimulationMetadata> {
+    await this.saveSim(meta, doc);
+    if (!thumbnail) return meta;
+    try {
+      await this.saveThumb(meta.id, thumbnail);
+      return (await this.patchSimMeta(meta.id, (m) => ({ ...m, hasThumbnail: true }))) ?? meta;
+    } catch {
+      return meta; // Vorschaubild ist optional (Speicherplatz)
+    }
+  }
+  async commitSim(id: string, doc: SceneDocument, patch: (m: SimulationMetadata) => SimulationMetadata, thumbnail?: string | null): Promise<SimulationMetadata | null> {
+    let thumbOk = false;
+    if (thumbnail) {
+      try {
+        await this.saveThumb(id, thumbnail);
+        thumbOk = true;
+      } catch {
+        /* Vorschaubild ist optional – Speicherplatzmangel darf das Speichern nicht verhindern */
+      }
+    }
+    await this.saveSimDoc(id, doc);
+    return this.patchSimMeta(id, (m) => {
+      const next = patch(m);
+      return thumbOk ? { ...next, hasThumbnail: true } : next;
+    });
+  }
+  async renameSimDoc(id: string, name: string) {
+    const rec = await this.getSim(id);
+    if (rec) await this.saveSimDoc(id, { ...rec.doc, name });
+  }
+
   deleteSim(id: string) {
     return this.serial(async () => {
       await this.removeFrom<SimulationMetadata>(KEYS.simIndex, (m) => m.id !== id);
@@ -192,10 +226,10 @@ export class Repositories {
   async listCustomTemplates(): Promise<Template[]> {
     return arr(await this.storage.get<Template[]>(KEYS.templates));
   }
-  saveTemplate(t: Template) {
+  saveTemplate(t: Template): Promise<void> {
     return this.serial(() => this.upsert(KEYS.templates, t));
   }
-  deleteTemplate(id: string) {
+  deleteTemplate(id: string): Promise<void> {
     return this.serial(() => this.removeFrom<Template>(KEYS.templates, (t) => t.id !== id));
   }
 }

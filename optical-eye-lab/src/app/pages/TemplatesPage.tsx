@@ -89,8 +89,8 @@ export function TemplatesPage() {
             title={q || cat !== 'all' ? 'Keine passenden eigenen Vorlagen' : 'Noch keine eigenen Vorlagen'}
             text={
               can(user, 'templates.create')
-                ? 'Öffne eine Simulation und wähle im Simulationsmenü „Als Vorlage speichern“ – oder nutze das Kartenmenü in „Meine Simulationen“.'
-                : 'Eigene Vorlagen können Trainer/innen und Administrator/innen anlegen. Vorlagen deiner Organisation erscheinen hier automatisch.'
+                ? 'Öffnen Sie eine Simulation und wählen Sie im Simulationsmenü „Als Vorlage speichern“ – oder nutzen Sie das Kartenmenü in „Meine Simulationen“.'
+                : 'Eigene Vorlagen können Trainer/innen und Administrator/innen anlegen. Vorlagen Ihrer Organisation erscheinen hier automatisch.'
             }
           />
         )}
@@ -107,7 +107,7 @@ export function TemplatesPage() {
             ))}
           </div>
         ) : (
-          <EmptyState icon={SearchX} title="Keine Treffer" text="Passe Suche oder Kategorie an." />
+          <EmptyState icon={SearchX} title="Keine Treffer" text="Bitte passen Sie Suche oder Kategorie an." />
         )}
       </section>
     </div>

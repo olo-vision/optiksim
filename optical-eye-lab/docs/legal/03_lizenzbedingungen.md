@@ -77,9 +77,15 @@ Dem Kunden und allen Nutzenden ist insbesondere untersagt,
 
 8.4 Während der Demo gelten die Nutzungsregeln des zum Kundentyp passenden Tarifs.
 
-## 9. Lokale Speicherung von Simulationen
+## 9. Speicherung von Simulationen im Kundenkonto
 
-Simulationen, Vorlagen und Einstellungen werden derzeit **lokal im Browser** des verwendeten Geräts gespeichert und nicht an OLO Vision übertragen. OLO Vision übernimmt dafür **keine serverseitige Speicherung oder Datensicherung**. Das Löschen von Browserdaten, ein anderer Browser oder ein anderes Gerät können dazu führen, dass diese Daten nicht mehr verfügbar sind. Der Kunde sichert wichtige Arbeiten über die Exportfunktion.
+9.1 Simulationen, eigene Vorlagen und Einstellungen werden im **Kundenkonto** gespeichert (Server in der EU) und stehen nach der Anmeldung auf jedem unterstützten Gerät zur Verfügung. Nur gerätebezogene Darstellungseinstellungen (z. B. Grafikqualität, Panelbreiten) und nicht gespeicherte Zwischenstände zur Absturzsicherung verbleiben im Browser des jeweiligen Geräts.
+
+9.2 Die Inhalte sind an das Kundenkonto gebunden, nicht an die Lizenz. Endet die Lizenz, bleiben sie erhalten; sie können weiterhin angesehen und exportiert, aber erst nach einer erneuten Buchung wieder bearbeitet werden.
+
+9.3 Wird dieselbe Simulation gleichzeitig auf mehreren Geräten bearbeitet, weist OLO-LAB3D vor dem Überschreiben eines neueren Stands darauf hin und bietet an, den eigenen Stand als Kopie zu speichern.
+
+9.4 Es wird empfohlen, wichtige Arbeiten zusätzlich über die Exportfunktion zu sichern.
 
 ## 10. Verfügbarkeit und Wartung
 
@@ -97,4 +103,8 @@ Verstößt der Kunde gegen diese Bedingungen, kann OLO Vision den Zugang nach vo
 
 ## 13. Ende der Nutzung
 
-Mit Ende des Vertrags bzw. der Demo endet das Nutzungsrecht. Das Kundenkonto bleibt bestehen, bis der Kunde seine Löschung verlangt oder die in der Datenschutzerklärung genannte Löschfrist abgelaufen ist; eine erneute Buchung ist in dieser Zeit möglich.
+13.1 Mit Ende des Vertrags bzw. der Demo endet das Nutzungsrecht. Das Kundenkonto und die gespeicherten Inhalte bleiben bestehen, bis der Kunde das Konto löscht oder die in der Datenschutzerklärung genannte Speicherdauer abgelaufen ist; eine erneute Buchung ist in dieser Zeit möglich und stellt die gespeicherten Inhalte wieder zur Bearbeitung bereit.
+
+13.2 Der Kunde kann sein Konto in der Kontoverwaltung **schließen**: Die Nutzung ruht, die Inhalte bleiben 12 Monate erhalten und das Konto kann in dieser Zeit wieder geöffnet werden. Danach wird es gelöscht.
+
+13.3 Der Kunde kann sein Konto in der Kontoverwaltung jederzeit **endgültig löschen**. Konto, Simulationen, Vorlagen und Einstellungen werden dabei sofort und unwiderruflich gelöscht; gesetzlich aufzubewahrende Rechnungs- und Vertragsnachweise bleiben bis zum Ende der Aufbewahrungsfrist gespeichert. Ein laufendes, nicht gekündigtes Abonnement ist vorher zu kündigen.

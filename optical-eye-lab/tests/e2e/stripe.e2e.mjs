@@ -88,7 +88,7 @@ await safe('Tarifregel', async () => {
   await register({ type: 'business', first: 'Greta', last: 'Glas', email: EMAIL, org: 'Glas & Co' });
   await page.waitForURL(/\/license/);
   await page.waitForSelector('[data-testid="plan-cards"]');
-  check('Passender Tarif (Business) hervorgehoben', (await page.getAttribute('[data-testid="plan-business"]', 'data-fits')) === 'true' && (await text('[data-testid="plan-business"]')).includes('Passend zu deinem Konto'));
+  check('Passender Tarif (Business) hervorgehoben', (await page.getAttribute('[data-testid="plan-business"]', 'data-fits')) === 'true' && (await text('[data-testid="plan-business"]')).includes('Passend zu Ihrem Konto'));
   check('Private für Betrieb gesperrt', await page.locator('[data-testid="choose-private"]').isDisabled() && (await text('[data-testid="choose-private"]')).includes('Nur für Privatkonten'));
   check('Education für Betrieb gesperrt', await page.locator('[data-testid="choose-education"]').isDisabled() && (await text('[data-testid="choose-education"]')).includes('Nur für Bildungseinrichtungen'));
   check('Buchbar: „Jetzt buchen“', (await text('[data-testid="choose-business"]')).includes('Jetzt buchen') && !(await page.locator('[data-testid="choose-business"]').isDisabled()));
@@ -142,7 +142,7 @@ await safe('Abo-Übersicht', async () => {
   const other = await page.evaluate(() => Object.values(JSON.parse(localStorage.getItem('olo-mock-cloud')).customers));
   check('Genau ein Stripe-Kunde', other.length === 1, other.join(','));
   await open('pricing');
-  check('Pricing: „Dein Tarif“ bei laufendem Abo', (await text('[data-testid="plan-business"]')).includes('Dein Tarif') && (await vis('[data-testid="plan-business"] [data-testid="manage-subscription"]')));
+  check('Pricing: „Ihr Tarif“ bei laufendem Abo', (await text('[data-testid="plan-business"]')).includes('Ihr Tarif') && (await vis('[data-testid="plan-business"] [data-testid="manage-subscription"]')));
 });
 
 // 5) Zahlung fehlgeschlagen → Frist (Zugriff bleibt, klarer Hinweis)

@@ -1,6 +1,6 @@
 # OLO-LAB3D (Optical Eye Lab)
 
-Interaktive 3D-Simulationsumgebung für Augenoptik – **0.9.0: Rechtstexte & Rechtsbetrieb** (Entwürfe 1.0, Kündigungs-/Widerrufsbutton, Vertragsbestätigung, USt.-Ausweis). Details: [docs/LEGAL_OPERATIONS.md](docs/LEGAL_OPERATIONS.md) · Phase 8: [docs/PHASE8_DEMO_LEGAL.md](docs/PHASE8_DEMO_LEGAL.md) · Stripe-Abos (Phase 7): [docs/STRIPE_SUBSCRIPTIONS.md](docs/STRIPE_SUBSCRIPTIONS.md) · SaaS-Grundstruktur (Phase 6): [docs/SAAS_AUTH_FOUNDATION.md](docs/SAAS_AUTH_FOUNDATION.md).
+Interaktive 3D-Simulationsumgebung für Augenoptik – **0.10.0: Cloud-Speicherung & Kontoverwaltung** (Simulationen, Vorlagen und Einstellungen im Kundenkonto, sichere Übernahme lokaler Daten, Konto schließen/löschen, repariertes Kundenportal, durchgängige „Sie“-Ansprache, responsiver Simulator). Details: [docs/CLOUD_ACCOUNT.md](docs/CLOUD_ACCOUNT.md) · 0.9.0: Rechtstexte & Rechtsbetrieb (Entwürfe 1.0, Kündigungs-/Widerrufsbutton, Vertragsbestätigung, USt.-Ausweis). Details: [docs/LEGAL_OPERATIONS.md](docs/LEGAL_OPERATIONS.md) · Phase 8: [docs/PHASE8_DEMO_LEGAL.md](docs/PHASE8_DEMO_LEGAL.md) · Stripe-Abos (Phase 7): [docs/STRIPE_SUBSCRIPTIONS.md](docs/STRIPE_SUBSCRIPTIONS.md) · SaaS-Grundstruktur (Phase 6): [docs/SAAS_AUTH_FOUNDATION.md](docs/SAAS_AUTH_FOUNDATION.md).
 
 Davor: **Phase 5: modulares Dashboard** (Skiaskopie, Refraktion, Patientensicht, Kontaktlinse und Brillenglas als eigenständige Module) und **fachlicher Physik-Review** (u. a. Glasdicke aus der Geometrie). Details: [docs/PHASE5.md](docs/PHASE5.md) · Untersuchungsmodi: [docs/PHASE4.md](docs/PHASE4.md) · Anwendung: [docs/PHASE3.md](docs/PHASE3.md) · Optik/Physik: [docs/PHASE2.md](docs/PHASE2.md).
 
@@ -35,6 +35,7 @@ Weitere Befehle:
 | `npm run dev:local` | lokale Demo wie Phase 3–5, ohne Backend und ohne Lizenzprüfung |
 | `npm run dev:e2e-cloud` | Mock-Backend im Browser (für SaaS-E2E, Port 5174) |
 | `npm run test:db` | RLS-/Trigger-Tests der Migration gegen echtes Postgres (PGlite) |
+| `npm run test:e2e:cloud` | Cloud-Speicherung, zweites Gerät, Übernahme lokaler Daten, Lizenzende/Neukauf, Konto schließen/löschen, 5 Viewports (Mock-Modus, Port 5174) |
 | `npm run test:e2e:saas` | Browser-Tests Registrierung → Tarif → Checkout → Freischaltung → Frist/Kündigung, Demo, Jahrespreise, Rechtstexte, Kündigungs-/Widerrufsbutton (Mock-Modus) |
 | `npm run legal:seed` | SQL-Import der Rechtstext-Entwürfe aus `docs/legal/` neu erzeugen |
 | `npm run test:stripe` | Stripe-Handler, Abo-Logik, Demo, Zustimmungen, Rechte und Webhook Ende-zu-Ende gegen PostgreSQL |

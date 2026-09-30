@@ -20,3 +20,7 @@ verify_jwt = false
 # Zeitgesteuerte E-Mails (pg_cron → pg_net); geschützt über den Header x-cron-secret (Secret CRON_SECRET).
 [functions.mail-jobs]
 verify_jwt = false
+
+# Endgültige Kontolöschung: Benutzer-JWT (frische Anmeldung) wird zusätzlich in der Function geprüft.
+[functions.delete-account]
+verify_jwt = true

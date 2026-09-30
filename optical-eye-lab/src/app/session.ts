@@ -13,6 +13,7 @@ import { applyAccent } from '@/platform/branding';
 import { DEFAULT_USER_PREFS, type UserPreferences } from '@/platform/preferences';
 import { StorageQuotaError } from '@/platform/storage';
 import { CLOUD_ENABLED } from '@/cloud/config';
+import { mergePrefs, syncedPrefs, type PrefsRemote } from './cloudPrefs';
 
 interface SessionState {
   status: 'booting' | 'ready' | 'error';
@@ -22,6 +23,8 @@ interface SessionState {
   sims: SimulationMetadata[];
   templates: Template[];
   libraryLoaded: boolean;
+  /** Bibliothek konnte nicht geladen werden (z. B. keine Verbindung) */
+  libraryError: string | null;
   /** Ergebnis der einmaligen Datenübernahme aus Phase 1/2 (nur beim ersten Start) */
   migration: MigrationReport | null;
   /** Speicher nicht dauerhaft (LocalStorage gesperrt) */
@@ -43,12 +46,42 @@ let prefsTimer: number | undefined;
 /** Noch nicht geschriebene Einstellungen (entprellt) – werden beim Verlassen der Seite sofort gesichert. */
 let pendingPrefs: { userId: string; prefs: UserPreferences } | null = null;
 
+/** Cloud-Modus: Einstellungen zusätzlich im Konto speichern (kontobezogener Anteil) */
+let prefsRemote: PrefsRemote | null = null;
+let remoteTimer: number | undefined;
+let pendingRemote: UserPreferences | null = null;
+
+/** Vom Cloud-Modus vor der Aktivierung des Arbeitsbereichs gesetzt (null = nur lokal) */
+export function setPrefsRemote(r: PrefsRemote | null) {
+  void flushRemotePrefs();
+  prefsRemote = r;
+}
+
+function flushRemotePrefs(): Promise<void> {
+  window.clearTimeout(remoteTimer);
+  const p = pendingRemote;
+  pendingRemote = null;
+  // Fehler (z. B. offline) nicht melden: das Gerät behält den Stand, der nächste Speichervorgang holt ihn nach
+  if (p && prefsRemote) return prefsRemote.save(syncedPrefs(p)).catch(() => undefined);
+  return Promise.resolve();
+}
+
+/** Ausstehende Einstellungen sofort speichern (vor dem Abmelden) */
+export function flushPendingPrefs(): Promise<void> {
+  window.clearTimeout(prefsTimer);
+  const p = pendingPrefs;
+  pendingPrefs = null;
+  const local = p ? platform.savePrefs(p.userId, p.prefs).catch(() => undefined) : Promise.resolve();
+  return Promise.all([local, flushRemotePrefs()]).then(() => undefined);
+}
+
 function flushPrefs() {
   window.clearTimeout(prefsTimer);
   const p = pendingPrefs;
   pendingPrefs = null;
   // LocalStorageProvider schreibt synchron im ersten Schritt – auch in „pagehide“ zuverlässig
   if (p) platform.savePrefs(p.userId, p.prefs).catch((e) => useAppStore.getState().notify(errorMessage(e), 'warning'));
+  void flushRemotePrefs();
 }
 
 if (typeof window !== 'undefined') {
@@ -58,23 +91,40 @@ if (typeof window !== 'undefined') {
 
 /** Fehlermeldung für die Oberfläche */
 export function errorMessage(e: unknown): string {
-  if (e instanceof StorageQuotaError) return 'Der lokale Speicher des Browsers ist voll. Lösche nicht mehr benötigte Simulationen oder exportiere sie als Datei.';
+  if (e instanceof StorageQuotaError) return 'Der lokale Speicher des Browsers ist voll. Bitte löschen Sie nicht mehr benötigte Simulationen oder exportieren Sie sie als Datei.';
   if (e instanceof Error && e.message) return e.message;
   return 'Unbekannter Fehler.';
 }
 
 async function activate(user: User) {
-  const [org, prefs] = await Promise.all([platform.repos.getOrg(user.organizationId), platform.loadPrefs(user.id)]);
+  const [org, devicePrefs] = await Promise.all([platform.repos.getOrg(user.organizationId), platform.loadPrefs(user.id)]);
+  let prefs = devicePrefs;
+  const remote = prefsRemote;
+  if (remote) {
+    try {
+      const account = await remote.load();
+      if (account) prefs = mergePrefs(devicePrefs, account);
+      // Erstes Gerät nach der Umstellung: bisherige Einstellungen in das Konto übernehmen
+      else void remote.save(syncedPrefs(devicePrefs)).catch(() => undefined);
+    } catch {
+      /* keine Verbindung: Einstellungen dieses Geräts verwenden */
+    }
+  }
   useAppStore.getState().applyUserPrefs(prefs);
   configureStoreHooks({
     persistPrefs: (p: UserPreferences) => {
       pendingPrefs = { userId: user.id, prefs: p };
       window.clearTimeout(prefsTimer);
       prefsTimer = window.setTimeout(flushPrefs, 250);
+      if (prefsRemote) {
+        pendingRemote = p;
+        window.clearTimeout(remoteTimer);
+        remoteTimer = window.setTimeout(flushRemotePrefs, 1000);
+      }
     },
   });
   applyAccent(org?.branding.accentColor);
-  useSession.setState({ user, org, sims: [], templates: [], libraryLoaded: false });
+  useSession.setState({ user, org, sims: [], templates: [], libraryLoaded: false, libraryError: null });
   await useSession.getState().refreshLibrary();
   return user;
 }
@@ -87,12 +137,14 @@ export const useSession = create<SessionState>()((set, get) => ({
   sims: [],
   templates: [],
   libraryLoaded: false,
+  libraryError: null,
   migration: null,
   volatile: false,
 
   boot: async () => {
     try {
-      const res = await platform.init();
+      // SaaS-Modus: keine lokalen Demo-Konten/-Simulationen anlegen (Inhalte liegen im Kundenkonto)
+      const res = await platform.init({ seedDemo: !CLOUD_ENABLED });
       const volatile = (platform.storage as { volatile?: boolean }).volatile === true;
       set({ migration: res.migration, volatile });
       // SaaS-Modus: Die Anmeldung stammt aus Supabase (cloudSession) – keine lokale Sitzung wiederherstellen
@@ -118,14 +170,21 @@ export const useSession = create<SessionState>()((set, get) => ({
     useAppStore.getState().applyUserPrefs(DEFAULT_USER_PREFS);
     useAppStore.setState({ simId: null, shell: null });
     applyAccent(undefined);
-    set({ user: null, org: null, sims: [], templates: [], libraryLoaded: false });
+    set({ user: null, org: null, sims: [], templates: [], libraryLoaded: false, libraryError: null });
   },
 
   refreshLibrary: async () => {
     const user = get().user;
     if (!user) return;
-    const [sims, templates] = await Promise.all([platform.library.list(user), platform.library.listTemplates(user)]);
-    set({ sims, templates, libraryLoaded: true });
+    try {
+      const [sims, templates] = await Promise.all([platform.library.list(user), platform.library.listTemplates(user)]);
+      // Inzwischen abgemeldet/gewechselt? Dann das Ergebnis verwerfen.
+      if (get().user?.id !== user.id) return;
+      set({ sims, templates, libraryLoaded: true, libraryError: null });
+    } catch (e) {
+      if (get().user?.id !== user.id) return;
+      set({ libraryLoaded: true, libraryError: errorMessage(e) });
+    }
   },
 
   refreshUser: async () => {

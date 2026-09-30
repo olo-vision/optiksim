@@ -174,7 +174,7 @@ function Banners() {
       {volatile && (
         <div className="banner banner--warn">
           <Info size={15} />
-          <span>Der Browser erlaubt keinen dauerhaften lokalen Speicher. Änderungen gehen beim Schließen verloren – exportiere wichtige Simulationen als Datei.</span>
+          <span>Der Browser erlaubt keinen dauerhaften lokalen Speicher. Änderungen gehen beim Schließen verloren – exportieren Sie wichtige Simulationen als Datei.</span>
         </div>
       )}
       {migration && (migration.migratedScenes > 0 || migration.recoveredAutosave) && (
@@ -182,7 +182,7 @@ function Banners() {
           <Info size={15} />
           <span>
             Daten aus der Vorversion übernommen: {migration.migratedScenes} gespeicherte Szene{migration.migratedScenes === 1 ? '' : 'n'}
-            {migration.recoveredAutosave ? ' und der letzte Arbeitsstand' : ''}. Du findest sie in „Meine Simulationen“ mit dem Tag „Übernommen“.
+            {migration.recoveredAutosave ? ' und der letzte Arbeitsstand' : ''}. Sie finden sie in „Meine Simulationen“ mit dem Tag „Übernommen“.
           </span>
           <Button size="sm" variant="ghost" onClick={() => navigate('/simulations?tag=%C3%9Cbernommen')}>
             Anzeigen
@@ -195,7 +195,7 @@ function Banners() {
       {user?.role === 'guest' && (
         <div className="banner banner--accent">
           <Info size={15} />
-          <span>Du nutzt den Gastzugang (bis zu {GUEST_SIMULATION_LIMIT} Simulationen). Mit einem lokalen Konto kannst du unbegrenzt speichern und Einstellungen behalten.</span>
+          <span>Sie nutzen den Gastzugang (bis zu {GUEST_SIMULATION_LIMIT} Simulationen). Mit einem lokalen Konto können Sie unbegrenzt speichern und Einstellungen behalten.</span>
           <Button
             size="sm"
             variant="primary"

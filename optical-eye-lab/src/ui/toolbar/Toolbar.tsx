@@ -82,7 +82,10 @@ export function Toolbar({ leading, trailing }: { leading?: ReactNode; trailing?:
             onClick={() => s.setSimulationLive(!s.simulationLive)}
           />
         </div>
-        <IconButton icon={Keyboard} label="Tastenkürzel" shortcut="?" onClick={() => s.openDialog('shortcuts')} />
+        {/* Tastenkürzel: auf Touch-Geräten/Smartphones ausgeblendet (keine Tastatur) */}
+        <span className="toolbar__kbd">
+          <IconButton icon={Keyboard} label="Tastenkürzel" shortcut="?" onClick={() => s.openDialog('shortcuts')} />
+        </span>
         <IconButton icon={Settings} label="Schnelleinstellungen" onClick={() => s.openDialog('settings')} />
         {trailing}
       </div>

@@ -1577,11 +1577,11 @@ body.is-scrubbing * {
 }
 .add-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(min(220px, 100%), 1fr));
   gap: 8px;
 }
 .add-grid--compact {
-  grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(min(170px, 100%), 1fr));
 }
 .add-card {
   display: flex;
@@ -1940,6 +1940,77 @@ body.is-scrubbing * {
     grid-template-columns: 1fr 1fr;
   }
   .measure-bar__label {
+    display: none;
+  }
+}
+
+/* --------------------------------------------------------------------------
+   Kompakte Ansicht (Tablet hoch, Smartphone) – Grenze = COMPACT_LAYOUT_QUERY
+   Panels liegen über der Szene (nur eines offen), Leisten scrollen statt zu überlaufen.
+   -------------------------------------------------------------------------- */
+@media (max-width: 1024px) {
+  .app.has-left,
+  .app.has-right {
+    --left-inset: var(--gap);
+    --right-inset: var(--gap);
+  }
+  .panel--left {
+    width: min(var(--left-w), calc(100vw - var(--gap) * 2));
+  }
+  .panel--right {
+    width: min(var(--right-w), calc(100vw - var(--gap) * 2));
+  }
+  .toolbar {
+    display: flex;
+    gap: 8px;
+  }
+  .toolbar__group--left,
+  .toolbar__group--right {
+    flex: none;
+  }
+  .toolbar__group--center {
+    flex: 1 1 auto;
+    min-width: 0;
+    justify-content: flex-start;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+  .toolbar__group--center::-webkit-scrollbar {
+    display: none;
+  }
+  .toolbar__group--center > * {
+    flex: none;
+  }
+  .measure-bar {
+    max-width: 100%;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+}
+.toolbar__kbd {
+  display: contents;
+}
+@media (max-width: 640px), (hover: none) and (pointer: coarse) {
+  .toolbar__kbd {
+    display: none;
+  }
+}
+@media (max-width: 640px) {
+  .app {
+    --gap: 6px;
+  }
+  .toolbar {
+    padding: 0 6px;
+  }
+  .statusbar {
+    grid-template-columns: minmax(0, 1fr) auto;
+    padding: 0 8px;
+  }
+  .statusbar__group {
+    overflow: hidden;
+  }
+  .statusbar__group--right .statusbar__muted,
+  .statusbar__group--right .statusbar__dot {
     display: none;
   }
 }

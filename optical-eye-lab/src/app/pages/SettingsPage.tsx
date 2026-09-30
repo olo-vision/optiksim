@@ -4,7 +4,7 @@
  */
 import { useEffect, useState, type ReactNode } from 'react';
 import { NavLink, useNavigate, useParams } from 'react-router';
-import { Box, Database, Eye, Glasses, LayoutPanelLeft, MousePointer2, Palette, RotateCcw, Settings2, Sparkles, Trash2, Download, Upload } from 'lucide-react';
+import { Box, Cloud, Database, Eye, Glasses, LayoutPanelLeft, MousePointer2, Palette, RotateCcw, Settings2, Sparkles, Trash2, Download, Upload } from 'lucide-react';
 import { useAppStore } from '@/state/store';
 import { Segmented } from '@/ui/common/controls';
 import { Button, Notice, PageHeader, Pill, SettingRow, Switch } from '@/ui/ds';
@@ -16,6 +16,7 @@ import { confirmDialog } from '@/ui/ds/modals';
 import { removeDemoData, wipeAllData } from '@/platform/seed';
 import { can } from '@/platform/permissions';
 import { usePageTitle } from '../usePageTitle';
+import { CLOUD_ENABLED } from '@/cloud/config';
 import { ELEMENT_DEFINITIONS } from '@/model/elementRegistry';
 
 type SectionId = 'general' | 'appearance' | 'graphics' | 'simulation' | 'controls' | 'optics' | 'workspace' | 'data';
@@ -80,7 +81,7 @@ function DataSection() {
   const removeDemo = async () => {
     const ok = await confirmDialog({
       title: 'Demo-Daten entfernen?',
-      message: 'Das Demo-Konto „Max Mustermann“, seine Beispiel-Simulationen und die Demo-Organisation werden gelöscht. Deine eigenen Daten bleiben erhalten.',
+      message: 'Das Demo-Konto „Max Mustermann“, seine Beispiel-Simulationen und die Demo-Organisation werden gelöscht. Ihre eigenen Daten bleiben erhalten.',
       confirmLabel: 'Demo-Daten entfernen',
       tone: 'danger',
     });
@@ -103,7 +104,7 @@ function DataSection() {
   const wipe = async () => {
     const ok = await confirmDialog({
       title: 'Alle lokalen Daten löschen?',
-      message: 'Alle Konten, Einstellungen, Simulationen und Vorlagen in diesem Browser werden unwiderruflich gelöscht – auch übernommene Daten der Vorversion. Exportiere vorher, was du behalten möchtest.',
+      message: 'Alle Konten, Einstellungen, Simulationen und Vorlagen in diesem Browser werden unwiderruflich gelöscht – auch übernommene Daten der Vorversion. Exportieren Sie vorher, was Sie behalten möchten.',
       confirmLabel: 'Alles löschen',
       tone: 'danger',
     });
@@ -116,17 +117,17 @@ function DataSection() {
     <>
       <Group title="Speicherort">
         <Notice tone="info" icon={Database} title="Nur in diesem Browser gespeichert">
-          Konten, Einstellungen und Simulationen liegen im lokalen Speicher dieses Browsers auf diesem Gerät. Es findet keine Übertragung an einen Server statt. Beim Löschen der Browserdaten gehen sie verloren – exportiere wichtige Arbeiten regelmäßig.
+          Konten, Einstellungen und Simulationen liegen im lokalen Speicher dieses Browsers auf diesem Gerät. Es findet keine Übertragung an einen Server statt. Beim Löschen der Browserdaten gehen sie verloren – exportieren Sie wichtige Arbeiten regelmäßig.
         </Notice>
         <SettingRow label="Belegter Speicher" description="Browser erlauben meist ca. 5–10 MB pro Website.">
           <span className="mono">{usage === null ? '…' : formatBytes(usage)}</span>
         </SettingRow>
-        <SettingRow label="Simulationen" description="Sichtbar für dein Konto">
+        <SettingRow label="Simulationen" description="Sichtbar für Ihr Konto">
           <span className="mono">{sims.length}</span>
         </SettingRow>
       </Group>
       <Group title="Import & Export">
-        <SettingRow label="Bibliothek exportieren" description="Alle für dich sichtbaren Simulationen als JSON-Datei.">
+        <SettingRow label="Bibliothek exportieren" description="Alle für Sie sichtbaren Simulationen als Datei.">
           <Button icon={Download} onClick={() => void exportLibrary()} disabled={!sims.length || !can(user, 'simulations.export')}>
             Exportieren
           </Button>
@@ -153,6 +154,46 @@ function DataSection() {
   );
 }
 
+/** Cloud-Modus: Inhalte liegen im Kundenkonto */
+function CloudDataSection() {
+  const user = useSession((s) => s.user)!;
+  const sims = useSession((s) => s.sims);
+  const templates = useSession((s) => s.templates.filter((t) => t.visibility !== 'builtin').length);
+  const navigate = useNavigate();
+  return (
+    <>
+      <Group title="Speicherort">
+        <Notice tone="info" icon={Cloud} title="In Ihrem OLO-LAB3D-Konto gespeichert">
+          Simulationen, eigene Vorlagen und Einstellungen werden in Ihrem Konto auf Servern in der EU gespeichert und stehen Ihnen nach der Anmeldung auf jedem Gerät zur Verfügung. Endet Ihre Lizenz, bleiben die Inhalte erhalten; zum Bearbeiten ist wieder eine aktive Lizenz nötig. Grafik- und Panel-Einstellungen gelten nur für dieses Gerät.
+        </Notice>
+        <SettingRow label="Simulationen" description="In Ihrem Konto gespeichert">
+          <span className="mono">{sims.length}</span>
+        </SettingRow>
+        <SettingRow label="Eigene Vorlagen" description="In Ihrem Konto gespeichert">
+          <span className="mono">{templates}</span>
+        </SettingRow>
+      </Group>
+      <Group title="Import & Export">
+        <SettingRow label="Alle Simulationen exportieren" description="Sicherungskopie aller Simulationen als Datei (.opticsim) – z. B. vor einer Kontolöschung.">
+          <Button icon={Download} onClick={() => void exportLibrary()} disabled={!sims.length || !can(user, 'simulations.export')}>
+            Exportieren
+          </Button>
+        </SettingRow>
+        <SettingRow label="Importieren" description=".opticsim-Dateien, Bibliotheksdateien und Szenendateien der Vorversion (.oel.json).">
+          <Button icon={Upload} onClick={() => pickImportFiles()}>
+            Datei wählen …
+          </Button>
+        </SettingRow>
+      </Group>
+      <Group title="Konto und Datenschutz">
+        <SettingRow label="Konto schließen oder löschen" description="Konto schließen, endgültig löschen und weitere Datenschutzanfragen finden Sie in der Kontoverwaltung.">
+          <Button onClick={() => navigate('/account#privacy')}>Zur Kontoverwaltung</Button>
+        </SettingRow>
+      </Group>
+    </>
+  );
+}
+
 export function SettingsPage() {
   usePageTitle('Einstellungen');
   const { section: raw } = useParams();
@@ -162,7 +203,7 @@ export function SettingsPage() {
   const up = <K extends keyof UserPreferences>(k: K) => (v: UserPreferences[K]) => set({ [k]: v } as Partial<UserPreferences>);
 
   const resetAll = async () => {
-    const ok = await confirmDialog({ title: 'Einstellungen zurücksetzen?', message: 'Alle Einstellungen deines Kontos werden auf die Standardwerte gesetzt. Simulationen bleiben unverändert.', confirmLabel: 'Zurücksetzen' });
+    const ok = await confirmDialog({ title: 'Einstellungen zurücksetzen?', message: 'Alle Einstellungen Ihres Kontos werden auf die Standardwerte gesetzt. Simulationen bleiben unverändert.', confirmLabel: 'Zurücksetzen' });
     if (ok) {
       set({ ...DEFAULT_USER_PREFS, onboardingDone: true });
       useAppStore.getState().applyUserPrefs({ ...DEFAULT_USER_PREFS, onboardingDone: true });
@@ -468,14 +509,14 @@ export function SettingsPage() {
       );
       break;
     case 'data':
-      body = <DataSection />;
+      body = CLOUD_ENABLED ? <CloudDataSection /> : <DataSection />;
       break;
   }
 
   const current = SECTIONS.find((s) => s.id === section)!;
   return (
     <div className="page page--settings">
-      <PageHeader title="Einstellungen" subtitle="Gelten für dein Konto auf diesem Gerät und werden sofort übernommen." />
+      <PageHeader title="Einstellungen" subtitle={CLOUD_ENABLED ? 'Gelten für Ihr Konto und werden sofort übernommen. Grafik- und Panel-Einstellungen gelten nur für dieses Gerät.' : 'Gelten für Ihr Konto auf diesem Gerät und werden sofort übernommen.'} />
       <div className="settings">
         <nav className="settings__nav" aria-label="Einstellungsbereiche">
           {SECTIONS.map((s) => (

@@ -31,7 +31,7 @@ export function AdminOrganizationPage() {
   }, [draft?.branding.accentColor]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => () => applyAccent(useSession.getState().org?.branding.accentColor), []);
 
-  if (!org || !draft) return <div className="page"><EmptyState icon={Building2} title="Keine Organisation" text="Dein Konto ist keiner Organisation zugeordnet." /></div>;
+  if (!org || !draft) return <div className="page"><EmptyState icon={Building2} title="Keine Organisation" text="Ihr Konto ist keiner Organisation zugeordnet." /></div>;
 
   const b = draft.branding;
   const setB = (patch: Partial<Organization['branding']>) => setDraft({ ...draft, branding: { ...b, ...patch } });

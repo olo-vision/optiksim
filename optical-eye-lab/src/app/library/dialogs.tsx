@@ -95,7 +95,7 @@ function NewSimulationDialog({ initialTemplate }: { initialTemplate?: string }) 
             </span>
             <span className="tpl-option__text">
               <span className="tpl-option__name">Leere Simulation</span>
-              <span className="tpl-option__desc">Emmetropes Modellauge ohne Elemente – mit deinen Standardwerten.</span>
+              <span className="tpl-option__desc">Emmetropes Modellauge ohne Elemente – mit Ihren Standardwerten.</span>
             </span>
           </button>
           <div className="new-sim__heading">Vorlagen</div>
@@ -198,7 +198,7 @@ function SaveTemplateDialog({ doc, defaultName, defaultCategory, defaultDescript
             { value: 'private', label: 'Nur für mich' },
             { value: 'organization', label: 'Für alle in meiner Organisation', disabled: !canOrg },
           ]}
-          hint={canOrg ? 'Organisationsvorlagen sehen alle Konten deiner Organisation auf diesem Gerät.' : 'Organisationsvorlagen können Trainer/innen und Administrator/innen veröffentlichen.'}
+          hint={canOrg ? 'Organisationsvorlagen sehen alle Konten Ihrer Organisation.' : 'Organisationsvorlagen können Trainer/innen und Administrator/innen veröffentlichen.'}
         />
         <button type="submit" hidden />
       </form>

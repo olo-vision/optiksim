@@ -21,7 +21,10 @@ import type { Organization, OrganizationType, Role, User } from '@/platform/mode
 import { makeUser } from '@/platform/auth';
 import { DEFAULT_BRANDING } from '@/platform/branding';
 import { platform } from './platformInstance';
-import { useSession } from './session';
+import { flushPendingPrefs, setPrefsRemote, useSession } from './session';
+import { CloudContentStore } from './cloudContent';
+import { LocalContentMigration, type LocalImportReport } from './cloudMigration';
+import { useAppStore } from '@/state/store';
 
 let backend: CloudBackend | null = null;
 export function cloudBackend(): CloudBackend {
@@ -40,7 +43,50 @@ export function setCloudBackend(b: CloudBackend | null) {
 
 /* --------------------------- Brücke zum Arbeitsbereich --------------------------- */
 
-const ROLE_MAP: Record<AppRole, Role> = { super_admin: 'admin', institution_admin: 'trainer', user: 'member' };
+let contentStore: CloudContentStore | null = null;
+/** Aktueller Cloud-Inhaltsspeicher (null = nicht angemeldet) */
+export const cloudContentStore = () => contentStore;
+
+/** Arbeitsbereich beim Abmelden/Kontowechsel vollständig lösen: keine Zwischenspeicher des alten Kontos */
+async function detachWorkspace() {
+  if (useSession.getState().user) await useSession.getState().signOut();
+  platform.useContent(null);
+  contentStore = null;
+  setPrefsRemote(null);
+  useCloud.setState({ localImport: null });
+}
+
+let migrationRun: Promise<void> | null = null;
+/** Lokal gespeicherte Inhalte dieses Kontos übernehmen (im Hintergrund, wiederholbar) */
+function runLocalImport() {
+  const store = contentStore;
+  if (!store || migrationRun) return migrationRun;
+  migrationRun = (async () => {
+    try {
+      const report = await new LocalContentMigration(platform.repos, store, cloudBackend()).run();
+      if (contentStore !== store) return;
+      useCloud.setState({ localImport: report });
+      const n = report.imported + report.copies;
+      if (n || report.templates) {
+        await useSession.getState().refreshLibrary();
+        const parts = [n ? `${n} ${n === 1 ? 'Simulation' : 'Simulationen'}` : '', report.templates ? `${report.templates} ${report.templates === 1 ? 'Vorlage' : 'Vorlagen'}` : ''].filter(Boolean).join(' und ');
+        useAppStore.getState().notify(`${parts} aus diesem Browser in Ihr Konto übernommen.`, 'success');
+      }
+    } catch {
+      /* z. B. keine Verbindung – beim nächsten Laden erneut */
+    } finally {
+      migrationRun = null;
+    }
+  })();
+  return migrationRun;
+}
+
+/**
+ * Rolle im Arbeitsbereich. Super-Admins erhalten bewusst KEINE lokale Administratorrolle: Die Verwaltung
+ * liegt im Admin-Center (/admin, serverseitig geprüft); lokal würde „alle Simulationen sehen“ sonst Inhalte
+ * anderer Konten auf demselben Gerät zeigen.
+ */
+const ROLE_MAP: Record<AppRole, Role> = { super_admin: 'trainer', institution_admin: 'trainer', user: 'member' };
 const ORG_TYPE_MAP: Record<InstitutionType, OrganizationType> = { private: 'other', business: 'business', education: 'school' };
 
 export const workspaceUserId = (cloudUserId: string) => `sb_${cloudUserId}`;
@@ -70,6 +116,12 @@ async function activateWorkspace(account: CloudAccount) {
     ? { ...existing, firstName: p.firstName, lastName: p.lastName, displayName: [p.firstName, p.lastName].filter(Boolean).join(' ') || p.email, email: p.email, role: ROLE_MAP[p.role], organizationId: org.id, active: true }
     : makeUser({ id, firstName: p.firstName, lastName: p.lastName, email: p.email, role: ROLE_MAP[p.role], organizationId: org.id });
   await platform.repos.saveUser(user);
+  // Inhalte und Einstellungen dieses Kontos liegen in Supabase (0.10.0)
+  if (contentStore?.identity.cloudUserId !== account.userId) {
+    contentStore = new CloudContentStore(cloudBackend(), platform.repos, { cloudUserId: account.userId, workspaceUserId: id, organizationId: org.id });
+    platform.useContent(contentStore);
+    setPrefsRemote({ load: () => cloudBackend().getPreferences(), save: (prefs) => cloudBackend().savePreferences(prefs) });
+  }
   const cur = useSession.getState().user;
   if (cur?.id === user.id) {
     useSession.setState({ user, org });
@@ -102,6 +154,10 @@ interface CloudState {
   tick: () => void;
   /** Phase 8: kostenlose Demo starten (serverseitig geprüft) und Konto neu laden */
   startDemo: (consentDocumentIds: string[]) => Promise<void>;
+  /** 0.10.0: Ergebnis der Übernahme lokaler Inhalte (u. a. wartender Altbestand) */
+  localImport: LocalImportReport | null;
+  /** Altbestand dieses Geräts (frühere Version) nach Bestätigung in das Konto übernehmen */
+  importLegacy: () => Promise<number>;
 }
 
 let initRun: Promise<void> | null = null;
@@ -121,16 +177,21 @@ export const useCloud = create<CloudState>()((set, get) => {
   async function doLoad(user: CloudUser | null) {
     if (!user) {
       set({ user: null, account: null, access: 'signed-out' });
-      if (useSession.getState().user) await useSession.getState().signOut();
+      await detachWorkspace();
       return;
     }
+    // Anderes Konto als bisher (z. B. Anmeldung in einem zweiten Tab) → alten Arbeitsbereich zuerst lösen
+    if (contentStore && contentStore.identity.cloudUserId !== user.id) await detachWorkspace();
     // Benutzer, Konto und Arbeitsbereich erst gemeinsam veröffentlichen – sonst leiten Seiten, die auf
     // „angemeldet“ reagieren, mit noch unbekanntem Lizenzstatus weiter.
     const account = await cloudBackend().loadAccount(user);
     // Serverzeit übernehmen: alle Zeitprüfungen im Browser rechnen ab jetzt mit der Serverzeit
     syncServerTime(account.billing?.serverNow);
     await activateWorkspace(account);
-    set({ user, account, access: accessState(account, serverDate()), error: null });
+    const access = accessState(account, serverDate());
+    set({ user, account, access, error: null });
+    // Übernahme lokaler Daten nur mit Schreibrecht (aktive Lizenz); sonst bleiben sie unverändert liegen
+    if (canUseSimulator(access)) void runLocalImport();
   }
 
   return {
@@ -141,6 +202,7 @@ export const useCloud = create<CloudState>()((set, get) => {
     account: null,
     recovery: false,
     access: 'signed-out',
+    localImport: null,
 
     init: () => {
       if (!CLOUD_ENABLED) return Promise.resolve();
@@ -157,6 +219,8 @@ export const useCloud = create<CloudState>()((set, get) => {
             if (event === 'PASSWORD_RECOVERY') set({ recovery: true });
             if (event === 'SIGNED_OUT') void load(null);
             else if ((event === 'SIGNED_IN' || event === 'USER_UPDATED' || event === 'PASSWORD_RECOVERY') && user && user.id !== get().user?.id) void load(user).catch((e) => set({ error: translateError(e).message }));
+            // E-Mail-Änderung bestätigt: Konto neu laden (neue Adresse anzeigen)
+            else if (event === 'USER_UPDATED' && user && user.email !== get().user?.email) void load(user).catch(() => undefined);
           });
           await load(await b.getUser());
           set({ status: 'ready' });
@@ -193,11 +257,27 @@ export const useCloud = create<CloudState>()((set, get) => {
     },
 
     signOut: async () => {
+      // Offene Einstellungen noch mit der gültigen Sitzung speichern
+      await flushPendingPrefs().catch(() => undefined);
       try {
         await cloudBackend().signOut();
       } finally {
         set({ user: null, account: null, access: 'signed-out', recovery: false });
-        if (useSession.getState().user) await useSession.getState().signOut();
+        await detachWorkspace();
+      }
+    },
+
+    importLegacy: async () => {
+      const store = contentStore;
+      if (!store) return 0;
+      try {
+        const r = await new LocalContentMigration(platform.repos, store, cloudBackend()).importLegacy();
+        await useSession.getState().refreshLibrary();
+        const cur = get().localImport;
+        if (cur) set({ localImport: { ...cur, legacyPending: r.failed } });
+        return r.imported;
+      } catch (e) {
+        throw translateError(e);
       }
     },
 
@@ -227,7 +307,7 @@ export const useCloud = create<CloudState>()((set, get) => {
 
     startDemo: async (consentDocumentIds) => {
       const u = get().user;
-      if (!u) throw translateError(new Error('Bitte melde dich an.'));
+      if (!u) throw translateError(new Error('Bitte melden Sie sich an.'));
       try {
         const r = await cloudBackend().startDemo(consentDocumentIds);
         syncServerTime(r.serverNow);
@@ -270,7 +350,12 @@ export function startAccessWatch(): () => void {
     if (demo && Date.now() - lastServerCheck > 60_000) serverCheck();
   }, 1000);
   const onVisible = () => {
-    if (document.visibilityState === 'visible' && useCloud.getState().user) serverCheck();
+    if (document.visibilityState === 'visible' && useCloud.getState().user) {
+      serverCheck();
+      // Änderungen anderer Geräte übernehmen
+      contentStore?.invalidate();
+      void useSession.getState().refreshLibrary();
+    }
   };
   document.addEventListener('visibilitychange', onVisible);
   return () => {

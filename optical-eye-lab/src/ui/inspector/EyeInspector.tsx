@@ -112,7 +112,7 @@ export function EyeInspector({ eye }: { eye: EyeEntity }) {
       {doc.training?.hidden ? (
         <Section title="Trainingsfall">
           <p className="insp-hint">
-            Refraktion, Anatomie und Korrektionswerte sind verborgen. Bestimme die Refraktion in den Arbeitsbereichen Skiaskopie oder Refraktion.
+            Refraktion, Anatomie und Korrektionswerte sind verborgen. Bestimmen Sie die Refraktion in den Arbeitsbereichen Skiaskopie oder Refraktion.
           </p>
           <ReadoutRow label="Patient" value={doc.training.title} />
           <ReadoutRow label="Beschwerde" value={doc.training.complaint} />

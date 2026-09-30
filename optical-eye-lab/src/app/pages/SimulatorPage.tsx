@@ -64,7 +64,7 @@ export function NewSimulationRoute() {
 export function SimulatorPage() {
   const { id = '' } = useParams();
   const navigate = useNavigate();
-  const { state, recovery, setRecovery, metaRef, leaveWithoutGuard } = useSimulationSession(id);
+  const { state, recovery, setRecovery, metaRef, leaveWithoutGuard, retryLoad } = useSimulationSession(id);
   const docName = useAppStore((s) => (s.simId === id ? s.doc.name : ''));
   usePageTitle(docName || 'Simulation');
 
@@ -153,6 +153,21 @@ export function SimulatorPage() {
 
   /* ------------------------------ Anzeige ------------------------------ */
   if (state.status === 'loading') return <Splash message="Simulation wird geöffnet …" />;
+  if (state.status === 'error')
+    return (
+      <div className="page-center">
+        <EmptyState
+          icon={FileQuestion}
+          title="Simulation konnte nicht geladen werden"
+          text={state.message}
+          action={
+            <Button variant="primary" onClick={retryLoad}>
+              Erneut versuchen
+            </Button>
+          }
+        />
+      </div>
+    );
   if (state.status === 'missing')
     return (
       <div className="page-center">

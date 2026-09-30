@@ -8,7 +8,7 @@
  *
  * Phase 8 – Demo: Lizenz mit source = 'demo' und valid_until = Demo-Ende.
  *   'demo'       → Demo läuft (voller Zugriff)
- *   'demo-ended' → Demo abgelaufen (kein Zugriff, Seite „Deine Demo ist beendet“)
+ *   'demo-ended' → Demo abgelaufen (kein Zugriff, Seite „Ihre Demo ist beendet“)
  * „jetzt“ ist die Serverzeit (serverClock), nicht die veränderbare Systemuhr.
  */
 import type { CloudAccount } from './types';
@@ -24,12 +24,15 @@ export type AccessState =
   | 'grace'
   | 'demo'
   | 'demo-ended'
+  /** 0.10.0: Konto geschlossen – kein Zugriff, Inhalte bleiben erhalten, Konto kann wieder geöffnet werden */
+  | 'account-closed'
   | 'active';
 
 export function accessState(account: CloudAccount | null, now: Date = new Date()): AccessState {
   if (!account) return 'signed-out';
   if (!account.profile) return 'no-profile';
   if (!account.institution) return 'no-institution';
+  if (account.profile.accountStatus === 'closed') return 'account-closed';
   const l = account.license;
   if (!l) return 'no-license';
   const t = now.getTime();
@@ -64,11 +67,12 @@ export function canStartDemo(account: CloudAccount | null, state: AccessState): 
 }
 
 export const ACCESS_MESSAGE: Record<Exclude<AccessState, 'active' | 'grace' | 'demo' | 'signed-out'>, string> = {
-  'no-profile': 'Zu deinem Konto wurde noch kein Profil angelegt. Bitte wende dich an den Support.',
-  'no-institution': 'Deinem Konto ist keine Institution zugeordnet. Bitte wende dich an den Support.',
-  'no-license': 'Für deine Institution ist noch keine Lizenz vorhanden.',
-  inactive: 'Deine Lizenz ist noch nicht aktiv.',
-  expired: 'Deine Lizenz ist abgelaufen.',
-  'not-yet-valid': 'Deine Lizenz ist noch nicht gültig.',
-  'demo-ended': 'Deine OLO-LAB Demo ist beendet.',
+  'no-profile': 'Zu Ihrem Konto wurde noch kein Profil angelegt. Bitte wenden Sie sich an info@olo-vision.de.',
+  'no-institution': 'Ihrem Konto ist keine Institution zugeordnet. Bitte wenden Sie sich an info@olo-vision.de.',
+  'no-license': 'Für Ihr Konto ist noch keine Lizenz vorhanden.',
+  inactive: 'Ihre Lizenz ist noch nicht aktiv.',
+  expired: 'Ihre Lizenz ist abgelaufen.',
+  'not-yet-valid': 'Ihre Lizenz ist noch nicht gültig.',
+  'demo-ended': 'Ihre OLO-LAB Demo ist beendet.',
+  'account-closed': 'Ihr Konto ist geschlossen.',
 };

@@ -84,7 +84,7 @@ export class AccountService {
 
   async setActive(actor: User, id: string, active: boolean): Promise<User> {
     this.assertAdmin(actor);
-    if (id === actor.id && !active) throw new AuthError('Du kannst dein eigenes Konto nicht deaktivieren.');
+    if (id === actor.id && !active) throw new AuthError('Sie können Ihr eigenes Konto nicht deaktivieren.');
     const cur = await this.repos.getUser(id);
     if (!cur) throw new AuthError('Konto nicht gefunden.');
     if (!active && cur.role === 'admin' && !(await this.activeAdmins(id)).length)

@@ -148,7 +148,7 @@
 .wb-panel {
   display: grid;
   /* Spalten brechen bei schmalem Dock in neue Zeilen um (nur vertikales Scrollen) */
-  grid-template-columns: minmax(300px, 330px) repeat(auto-fit, minmax(230px, 1fr));
+  grid-template-columns: minmax(300px, 330px) repeat(auto-fit, minmax(min(230px, 100%), 1fr));
   gap: 12px;
   padding: 12px;
   align-items: start;
@@ -156,7 +156,7 @@
 /* erste Spalte = Bildansicht: eigene Spurbreite, damit sie nie in die Nachbarspalte ragt */
 .wb-panel--refraction,
 .wb-panel--patient {
-  grid-template-columns: minmax(330px, 380px) repeat(auto-fit, minmax(230px, 1fr));
+  grid-template-columns: minmax(330px, 380px) repeat(auto-fit, minmax(min(230px, 100%), 1fr));
 }
 .wb-col {
   display: flex;
@@ -479,7 +479,7 @@
 
 .patient-pair {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(200px, 100%), 1fr));
   gap: 10px;
 }
 .patient-pair--small {

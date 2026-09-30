@@ -98,7 +98,7 @@ function UserDialog({ existing, onClose, onDone }: { existing?: User; onClose: (
             value={form.password}
             onChange={(e) => setForm({ ...form, password: e.target.value })}
             error={fe('password')}
-            hint="Teile es der Person mit; sie kann es im Profil ändern. Lokale Demo-Anmeldung ohne echte Kontosicherheit."
+            hint="Teilen Sie es der Person mit; sie kann es im Profil ändern. Lokale Demo-Anmeldung ohne echte Kontosicherheit."
           />
         )}
         {err && !err.field && <p className="ds-field__error">{err.msg}</p>}
@@ -141,7 +141,7 @@ export function AdminUsersPage() {
 
   const toggleActive = async (u: User) => {
     if (u.active) {
-      const ok = await confirmDialog({ title: `${u.displayName} deaktivieren?`, message: 'Das Konto kann sich nicht mehr anmelden. Simulationen bleiben erhalten; du kannst es jederzeit wieder aktivieren.', confirmLabel: 'Deaktivieren', tone: 'danger' });
+      const ok = await confirmDialog({ title: `${u.displayName} deaktivieren?`, message: 'Das Konto kann sich nicht mehr anmelden. Simulationen bleiben erhalten; Sie können es jederzeit wieder aktivieren.', confirmLabel: 'Deaktivieren', tone: 'danger' });
       if (!ok) return;
     }
     await act(() => platform.accounts.setActive(actor, u.id, !u.active), u.active ? `${u.displayName} deaktiviert` : `${u.displayName} aktiviert`);
@@ -190,7 +190,7 @@ export function AdminUsersPage() {
                 <span>
                   <strong>
                     {u.displayName}
-                    {u.id === actor.id && <small> (du)</small>}
+                    {u.id === actor.id && <small> (Sie)</small>}
                   </strong>
                   <small>{u.email}</small>
                 </span>

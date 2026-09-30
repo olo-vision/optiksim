@@ -262,7 +262,7 @@ describe('Ende-zu-Ende: Kauf → Vertragsbestätigung, Kündigung/Widerruf, Mail
     expect(res.status).toBe(200);
     const call = stripe.calls.find((c) => c.path === 'checkout/sessions')!;
     expect(call.params['subscription_data[default_tax_rates][0]']).toBe('txr_19inkl');
-    expect(call.params['custom_text[submit][message]']).toContain('Mit Klick auf „Abonnieren“ bestellst du OLO-LAB3D Private zahlungspflichtig: 199,00 € für 12 Monate inkl. 19 % USt.; Laufzeit 12 Monate, endet automatisch');
+    expect(call.params['custom_text[submit][message]']).toContain('Mit Klick auf „Abonnieren“ bestellen Sie OLO-LAB3D Private zahlungspflichtig: 199,00 € für 12 Monate inkl. 19 % USt.; Laufzeit 12 Monate, endet automatisch');
     sessionId = (await h.rows<{ s: string }>(`select distinct checkout_session_id as s from public.legal_consents where user_id = $1 and context = 'checkout'`, [uid]))[0].s;
 
     const regB2b = await required('registration', 'business');
@@ -310,9 +310,9 @@ describe('Ende-zu-Ende: Kauf → Vertragsbestätigung, Kündigung/Widerruf, Mail
     expect(res.status).toBe(200);
     const body = await res.json();
     expect(Object.keys(body).sort()).toEqual(['confirmationSent', 'id', 'ok', 'receivedAt']);
-    const conf = mailer.sent.find((x) => x.subject.startsWith('Eingangsbestätigung deiner Kündigung'))!;
+    const conf = mailer.sent.find((x) => x.subject.startsWith('Eingangsbestätigung Ihrer Kündigung'))!;
     expect(conf.to).toBe('kunde@web.de');
-    expect(conf.text).toMatch(/Dein Vertrag endet zum \d{1,2}\. \S+ \d{4}/);
+    expect(conf.text).toMatch(/Ihr Vertrag endet zum \d{1,2}\. \S+ \d{4}/);
     const notice = mailer.sent.find((x) => x.subject.startsWith('[OLO-LAB3D] Kündigung'))!;
     expect(notice.to).toBe('info@olo-vision.de');
     expect(notice.replyTo).toBe('kunde@web.de');
@@ -351,7 +351,7 @@ describe('Ende-zu-Ende: Kauf → Vertragsbestätigung, Kündigung/Widerruf, Mail
     mailer.sent = [];
     const res = await handleConsumerRequest(post({ kind: 'withdrawal', name: 'Karla Kunde', email: 'kunde@web.de' }), deps());
     expect(res.status).toBe(200);
-    expect(mailer.sent.find((x) => x.subject.startsWith('Eingangsbestätigung deines Widerrufs'))?.to).toBe('kunde@web.de');
+    expect(mailer.sent.find((x) => x.subject.startsWith('Eingangsbestätigung Ihres Widerrufs'))?.to).toBe('kunde@web.de');
     expect(mailer.sent.find((x) => x.subject.startsWith('[OLO-LAB3D] Widerruf'))?.text).toContain('Erstattung in Stripe ausführen');
   });
 
@@ -395,7 +395,7 @@ describe('Ende-zu-Ende: Kauf → Vertragsbestätigung, Kündigung/Widerruf, Mail
     expect(b1.confirmations).toBeGreaterThanOrEqual(1);
     expect(b1.reminders.sent).toBe(1);
     expect(mailer.sent.some((m) => m.to === 'pia@web.de' && m.subject.startsWith('Vertragsbestätigung'))).toBe(true);
-    expect(mailer.sent.some((m) => m.to === 'pia@web.de' && m.subject.startsWith('Deine Jahreslizenz'))).toBe(true);
+    expect(mailer.sent.some((m) => m.to === 'pia@web.de' && m.subject.startsWith('Ihre Jahreslizenz'))).toBe(true);
     const r2 = await (await cron(env.CRON_SECRET)).json();
     expect(r2).toEqual({ confirmations: 0, reminders: { checked: 0, sent: 0 } });
   });

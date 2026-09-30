@@ -73,7 +73,7 @@ export function ProfilePage() {
 
   return (
     <div className="page page--narrow">
-      <PageHeader title="Profil" subtitle="Deine Angaben werden nur lokal auf diesem Gerät gespeichert." />
+      <PageHeader title="Profil" subtitle="Ihre Angaben werden nur lokal auf diesem Gerät gespeichert." />
       <div className="profile-grid">
         <Card>
           <div className="profile-avatar">
@@ -148,7 +148,7 @@ export function ProfilePage() {
               <TextField label="Vorname" {...f('firstName')} disabled={isGuest} autoComplete="given-name" />
               <TextField label="Nachname" optional {...f('lastName')} disabled={isGuest} autoComplete="family-name" />
             </div>
-            <TextField label="Anzeigename" hint="So erscheinst du in der Oberfläche." {...f('displayName')} disabled={isGuest} />
+            <TextField label="Anzeigename" hint="So erscheinen Sie in der Oberfläche." {...f('displayName')} disabled={isGuest} />
             <div className="form-row">
               <TextField label="Tätigkeit" optional placeholder="z. B. Augenoptiker/in" {...f('jobTitle')} disabled={isGuest} />
               <TextField label="Ausbildungsstand" optional placeholder="z. B. 2. Lehrjahr" {...f('trainingStatus')} disabled={isGuest} />

@@ -369,6 +369,10 @@
   padding: 12px 14px;
   background: var(--card);
 }
+/* ungerade Anzahl: letzte Zelle über die volle Breite (keine leere Fläche) */
+.account-grid > div:last-child:nth-child(odd) {
+  grid-column: 1 / -1;
+}
 .account-grid dt {
   font-size: var(--fs-sm);
   color: var(--text-3);
@@ -376,6 +380,94 @@
 .account-grid dd {
   margin: 3px 0 0;
   font-weight: 550;
+  overflow-wrap: anywhere;
+}
+
+/* ------------------------------ Kontoverwaltung (0.10.0) ------------------------------ */
+.account-section__desc {
+  margin: -4px 0 12px;
+  color: var(--text-2);
+  font-size: var(--fs);
+  line-height: 1.5;
+}
+.account-section__desc a,
+.account-links a {
+  color: var(--accent);
+}
+.account-rows {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--card);
+  overflow: hidden;
+}
+.account-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 16px;
+  padding: 14px;
+}
+.account-row + .account-row,
+.account-rows > .auth-note,
+.account-rows > .danger-form {
+  border-top: 1px solid var(--border);
+}
+.account-rows > .auth-note {
+  margin: 0;
+  border-radius: 0;
+  border-left: 0;
+  border-right: 0;
+  border-bottom: 0;
+}
+.account-row__main {
+  display: flex;
+  flex: 1 1 260px;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+.account-row__main > span {
+  color: var(--text-2);
+  font-size: var(--fs);
+  overflow-wrap: anywhere;
+}
+.account-row__main .auth-note {
+  margin-top: 8px;
+}
+.account-row__form {
+  flex: 1 1 100%;
+}
+.account-row--danger strong {
+  color: var(--danger);
+}
+.account-form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.danger-form {
+  padding: 14px;
+}
+.account-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 18px;
+  margin: 12px 0 0;
+  font-size: var(--fs);
+}
+.form-actions--start {
+  justify-content: flex-start;
+}
+@media (max-width: 640px) {
+  .account-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .account-row > .ds-btn {
+    width: 100%;
+    justify-content: center;
+  }
 }
 
 /* ------------------------------ Admin ------------------------------ */
@@ -1469,4 +1561,15 @@
 .legal-table td,
 [data-testid='declarations-table'] td {
   vertical-align: middle;
+}
+
+.portal-action {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+  max-width: 100%;
+}
+.portal-action .ds-field__error {
+  text-align: right;
 }

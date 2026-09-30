@@ -34,7 +34,7 @@ export function ModulePage() {
   const { moduleId = '', simId = '' } = useParams();
   const mod = findModule(moduleId);
   const navigate = useNavigate();
-  const { state, recovery, setRecovery, leaveWithoutGuard } = useSimulationSession(simId, { saveOnLeave: true });
+  const { state, recovery, setRecovery, leaveWithoutGuard, retryLoad } = useSimulationSession(simId, { saveOnLeave: true });
   const workbench = useAppStore((s) => (s.simId === simId ? s.doc.display.workbench : undefined));
   const [show3d, setShow3d] = useState<boolean>(() => !!mod?.show3d && window.innerWidth >= 900);
   const [introHidden, setIntroHidden] = useState<boolean>(() => {
@@ -109,6 +109,21 @@ export function ModulePage() {
       </div>
     );
   if (state.status === 'loading') return <Splash message={`${mod.title} wird geöffnet …`} />;
+  if (state.status === 'error')
+    return (
+      <div className="page-center">
+        <EmptyState
+          icon={FolderOpen}
+          title="Sitzung konnte nicht geladen werden"
+          text={state.message}
+          action={
+            <Button variant="primary" onClick={retryLoad}>
+              Erneut versuchen
+            </Button>
+          }
+        />
+      </div>
+    );
   if (state.status === 'missing')
     return (
       <div className="page-center">

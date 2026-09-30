@@ -32,7 +32,7 @@ import {
 // deno-lint-ignore no-explicit-any
 type Obj = Record<string, any>;
 
-export type MailKind = 'contract_confirmation' | 'cancellation_confirmation' | 'withdrawal_confirmation' | 'declaration_notice' | 'renewal_reminder' | 'b2b_country_notice';
+export type MailKind = 'contract_confirmation' | 'cancellation_confirmation' | 'withdrawal_confirmation' | 'declaration_notice' | 'renewal_reminder' | 'b2b_country_notice' | 'account_deleted';
 
 export interface DeclarationInput {
   kind: 'cancellation' | 'withdrawal';
@@ -56,6 +56,7 @@ export interface RenewalCandidate {
   stripe_subscription_id: string | null;
   email: string;
   first_name: string | null;
+  last_name?: string | null;
   current_period_end: string | null;
 }
 
@@ -111,9 +112,9 @@ function parseDeclaration(body: Obj): DeclarationInput | { error: string; field?
   const contractDetails = str(body.contract, 500) || null;
   const reason = str(body.reason, 2000) || null;
   const cancellationType = kind === 'cancellation' ? (body.cancellationType === 'extraordinary' ? 'extraordinary' : 'ordinary') : null;
-  if (!name) return { error: 'Bitte gib deinen Namen an.', field: 'name' };
-  if (!isEmail(email)) return { error: 'Bitte gib die E-Mail-Adresse deines Kundenkontos an.', field: 'email' };
-  if (cancellationType === 'extraordinary' && !reason) return { error: 'Bitte gib bei einer außerordentlichen Kündigung den Grund an.', field: 'reason' };
+  if (!name) return { error: 'Bitte geben Sie Ihren Namen an.', field: 'name' };
+  if (!isEmail(email)) return { error: 'Bitte geben Sie die E-Mail-Adresse Ihres Kundenkontos an.', field: 'email' };
+  if (cancellationType === 'extraordinary' && !reason) return { error: 'Bitte geben Sie bei einer außerordentlichen Kündigung den Grund an.', field: 'reason' };
   return { kind, cancellationType, name, email, contractDetails, reason };
 }
 
@@ -186,7 +187,7 @@ export async function handleConsumerRequest(req: Request, deps: Deps): Promise<R
   } catch (e) {
     deps.log?.(`consumer-request: ${errMsg(e)}`);
     return json(
-      { error: 'Deine Erklärung konnte gerade nicht gespeichert werden. Bitte sende sie per E-Mail an info@olo-vision.de – maßgeblich ist der Zeitpunkt des Absendens.', code: 'internal' },
+      { error: 'Ihre Erklärung konnte gerade nicht gespeichert werden. Bitte senden Sie sie per E-Mail an info@olo-vision.de – maßgeblich ist der Zeitpunkt des Absendens.', code: 'internal' },
       500,
       cors,
     );
@@ -221,7 +222,7 @@ export async function handleMailJobs(req: Request, deps: Deps): Promise<Response
     const list = await deps.ops.renewalCandidates(14);
     let sent = 0;
     for (const c of list) {
-      const ok = await sendLogged(deps, 'renewal_reminder', renewalReminderMail(c.email, c.first_name, c.current_period_end), c.subscription_id);
+      const ok = await sendLogged(deps, 'renewal_reminder', renewalReminderMail(c.email, [c.first_name, c.last_name].filter(Boolean).join(' '), c.current_period_end), c.subscription_id);
       if (ok) {
         await deps.ops.markRenewal(c.subscription_id);
         sent++;

@@ -62,7 +62,7 @@ export function DashboardPage() {
             {greeting()}, {user.firstName || user.displayName}
           </>
         }
-        subtitle={active.length ? `Du hast ${active.length} Simulation${active.length === 1 ? '' : 'en'} in deiner Bibliothek.` : 'Lege deine erste Simulation an – leer oder aus einer Vorlage.'}
+        subtitle={active.length ? `Sie haben ${active.length} Simulation${active.length === 1 ? '' : 'en'} in Ihrer Bibliothek.` : 'Legen Sie Ihre erste Simulation an – leer oder aus einer Vorlage.'}
         actions={
           <Button variant="primary" icon={FilePlus2} onClick={() => openAppDialog({ kind: 'new-simulation' })}>
             Neue Simulation
@@ -129,7 +129,7 @@ export function DashboardPage() {
           <EmptyState
             icon={FolderOpen}
             title="Noch keine Simulationen"
-            text="Starte mit einer Vorlage wie „Myopie“ oder „Torische Kontaktlinse“ und passe sie an."
+            text="Starten Sie mit einer Vorlage wie „Myopie“ oder „Torische Kontaktlinse“ und passen Sie sie an."
             action={
               <Button variant="primary" icon={FilePlus2} onClick={() => openAppDialog({ kind: 'new-simulation' })}>
                 Erste Simulation anlegen

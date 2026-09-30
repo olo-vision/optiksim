@@ -20,17 +20,17 @@ import { PublicShell } from './LegalPages';
 const TEXT = {
   cancellation: {
     title: 'Verträge hier kündigen',
-    lead: `Hier kündigst du dein ${PRODUCT_NAME}-Abonnement – ohne Anmeldung. Du erhältst sofort eine Eingangsbestätigung auf dieser Seite und per E-Mail.`,
+    lead: `Hier kündigen Sie Ihr ${PRODUCT_NAME}-Abonnement – ohne Anmeldung. Sie erhalten sofort eine Eingangsbestätigung auf dieser Seite und per E-Mail.`,
     confirmTitle: 'Kündigung prüfen und absenden',
     button: 'Jetzt kündigen',
-    doneTitle: 'Deine Kündigung ist eingegangen',
+    doneTitle: 'Ihre Kündigung ist eingegangen',
   },
   withdrawal: {
     title: 'Vertrag widerrufen',
-    lead: `Als Verbraucherin oder Verbraucher kannst du deinen Vertrag über ${PRODUCT_NAME} innerhalb von 14 Tagen nach Vertragsschluss ohne Angabe von Gründen widerrufen. Einzelheiten stehen in der Widerrufsbelehrung.`,
+    lead: `Als Verbraucherin oder Verbraucher können Sie Ihren Vertrag über ${PRODUCT_NAME} innerhalb von 14 Tagen nach Vertragsschluss ohne Angabe von Gründen widerrufen. Einzelheiten stehen in der Widerrufsbelehrung.`,
     confirmTitle: 'Widerruf prüfen und absenden',
     button: 'Widerruf bestätigen',
-    doneTitle: 'Dein Widerruf ist eingegangen',
+    doneTitle: 'Ihr Widerruf ist eingegangen',
   },
 } as const;
 
@@ -60,9 +60,9 @@ export function ConsumerDeclarationPage({ kind }: { kind: ConsumerDeclarationKin
   const check = (e: FormEvent) => {
     e.preventDefault();
     const err: Record<string, string | null> = {};
-    if (!f.name.trim()) err.name = 'Bitte gib deinen Namen an.';
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(f.email.trim())) err.email = 'Bitte gib die E-Mail-Adresse deines Kundenkontos an.';
-    if (extraordinary && !f.reason?.trim()) err.reason = 'Bitte gib bei einer außerordentlichen Kündigung den Grund an.';
+    if (!f.name.trim()) err.name = 'Bitte geben Sie Ihren Namen an.';
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(f.email.trim())) err.email = 'Bitte geben Sie die E-Mail-Adresse Ihres Kundenkontos an.';
+    if (extraordinary && !f.reason?.trim()) err.reason = 'Bitte geben Sie bei einer außerordentlichen Kündigung den Grund an.';
     setErrors(err);
     if (!Object.values(err).some(Boolean)) setStep('confirm');
   };
@@ -140,7 +140,7 @@ export function ConsumerDeclarationPage({ kind }: { kind: ConsumerDeclarationKin
               </fieldset>
             )}
             <TextField label="Vor- und Nachname" value={f.name} onChange={(e) => set('name', e.target.value)} autoComplete="name" error={errors.name} required />
-            <TextField label="E-Mail-Adresse deines Kundenkontos" type="email" value={f.email} onChange={(e) => set('email', e.target.value)} autoComplete="email" error={errors.email} hint="Die Bestätigung senden wir an die E-Mail-Adresse deines Kundenkontos." required />
+            <TextField label="E-Mail-Adresse Ihres Kundenkontos" type="email" value={f.email} onChange={(e) => set('email', e.target.value)} autoComplete="email" error={errors.email} hint="Die Bestätigung senden wir an die E-Mail-Adresse Ihres Kundenkontos." required />
             <TextField
               label={kind === 'cancellation' ? 'Vertrag' : 'Vertrag und Bestelldatum'}
               optional
@@ -181,7 +181,7 @@ export function ConsumerDeclarationPage({ kind }: { kind: ConsumerDeclarationKin
           <div className="declaration__card" data-testid="declaration-confirm">
             <header>
               <h1>{t.confirmTitle}</h1>
-              <p>Bitte prüfe deine Angaben. Mit dem Klick auf „{t.button}“ wird deine Erklärung verbindlich übermittelt.</p>
+              <p>Bitte prüfen Sie Ihre Angaben. Mit dem Klick auf „{t.button}“ wird Ihre Erklärung verbindlich übermittelt.</p>
             </header>
             {summary}
             {problem && (
@@ -211,10 +211,10 @@ export function ConsumerDeclarationPage({ kind }: { kind: ConsumerDeclarationKin
             {receipt.id && <p className="declaration__ref">Vorgangsnummer: {receipt.id}</p>}
             <p>
               {kind === 'cancellation'
-                ? 'Wir haben deine Kündigung erhalten. Die Bestätigung mit dem Zeitpunkt, zu dem dein Vertrag endet, senden wir an die E-Mail-Adresse deines Kundenkontos. Eine ordentliche Kündigung wird automatisch zum Ende des bezahlten Abrechnungszeitraums wirksam.'
-                : 'Wir haben deinen Widerruf erhalten und senden dir eine Eingangsbestätigung per E-Mail. Die Erstattung erfolgt spätestens 14 Tage nach Eingang über dein ursprüngliches Zahlungsmittel.'}
+                ? 'Wir haben Ihre Kündigung erhalten. Die Bestätigung mit dem Zeitpunkt, zu dem Ihr Vertrag endet, senden wir an die E-Mail-Adresse Ihres Kundenkontos. Eine ordentliche Kündigung wird automatisch zum Ende des bezahlten Abrechnungszeitraums wirksam.'
+                : 'Wir haben Ihren Widerruf erhalten und senden Ihnen eine Eingangsbestätigung per E-Mail. Die Erstattung erfolgt spätestens 14 Tage nach Eingang über Ihr ursprüngliches Zahlungsmittel.'}
             </p>
-            <p className="declaration__note">Kommt keine E-Mail an, prüfe bitte deinen Spam-Ordner oder schreibe an info@olo-vision.de. Du kannst diese Seite zusätzlich speichern oder drucken.</p>
+            <p className="declaration__note">Kommt keine E-Mail an, prüfen Sie bitte Ihren Spam-Ordner oder schreiben Sie an info@olo-vision.de. Sie können diese Seite zusätzlich speichern oder drucken.</p>
             <div className="declaration__actions">
               <Button icon={Printer} onClick={() => window.print()}>
                 Seite drucken / speichern

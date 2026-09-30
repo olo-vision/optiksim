@@ -21,7 +21,7 @@ function SettingsDialog() {
   return (
     <Dialog
       title="Schnelleinstellungen"
-      subtitle="Gelten für dein Konto und werden lokal gespeichert."
+      subtitle="Gelten für Ihr Konto."
       onClose={close}
       width={560}
       footer={

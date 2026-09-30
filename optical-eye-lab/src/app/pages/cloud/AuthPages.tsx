@@ -122,12 +122,17 @@ export function CloudLoginPage() {
     >
       {params.get('confirmed') && (
         <p className="auth-note auth-note--ok">
-          <CheckCircle2 size={14} /> E-Mail-Adresse bestätigt. Du kannst dich jetzt anmelden.
+          <CheckCircle2 size={14} /> E-Mail-Adresse bestätigt. Sie können sich jetzt anmelden.
         </p>
       )}
       {params.get('reset') && (
         <p className="auth-note auth-note--ok">
-          <CheckCircle2 size={14} /> Passwort geändert. Bitte melde dich mit dem neuen Passwort an.
+          <CheckCircle2 size={14} /> Passwort geändert. Bitte melden Sie sich mit dem neuen Passwort an.
+        </p>
+      )}
+      {params.get('deleted') && (
+        <p className="auth-note auth-note--ok" data-testid="account-deleted-note">
+          <CheckCircle2 size={14} /> <span>Ihr Konto wurde gelöscht. Eine Bestätigung haben wir an Ihre bisherige E-Mail-Adresse gesendet.</span>
         </p>
       )}
       <form className="login__form" onSubmit={submit} noValidate data-testid="login-form">
@@ -217,7 +222,7 @@ export function RegisterPage() {
     e.preventDefault();
     setError(null);
     if (!consentsOk) {
-      setError({ msg: 'Bitte bestätige die erforderlichen Rechtstexte.' });
+      setError({ msg: 'Bitte bestätigen Sie die erforderlichen Rechtstexte.' });
       return;
     }
     setBusy(true);
@@ -239,9 +244,9 @@ export function RegisterPage() {
         <div className="auth-done" data-testid="confirm-notice">
           <MailCheck size={28} />
           <p>
-            Wir haben eine Bestätigungs-E-Mail an <strong>{confirmMail}</strong> gesendet. Öffne den Link darin und melde dich anschließend an.
+            Wir haben eine Bestätigungs-E-Mail an <strong>{confirmMail}</strong> gesendet. Öffnen Sie den Link darin und melden Sie sich anschließend an.
           </p>
-          <p className="muted">{intent ? (intent.plan === 'demo' ? 'Nach der Anmeldung kannst du die Demo direkt starten.' : 'Nach der Anmeldung geht es mit deinem gewählten Paket weiter.') : 'Nach der Anmeldung wählst du dein Paket oder startest die kostenlose Demo.'}</p>
+          <p className="muted">{intent ? (intent.plan === 'demo' ? 'Nach der Anmeldung können Sie die Demo direkt starten.' : 'Nach der Anmeldung geht es mit Ihrem gewählten Paket weiter.') : 'Nach der Anmeldung wählen Sie Ihr Paket oder starten die kostenlose Demo.'}</p>
         </div>
       </AuthFrame>
     );
@@ -249,7 +254,7 @@ export function RegisterPage() {
   return (
     <AuthFrame
       title="Konto erstellen"
-      subtitle={intent?.plan === 'demo' ? `Danach startest du die kostenlose Demo (${DEMO_PLAN.durationLabel}, ohne Zahlungsdaten).` : 'Wähle, wie du OLO-LAB3D nutzen möchtest.'}
+      subtitle={intent?.plan === 'demo' ? `Danach starten Sie die kostenlose Demo (${DEMO_PLAN.durationLabel}, ohne Zahlungsdaten).` : 'Wählen Sie, wie Sie OLO-LAB3D nutzen möchten.'}
       footer={
         <>
           Bereits registriert? <Link to="/login">Anmelden</Link>
@@ -327,7 +332,7 @@ export function RegisterPage() {
             </div>
             {(f.country ?? 'DE') !== 'DE' && (
               <p className="auth-note auth-note--warn" data-testid="register-country-note">
-                <Info size={13} /> {B2B_COUNTRY_MESSAGE} Die kostenlose Demo kannst du trotzdem nutzen.
+                <Info size={13} /> {B2B_COUNTRY_MESSAGE} Die kostenlose Demo können Sie trotzdem nutzen.
               </p>
             )}
             <p className="login__org-hint">
@@ -344,7 +349,7 @@ export function RegisterPage() {
         </Button>
         <p className="login__notice">
           <Info size={13} />
-          <span>{intent?.plan === 'demo' ? 'Die Demo ist kostenlos, braucht keine Zahlungsdaten und endet automatisch – es beginnt kein Abonnement.' : 'Nach der Registrierung wählst du dein Paket oder testest OLO-LAB3D zuerst 2 Stunden kostenlos.'}</span>
+          <span>{intent?.plan === 'demo' ? 'Die Demo ist kostenlos, braucht keine Zahlungsdaten und endet automatisch – es beginnt kein Abonnement.' : 'Nach der Registrierung wählen Sie Ihr Paket oder testen OLO-LAB3D zuerst 2 Stunden kostenlos.'}</span>
         </p>
       </form>
     </AuthFrame>
@@ -374,7 +379,7 @@ export function ForgotPasswordPage() {
     }
   };
   return (
-    <AuthFrame title="Passwort vergessen" subtitle="Wir senden dir einen Link zum Zurücksetzen." footer={<Link to="/login">Zurück zur Anmeldung</Link>}>
+    <AuthFrame title="Passwort vergessen" subtitle="Wir senden Ihnen einen Link zum Zurücksetzen." footer={<Link to="/login">Zurück zur Anmeldung</Link>}>
       {sent ? (
         <div className="auth-done" data-testid="reset-sent">
           <MailCheck size={28} />

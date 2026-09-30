@@ -20,7 +20,8 @@ export const fmtDateTime = (iso: string | null | undefined) =>
   iso ? new Intl.DateTimeFormat('de-DE', { timeZone: TZ, dateStyle: 'medium', timeStyle: 'short' }).format(new Date(iso)) + ' Uhr' : '–';
 export const fmtDate = (iso: string | null | undefined) => (iso ? new Intl.DateTimeFormat('de-DE', { timeZone: TZ, dateStyle: 'long' }).format(new Date(iso)) : '–');
 
-const hello = (first?: string | null) => (first ? `Hallo ${first},` : 'Hallo,');
+/** Förmliche Anrede (Sie) */
+const hello = (name?: string | null) => (name?.trim() ? `Guten Tag ${name.trim()},` : 'Guten Tag,');
 
 const DOC_LABEL: Record<string, string> = {
   terms: 'AGB',
@@ -72,7 +73,7 @@ export function contractConfirmationMail(d: ContractData): MailMessage {
   const interval: BillingInterval | null = isBillingInterval(d.billing_interval) ? d.billing_interval : null;
   const b2c = d.customer_type === 'private';
   const lines: string[] = [];
-  lines.push(hello(d.first_name), '', `vielen Dank für deine Bestellung. Hiermit bestätigen wir den Vertrag über die Nutzung von ${PRODUCT_NAME}.`, '');
+  lines.push(hello([d.first_name, d.last_name].filter(Boolean).join(' ')), '', `vielen Dank für Ihre Bestellung. Hiermit bestätigen wir den Vertrag über die Nutzung von ${PRODUCT_NAME}.`, '');
   lines.push('VERTRAGSDATEN');
   lines.push(`Tarif: ${plan ? PLAN_NAMES[plan] : '–'}`);
   if (plan && interval) {
@@ -84,15 +85,15 @@ export function contractConfirmationMail(d: ContractData): MailMessage {
   if (plan && interval && endsAutomatically(plan, interval)) lines.push(`Ende der Laufzeit: ${fmtDate(d.current_period_end)} (keine automatische Verlängerung)`);
   else lines.push(`Aktueller Abrechnungszeitraum bis: ${fmtDate(d.current_period_end)}`);
   if (d.stripe_subscription_id) lines.push(`Abonnement-Nr.: ${d.stripe_subscription_id}`);
-  lines.push('', 'Die Zahlung wird über Stripe abgewickelt; den Zahlungsbeleg bzw. die Rechnung erhältst du gesondert per E-Mail.');
+  lines.push('', 'Die Zahlung wird über Stripe abgewickelt; den Zahlungsbeleg bzw. die Rechnung erhalten Sie gesondert per E-Mail.');
 
   const statements = d.documents.filter((x) => x.consent_type === 'agreed' && statementOf(x));
   if (b2c && statements.length) {
-    lines.push('', 'DEINE ERKLÄRUNGEN BEI DER BESTELLUNG');
+    lines.push('', 'IHRE ERKLÄRUNGEN BEI DER BESTELLUNG');
     for (const s of statements) lines.push(`- ${statementOf(s)}`);
     lines.push(
       '',
-      'Du kannst den Vertrag innerhalb von 14 Tagen widerrufen – auch über https://olo-lab.de/widerrufen. Da du den sofortigen Beginn der Leistung verlangt hast, schuldest du bei einem Widerruf einen zeitanteiligen Betrag für die Zeit bis zum Widerruf (Wertersatz). Einzelheiten stehen in der beigefügten Widerrufsbelehrung.',
+      'Sie können den Vertrag innerhalb von 14 Tagen widerrufen – auch über https://olo-lab.de/widerrufen. Da Sie den sofortigen Beginn der Leistung verlangt haben, schulden Sie bei einem Widerruf einen zeitanteiligen Betrag für die Zeit bis zum Widerruf (Wertersatz). Einzelheiten stehen in der beigefügten Widerrufsbelehrung.',
     );
   }
   lines.push('', 'KÜNDIGUNG', 'Über https://olo-lab.de/kuendigen („Verträge hier kündigen“), im Kundenkonto unter „Abonnement verwalten“ oder per E-Mail an info@olo-vision.de.');
@@ -134,33 +135,33 @@ export interface DeclarationMailData {
 
 /** Eingangsbestätigung Kündigung (§ 312k Abs. 4 BGB): Inhalt, Datum und Uhrzeit, Zeitpunkt der Beendigung */
 export function cancellationConfirmationMail(d: DeclarationMailData): MailMessage {
-  const lines = [hello(d.firstName), '', `wir bestätigen den Eingang deiner Kündigung am ${fmtDateTime(d.receivedAt)}.`, '', 'INHALT DEINER KÜNDIGUNG'];
+  const lines = [hello(d.name), '', `wir bestätigen den Eingang Ihrer Kündigung am ${fmtDateTime(d.receivedAt)}.`, '', 'INHALT IHRER KÜNDIGUNG'];
   lines.push(`Art: ${d.cancellationType === 'extraordinary' ? 'außerordentliche Kündigung' : 'ordentliche Kündigung zum nächstmöglichen Zeitpunkt'}`);
   lines.push(`Name: ${d.name}`, `E-Mail: ${d.email}`);
   if (d.contractDetails) lines.push(`Vertrag: ${d.contractDetails}`);
   if (d.reason) lines.push(`Grund: ${d.reason}`);
   lines.push(`Vorgangsnummer: ${d.id}`, '');
   if (d.endsAt && d.cancellationType !== 'extraordinary') {
-    lines.push(`Dein Vertrag endet zum ${fmtDate(d.endsAt)}. Bis dahin kannst du ${PRODUCT_NAME} weiter nutzen. Eine weitere Abbuchung erfolgt nicht.${d.alreadyCancelled ? ' (Der Vertrag war bereits zu diesem Zeitpunkt gekündigt.)' : ''}`);
+    lines.push(`Ihr Vertrag endet zum ${fmtDate(d.endsAt)}. Bis dahin können Sie ${PRODUCT_NAME} weiter nutzen. Eine weitere Abbuchung erfolgt nicht.${d.alreadyCancelled ? ' (Der Vertrag war bereits zu diesem Zeitpunkt gekündigt.)' : ''}`);
   } else if (d.cancellationType === 'extraordinary') {
-    lines.push('Wir prüfen deine außerordentliche Kündigung und melden uns zeitnah mit dem Zeitpunkt der Beendigung.');
+    lines.push('Wir prüfen Ihre außerordentliche Kündigung und melden uns zeitnah mit dem Zeitpunkt der Beendigung.');
   } else {
-    lines.push('Wir konnten der angegebenen E-Mail-Adresse kein laufendes Abonnement automatisch zuordnen. Wir prüfen deine Kündigung und melden uns mit dem Zeitpunkt der Beendigung.');
+    lines.push('Wir konnten der angegebenen E-Mail-Adresse kein laufendes Abonnement automatisch zuordnen. Wir prüfen Ihre Kündigung und melden uns mit dem Zeitpunkt der Beendigung.');
   }
-  return { to: d.email, subject: `Eingangsbestätigung deiner Kündigung – ${PRODUCT_NAME}`, text: lines.join('\n') + FOOTER };
+  return { to: d.email, subject: `Eingangsbestätigung Ihrer Kündigung – ${PRODUCT_NAME}`, text: lines.join('\n') + FOOTER };
 }
 
 /** Eingangsbestätigung Widerruf (§ 356a BGB) */
 export function withdrawalConfirmationMail(d: DeclarationMailData): MailMessage {
-  const lines = [hello(d.firstName), '', `wir bestätigen den Eingang deines Widerrufs am ${fmtDateTime(d.receivedAt)}.`, '', 'INHALT DEINES WIDERRUFS'];
+  const lines = [hello(d.name), '', `wir bestätigen den Eingang Ihres Widerrufs am ${fmtDateTime(d.receivedAt)}.`, '', 'INHALT IHRES WIDERRUFS'];
   lines.push(`Name: ${d.name}`, `E-Mail: ${d.email}`);
   if (d.contractDetails) lines.push(`Vertrag: ${d.contractDetails}`);
   if (d.reason) lines.push(`Anmerkung: ${d.reason}`);
   lines.push(`Vorgangsnummer: ${d.id}`, '');
   lines.push(
-    'Wir bearbeiten den Widerruf und erstatten dir die Zahlung spätestens 14 Tage nach Eingang über das bei der Bestellung verwendete Zahlungsmittel – abzüglich des zeitanteiligen Wertersatzes für die Zeit bis zum Widerruf, sofern du den sofortigen Beginn der Leistung verlangt hattest. Mit dem Widerruf endet der Vertrag.',
+    'Wir bearbeiten den Widerruf und erstatten Ihnen die Zahlung spätestens 14 Tage nach Eingang über das bei der Bestellung verwendete Zahlungsmittel – abzüglich des zeitanteiligen Wertersatzes für die Zeit bis zum Widerruf, sofern Sie den sofortigen Beginn der Leistung verlangt hatten. Mit dem Widerruf endet der Vertrag.',
   );
-  return { to: d.email, subject: `Eingangsbestätigung deines Widerrufs – ${PRODUCT_NAME}`, text: lines.join('\n') + FOOTER };
+  return { to: d.email, subject: `Eingangsbestätigung Ihres Widerrufs – ${PRODUCT_NAME}`, text: lines.join('\n') + FOOTER };
 }
 
 /** interne Benachrichtigung an OLO Vision */
@@ -185,15 +186,15 @@ export function declarationNoticeMail(to: string, d: DeclarationMailData, status
   return { to, subject: `[OLO-LAB3D] ${d.kind === 'withdrawal' ? 'Widerruf' : 'Kündigung'} eingegangen – ${d.name}`, text: lines.join('\n'), replyTo: d.email };
 }
 
-export function renewalReminderMail(to: string, firstName: string | null, endsAt: string | null): MailMessage {
+export function renewalReminderMail(to: string, name: string | null, endsAt: string | null): MailMessage {
   const lines = [
-    hello(firstName),
+    hello(name),
     '',
-    `deine Jahreslizenz ${PLAN_NAMES.private} endet am ${fmtDate(endsAt)}. Sie verlängert sich nicht automatisch – es erfolgt keine weitere Abbuchung.`,
+    `Ihre Jahreslizenz ${PLAN_NAMES.private} endet am ${fmtDate(endsAt)}. Sie verlängert sich nicht automatisch – es erfolgt keine weitere Abbuchung.`,
     '',
-    `Wenn du ${PRODUCT_NAME} danach weiter nutzen möchtest, kannst du jederzeit neu buchen: https://olo-lab.de/license`,
+    `Wenn Sie ${PRODUCT_NAME} danach weiter nutzen möchten, können Sie jederzeit neu buchen: https://olo-lab.de/license. Ihre gespeicherten Simulationen bleiben erhalten.`,
   ];
-  return { to, subject: `Deine Jahreslizenz ${PRODUCT_NAME} endet am ${fmtDate(endsAt)}`, text: lines.join('\n') + FOOTER };
+  return { to, subject: `Ihre Jahreslizenz ${PRODUCT_NAME} endet am ${fmtDate(endsAt)}`, text: lines.join('\n') + FOOTER };
 }
 
 export function b2bCountryNoticeMail(to: string, info: { email: string; institution: string | null; country: string | null; session: string }): MailMessage {
@@ -209,4 +210,18 @@ export function b2bCountryNoticeMail(to: string, info: { email: string; institut
       `Checkout-Session: ${info.session}`,
     ].join('\n'),
   };
+}
+
+/** Bestätigung der endgültigen Kontolöschung (an die frühere Adresse) */
+export function accountDeletedMail(to: string, name: string | null): MailMessage {
+  const lines = [
+    hello(name),
+    '',
+    `Ihr ${PRODUCT_NAME}-Konto wurde auf Ihren Wunsch endgültig gelöscht. Ihre gespeicherten Simulationen, Vorlagen, Einstellungen sowie Ihre Profil- und Kontaktdaten wurden entfernt.`,
+    '',
+    'Aufbewahrt werden nur Daten, zu deren Aufbewahrung wir gesetzlich verpflichtet sind oder die wir zum Nachweis benötigen (z. B. Rechnungen beim Zahlungsdienstleister, Nachweise über Vertragszustimmungen, Kündigungen und Widerrufe). Diese Daten werden nach Ablauf der jeweiligen Fristen gelöscht.',
+    '',
+    'Sie können jederzeit ein neues Konto anlegen. Bei Fragen erreichen Sie uns unter info@olo-vision.de.',
+  ];
+  return { to, subject: `Ihr ${PRODUCT_NAME}-Konto wurde gelöscht`, text: lines.join('\n') + FOOTER };
 }

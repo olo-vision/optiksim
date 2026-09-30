@@ -35,17 +35,17 @@ export function Onboarding() {
         {
           icon: Sparkles,
           title: `Willkommen bei ${name}${first ? `, ${first}` : ''}!`,
-          text: `${name} ist eine interaktive 3D-Simulation für die Augenoptik: Modellauge, Brillengläser, Kontaktlinsen und Strahlengang – physikalisch berechnet und live veränderbar.${demo ? ` Deine Demo läuft ${DEMO_PLAN.durationLabel} mit vollem Funktionsumfang; die verbleibende Zeit siehst du oben.` : ''}`,
+          text: `${name} ist eine interaktive 3D-Simulation für die Augenoptik: Modellauge, Brillengläser, Kontaktlinsen und Strahlengang – physikalisch berechnet und live veränderbar.${demo ? ` Ihre Demo läuft ${DEMO_PLAN.durationLabel} mit vollem Funktionsumfang; die verbleibende Zeit sehen Sie oben.` : ''}`,
         },
         {
           icon: Compass,
           title: 'Das Wichtigste auf einen Blick',
-          text: 'Links findest du Dashboard, Module (Skiaskopie, Refraktion, Patientensicht, Kontaktlinse, Brillenglas), „Meine Simulationen“ und Vorlagen. Konto, Lizenz und Abonnement erreichst du unten links über deinen Namen.',
+          text: 'Links finden Sie Dashboard, Module (Skiaskopie, Refraktion, Patientensicht, Kontaktlinse, Brillenglas), „Meine Simulationen“ und Vorlagen. Konto, Lizenz und Abonnement erreichen Sie unten links über Ihren Namen. Alles, was Sie speichern, liegt sicher in Ihrem Konto – auf jedem Gerät verfügbar.',
         },
         {
           icon: Rocket,
           title: 'Los geht’s',
-          text: 'Starte direkt im vollständigen Simulator oder mit einer fertigen Vorlage. Im Simulator: Linksklick wählt aus, rechte Maustaste dreht, Mausrad zoomt – Werte änderst du rechts im Inspector.',
+          text: 'Starten Sie direkt im vollständigen Simulator oder mit einer fertigen Vorlage. Im Simulator: Linksklick wählt aus, rechte Maustaste dreht, Mausrad zoomt – Werte ändern Sie rechts im Inspector.',
           actions: true,
         },
       ]
@@ -58,17 +58,17 @@ export function Onboarding() {
         {
           icon: FolderOpen,
           title: 'Simulationen & Vorlagen',
-          text: 'Starte eine neue Simulation leer oder aus einer Vorlage (z. B. Myopie, torische KL, Tränenlinse). Alles, was du speicherst, findest du unter „Meine Simulationen“ – mit Suche, Filtern und Favoriten.',
+          text: 'Starten Sie eine neue Simulation leer oder aus einer Vorlage (z. B. Myopie, torische KL, Tränenlinse). Alles, was Sie speichern, finden Sie unter „Meine Simulationen“ – mit Suche, Filtern und Favoriten.',
         },
         {
           icon: MousePointer2,
           title: 'Im Simulator',
-          text: 'Linksklick wählt aus, rechte Maustaste dreht die Kamera, das Mausrad zoomt. Werte änderst du rechts im Inspector. Änderungen werden automatisch gespeichert – die Statusleiste zeigt, wann zuletzt.',
+          text: 'Linksklick wählt aus, rechte Maustaste dreht die Kamera, das Mausrad zoomt. Werte ändern Sie rechts im Inspector. Änderungen werden automatisch gespeichert – die Statusleiste zeigt, wann zuletzt.',
         },
         {
           icon: HardDrive,
-          title: 'Deine Daten bleiben lokal',
-          text: 'Konten, Einstellungen und Simulationen werden nur in diesem Browser gespeichert. Die Anmeldung ist eine lokale Demo ohne echte Kontosicherheit. Sichere wichtige Arbeiten über „Exportieren“ als Datei.',
+          title: 'Ihre Daten bleiben lokal',
+          text: 'Konten, Einstellungen und Simulationen werden nur in diesem Browser gespeichert. Die Anmeldung ist eine lokale Demo ohne echte Kontosicherheit. Sichern Sie wichtige Arbeiten über „Exportieren“ als Datei.',
         },
       ];
   const s = steps[step];

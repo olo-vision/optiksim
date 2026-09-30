@@ -228,13 +228,14 @@ export function SettingRow({ label, description, children, badge }: { label: str
   );
 }
 
-export function Notice({ tone = 'info', icon: Icon, children, title }: { tone?: 'info' | 'warn' | 'ok'; icon?: LucideIcon; children: ReactNode; title?: string }) {
+export function Notice({ tone = 'info', icon: Icon, children, title, actions, className, role }: { tone?: 'info' | 'warn' | 'ok'; icon?: LucideIcon; children: ReactNode; title?: string; actions?: ReactNode; className?: string; role?: 'alert' | 'status' }) {
   return (
-    <div className={`ds-notice ds-notice--${tone}`}>
+    <div className={`ds-notice ds-notice--${tone}${className ? ` ${className}` : ''}`} role={role}>
       {Icon && <Icon size={16} strokeWidth={1.9} className="ds-notice__icon" />}
       <div>
         {title && <strong className="ds-notice__title">{title}</strong>}
         <div className="ds-notice__body">{children}</div>
+        {actions && <div className="ds-notice__actions">{actions}</div>}
       </div>
     </div>
   );

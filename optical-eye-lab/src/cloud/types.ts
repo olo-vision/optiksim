@@ -25,6 +25,10 @@ export interface CloudProfile {
   email: string;
   role: AppRole;
   createdAt: string;
+  /** 0.10.0: geschlossenes Konto (Inhalte bleiben bis deletionDueAt erhalten, Konto kann wieder geöffnet werden) */
+  accountStatus?: 'active' | 'closed';
+  closedAt?: string | null;
+  deletionDueAt?: string | null;
 }
 
 export interface CloudInstitution {
@@ -74,6 +78,82 @@ export interface BillingStatus {
   hasAccess?: boolean;
   /** Serverzeit zum Zeitpunkt der Abfrage – Grundlage aller Zeitprüfungen im Browser */
   serverNow?: string | null;
+}
+
+/* ------------------------------ Cloud-Inhalte des Kontos (0.10.0) ------------------------------ */
+
+/** Simulation in der Datenbank (ohne Dokument und Vorschaubild – für Listen) */
+export interface CloudSimulationRow {
+  id: string;
+  ownerUserId: string;
+  institutionId: string;
+  visibility: 'private' | 'institution';
+  name: string;
+  description: string;
+  category: string;
+  tags: string[];
+  favorite: boolean;
+  archived: boolean;
+  templateId: string | null;
+  moduleId: string | null;
+  summary: unknown;
+  schemaVersion: number;
+  docRevision: number;
+  hasThumbnail: boolean;
+  createdAt: string;
+  updatedAt: string;
+  lastOpenedAt: string | null;
+}
+export interface CloudSimulationFull extends CloudSimulationRow {
+  doc: unknown;
+}
+/** Neue Simulation (Besitzer und Institution setzt der Server) */
+export interface NewCloudSimulation {
+  id: string;
+  name: string;
+  description: string;
+  category: string;
+  tags: string[];
+  favorite: boolean;
+  archived: boolean;
+  templateId: string | null;
+  moduleId: string | null;
+  summary: unknown;
+  schemaVersion: number;
+  doc: unknown;
+  thumbnail: string | null;
+  createdAt: string;
+  updatedAt: string;
+  lastOpenedAt: string | null;
+  origin?: string | null;
+}
+/** Änderbare Felder (nur übergebene Felder werden geändert) */
+export type CloudSimulationPatch = Partial<Omit<NewCloudSimulation, 'id' | 'createdAt' | 'updatedAt' | 'origin'>>;
+
+export interface CloudTemplateRow {
+  id: string;
+  ownerUserId: string;
+  visibility: 'private' | 'institution';
+  name: string;
+  description: string;
+  category: string;
+  tags: string[];
+  doc: unknown;
+  createdAt: string;
+}
+
+export interface AccountOverview {
+  accountStatus: 'active' | 'closed';
+  closedAt: string | null;
+  deletionDueAt: string | null;
+  simulations: number;
+  templates: number;
+  liveSubscription: boolean;
+  subscriptionStatus: string | null;
+  cancelAtPeriodEnd: boolean;
+  currentPeriodEnd: string | null;
+  canClose: boolean;
+  canDelete: boolean;
 }
 
 /* ------------------------------ Kündigung / Widerruf über die Website ------------------------------ */
@@ -271,6 +351,8 @@ export interface AdminAccountRow {
   lastConsentAt?: string | null;
   consentSummary?: Array<{ type: LegalDocType; version: string; acceptedAt: string }>;
 }
+
+export { ContentConflictError } from '@/platform/content';
 
 /** Fehler mit Feldbezug für Formulare */
 export class CloudError extends Error {

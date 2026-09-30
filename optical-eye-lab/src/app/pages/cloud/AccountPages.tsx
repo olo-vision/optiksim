@@ -3,7 +3,7 @@
  */
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router';
-import { ArrowRight, BadgeCheck, CircleAlert, CreditCard, Hourglass, KeyRound, LogOut, RefreshCcw, ShieldCheck, Sparkles, Users } from 'lucide-react';
+import { ArrowRight, BadgeCheck, CircleAlert, CreditCard, Hourglass, RefreshCcw, ShieldCheck, Sparkles, Users } from 'lucide-react';
 import { BrandMark } from '../../Brand';
 import { Button, EmptyState, PageHeader, Pill, TextField } from '@/ui/ds';
 import { usePageTitle } from '../../usePageTitle';
@@ -59,7 +59,7 @@ export function PricingPage() {
         {cancelled && (
           <p className="auth-note checkout-cancelled" data-testid="checkout-cancelled">
             <CircleAlert size={14} />
-            <span>Der Bezahlvorgang wurde abgebrochen – es wurde nichts berechnet. Du kannst jederzeit erneut buchen.</span>
+            <span>Der Bezahlvorgang wurde abgebrochen – es wurde nichts berechnet. Sie können jederzeit erneut buchen.</span>
             <button type="button" className="banner__close" aria-label="Hinweis schließen" onClick={() => setParams({}, { replace: true })}>
               ×
             </button>
@@ -74,15 +74,15 @@ export function PricingPage() {
 /* ------------------------------------ Lizenz ------------------------------------ */
 
 function licenseHeadline(access: string, status: string | undefined): { title: string; subtitle?: string } {
-  if (access === 'active') return { title: 'Deine Lizenz ist aktiv' };
-  if (access === 'demo') return { title: 'Deine Demo läuft', subtitle: `Voller Funktionsumfang für ${DEMO_PLAN.durationLabel}. Wähle jederzeit ein Paket, um ${PRODUCT_NAME} danach weiter zu nutzen.` };
-  if (access === 'demo-ended') return { title: 'Deine OLO-LAB Demo ist beendet.', subtitle: 'Vielen Dank fürs Testen. Wähle jetzt eine Lizenz, um OLO-LAB weiter zu nutzen.' };
-  if (access === 'grace') return { title: 'Zahlung fehlgeschlagen', subtitle: 'Dein Zugriff bleibt während der Zahlungsfrist erhalten. Bitte aktualisiere dein Zahlungsmittel.' };
-  if (status === 'suspended') return { title: 'Deine Lizenz ist gesperrt', subtitle: 'Eine Zahlung ist offen. Nach erfolgreicher Zahlung wird die Lizenz automatisch wieder freigeschaltet.' };
-  if (status === 'cancelled') return { title: 'Dein Abonnement ist beendet', subtitle: 'Buche einen Tarif, um den Simulator wieder zu nutzen.' };
-  if (status === 'expired' || access === 'expired') return { title: 'Deine Lizenz ist abgelaufen', subtitle: 'Buche einen Tarif, um den Simulator wieder zu nutzen.' };
-  if (access === 'inactive') return { title: 'Deine Lizenz ist noch nicht aktiv', subtitle: 'Wähle deinen Tarif. Nach erfolgreicher Zahlung stehen Dashboard, vollständiger Simulator und alle Module sofort zur Verfügung.' };
-  return { title: 'Deine Lizenz ist noch nicht aktiv', subtitle: access === 'signed-out' ? undefined : ACCESS_MESSAGE[access as keyof typeof ACCESS_MESSAGE] };
+  if (access === 'active') return { title: 'Ihre Lizenz ist aktiv' };
+  if (access === 'demo') return { title: 'Ihre Demo läuft', subtitle: `Voller Funktionsumfang für ${DEMO_PLAN.durationLabel}. Wählen Sie jederzeit ein Paket, um ${PRODUCT_NAME} danach weiter zu nutzen.` };
+  if (access === 'demo-ended') return { title: 'Ihre OLO-LAB Demo ist beendet.', subtitle: 'Vielen Dank fürs Testen. Wählen Sie jetzt eine Lizenz, um OLO-LAB weiter zu nutzen.' };
+  if (access === 'grace') return { title: 'Zahlung fehlgeschlagen', subtitle: 'Ihr Zugriff bleibt während der Zahlungsfrist erhalten. Bitte aktualisieren Sie Ihr Zahlungsmittel.' };
+  if (status === 'suspended') return { title: 'Ihre Lizenz ist gesperrt', subtitle: 'Eine Zahlung ist offen. Nach erfolgreicher Zahlung wird die Lizenz automatisch wieder freigeschaltet.' };
+  if (status === 'cancelled') return { title: 'Ihr Abonnement ist beendet', subtitle: 'Buchen Sie einen Tarif, um den Simulator wieder zu nutzen. Ihre gespeicherten Simulationen bleiben erhalten und stehen danach wieder zur Verfügung.' };
+  if (status === 'expired' || access === 'expired') return { title: 'Ihre Lizenz ist abgelaufen', subtitle: 'Buchen Sie einen Tarif, um den Simulator wieder zu nutzen. Ihre gespeicherten Simulationen bleiben erhalten und stehen danach wieder zur Verfügung.' };
+  if (access === 'inactive') return { title: 'Ihre Lizenz ist noch nicht aktiv', subtitle: 'Wählen Sie Ihren Tarif. Nach erfolgreicher Zahlung stehen Dashboard, vollständiger Simulator und alle Module sofort zur Verfügung.' };
+  return { title: 'Ihre Lizenz ist noch nicht aktiv', subtitle: access === 'signed-out' ? undefined : ACCESS_MESSAGE[access as keyof typeof ACCESS_MESSAGE] };
 }
 
 const LIVE_SUB = new Set(['active', 'trialing', 'past_due', 'unpaid', 'paused']);
@@ -102,7 +102,7 @@ export function LicensePage() {
   const demoEnded = access === 'demo-ended';
   // Während der Bestätigung keine erneute Buchung anbieten (der Webhook kommt gleich)
   const confirming = returning && !allowed;
-  const head = confirming ? { title: 'Zahlung wird bestätigt', subtitle: 'Sobald Stripe die Zahlung bestätigt hat, wird deine Lizenz automatisch aktiviert.' } : licenseHeadline(access, l?.status);
+  const head = confirming ? { title: 'Zahlung wird bestätigt', subtitle: 'Sobald Stripe die Zahlung bestätigt hat, wird Ihre Lizenz automatisch aktiviert.' } : licenseHeadline(access, l?.status);
   const liveSub = !!account?.billing?.subscriptionStatus && LIVE_SUB.has(account.billing.subscriptionStatus);
   const showBilling = !!l && (liveSub || !!account?.billing?.hasCustomer || l.source === 'manual');
   return (
@@ -112,8 +112,8 @@ export function LicensePage() {
         <section className="demo-ended" data-testid="demo-ended">
           <Hourglass size={26} />
           <div>
-            <h2>Deine OLO-LAB Demo ist beendet.</h2>
-            <p>Vielen Dank fürs Testen. Wähle jetzt eine Lizenz, um OLO-LAB weiter zu nutzen.</p>
+            <h2>Ihre OLO-LAB Demo ist beendet.</h2>
+            <p>Vielen Dank fürs Testen. Wählen Sie jetzt eine Lizenz, um OLO-LAB weiter zu nutzen. Was Sie in der Demo gespeichert haben, bleibt in Ihrem Konto erhalten.</p>
           </div>
         </section>
       )}
@@ -164,127 +164,7 @@ export function LicensePage() {
 
 /* ------------------------------------ Konto ------------------------------------ */
 
-export function AccountPage() {
-  usePageTitle('Konto');
-  const account = useCloud((s) => s.account);
-  const user = useCloud((s) => s.user);
-  const navigate = useNavigate();
-  const p = account?.profile;
-  const i = account?.institution;
-  const l = account?.license;
-  const [first, setFirst] = useState(p?.firstName ?? '');
-  const [last, setLast] = useState(p?.lastName ?? '');
-  const [busy, setBusy] = useState(false);
-  useEffect(() => {
-    setFirst(p?.firstName ?? '');
-    setLast(p?.lastName ?? '');
-  }, [p?.firstName, p?.lastName]);
-  if (!user) return null;
-  const dirty = !!p && (first.trim() !== p.firstName || last.trim() !== p.lastName);
-  return (
-    <div className="page page--narrow">
-      <PageHeader eyebrow="Konto" title={p ? `${p.firstName} ${p.lastName}`.trim() || user.email : user.email} subtitle={user.email} />
-      <dl className="account-grid" data-testid="account-details">
-        <div>
-          <dt>Name</dt>
-          <dd>{p ? `${p.firstName} ${p.lastName}`.trim() || '–' : '–'}</dd>
-        </div>
-        <div>
-          <dt>E-Mail</dt>
-          <dd>{user.email}</dd>
-        </div>
-        <div>
-          <dt>Institutionstyp</dt>
-          <dd>{i ? INSTITUTION_TYPE_LABEL[i.type] : '–'}</dd>
-        </div>
-        <div>
-          <dt>{i?.type === 'education' ? 'Bildungseinrichtung' : i?.type === 'business' ? 'Firma' : 'Institution'}</dt>
-          <dd>{i?.name ?? '–'}</dd>
-        </div>
-        <div>
-          <dt>Lizenztyp</dt>
-          <dd data-testid="account-license">{licenseLabel(l?.plan, l?.maxLocations)}</dd>
-        </div>
-        <div>
-          <dt>Lizenzstatus</dt>
-          <dd>
-            <Pill tone={l?.status === 'active' ? 'ok' : 'warn'}>{l ? LICENSE_STATUS_LABEL[l.status] : 'keine Lizenz'}</Pill>
-          </dd>
-        </div>
-        {p && (
-          <div>
-            <dt>Rolle</dt>
-            <dd>{p.role === 'super_admin' ? 'Super-Admin' : p.role === 'institution_admin' ? 'Administration der Institution' : 'Benutzer/in'}</dd>
-          </div>
-        )}
-      </dl>
-      {l?.status === 'pending' && (
-        <p className="auth-note" data-testid="pending-note">
-          <CircleAlert size={14} /> Deine Lizenz ist noch nicht aktiviert. <Link to="/license">Zur Lizenzseite</Link>
-        </p>
-      )}
-
-      <BillingSummary />
-
-      <section className="page-section" data-testid="account-legal">
-        <div className="page-section__head">
-          <h2 className="page-section__title">Verträge &amp; Rechtliches</h2>
-        </div>
-        <LegalFooterLinks compact />
-      </section>
-
-      {p && (
-        <section className="page-section">
-          <div className="page-section__head">
-            <h2 className="page-section__title">Name ändern</h2>
-          </div>
-          <div className="form-row">
-            <TextField label="Vorname" value={first} onChange={(e) => setFirst(e.target.value)} />
-            <TextField label="Nachname" value={last} onChange={(e) => setLast(e.target.value)} />
-          </div>
-          <div className="form-actions">
-            <Button
-              variant="primary"
-              disabled={!dirty || !first.trim()}
-              loading={busy}
-              onClick={async () => {
-                setBusy(true);
-                try {
-                  await useCloud.getState().updateName(first, last);
-                  useAppStore.getState().notify('Name gespeichert', 'success');
-                } catch (e) {
-                  useAppStore.getState().notify(e instanceof Error ? e.message : 'Fehler', 'warning');
-                } finally {
-                  setBusy(false);
-                }
-              }}
-            >
-              Speichern
-            </Button>
-          </div>
-        </section>
-      )}
-
-      <section className="page-section">
-        <div className="form-actions">
-          <Button icon={KeyRound} onClick={() => navigate('/reset-password')}>
-            Passwort ändern
-          </Button>
-          <Button
-            icon={LogOut}
-            onClick={async () => {
-              await useCloud.getState().signOut();
-              navigate('/login', { replace: true });
-            }}
-            data-testid="account-signout"
-          >
-            Abmelden
-          </Button>
-        </div>
-      </section>
-    </div>
-  );
-}
+export { AccountPage } from './AccountSettings';
 
 /* ------------------------------------ Admin ------------------------------------ */
 

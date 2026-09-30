@@ -118,7 +118,7 @@ export class LocalAuthProvider implements AuthProvider {
     const user = users.find((u) => u.email === email);
     const cred = (await this.repos.listCredentials()).find((c) => c.email === email);
     if (!user || !cred || !(await verifyCredential(cred, password))) throw new AuthError('E-Mail oder Passwort ist nicht korrekt.', 'password');
-    if (!user.active) throw new AuthError('Dieses Konto wurde deaktiviert. Bitte wende dich an die Administration.');
+    if (!user.active) throw new AuthError('Dieses Konto wurde deaktiviert. Bitte wenden Sie sich an die Administration.');
     return this.startSession(user);
   }
 

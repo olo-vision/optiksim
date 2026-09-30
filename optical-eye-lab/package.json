@@ -1,7 +1,7 @@
 {
   "name": "optical-eye-lab",
   "private": true,
-  "version": "0.9.0",
+  "version": "0.10.0",
   "description": "OLO-LAB3D – interaktive 3D-Simulationsumgebung für Augenoptik (Phase 7: SaaS mit Supabase und Stripe-Abos)",
   "type": "module",
   "scripts": {
@@ -15,11 +15,12 @@
     "dev:e2e": "vite --mode e2e --port 5173 --host 127.0.0.1 --open false",
     "dev:e2e-cloud": "vite --mode e2e-cloud --port 5174 --host 127.0.0.1 --open false",
     "test:db": "vitest run tests/db",
-    "test:e2e:saas": "node tests/e2e/saas.e2e.mjs && node tests/e2e/stripe.e2e.mjs && node tests/e2e/phase8.e2e.mjs && node tests/e2e/legal.e2e.mjs",
+    "test:e2e:saas": "node tests/e2e/saas.e2e.mjs && node tests/e2e/stripe.e2e.mjs && node tests/e2e/phase8.e2e.mjs && node tests/e2e/legal.e2e.mjs && node tests/e2e/cloud.e2e.mjs",
+    "test:e2e:cloud": "node tests/e2e/cloud.e2e.mjs",
     "test:stripe": "vitest run tests/stripe.handlers.test.ts tests/billing.unit.test.ts tests/phase8.unit.test.ts tests/db/stripe.test.ts tests/db/phase8.test.ts tests/db/legalops.test.ts tests/legalops.unit.test.ts tests/db/grants.test.ts",
     "legal:seed": "node scripts/legal-seed.mjs",
     "supabase:db-push": "npx supabase db push",
-    "supabase:deploy-functions": "npx supabase functions deploy create-checkout-session && npx supabase functions deploy create-customer-portal && npx supabase functions deploy stripe-webhook --no-verify-jwt && npx supabase functions deploy consumer-request --no-verify-jwt && npx supabase functions deploy mail-jobs --no-verify-jwt",
+    "supabase:deploy-functions": "npx supabase functions deploy create-checkout-session && npx supabase functions deploy create-customer-portal && npx supabase functions deploy stripe-webhook --no-verify-jwt && npx supabase functions deploy consumer-request --no-verify-jwt && npx supabase functions deploy mail-jobs --no-verify-jwt && npx supabase functions deploy delete-account",
     "test:edge": "node tests/edge/edge-auth.smoke.mjs"
   },
   "dependencies": {

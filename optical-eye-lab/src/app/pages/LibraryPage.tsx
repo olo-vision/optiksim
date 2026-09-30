@@ -3,16 +3,17 @@
  */
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router';
-import { Download, FilePlus2, FolderOpen, LayoutGrid, List, SearchX, Star, Upload } from 'lucide-react';
+import { CloudOff, Download, FilePlus2, FolderOpen, LayoutGrid, List, SearchX, Star, Upload } from 'lucide-react';
 import { useSession } from '../session';
 import { platform } from '../platformInstance';
-import { Button, EmptyState, PageHeader, Pill, SearchInput, Tabs } from '@/ui/ds';
+import { Button, EmptyState, Notice, PageHeader, Pill, SearchInput, Tabs } from '@/ui/ds';
 import { exportLibrary, importFiles, openAppDialog, pickImportFiles, setFavorite } from '../library/actions';
 import { SimulationActionsMenu, SimulationCard, relativeTime, TemplateGlyph } from '../library/visuals';
 import { querySimulations, type LibraryScope, type LibrarySort } from '@/platform/library';
 import { CATEGORY_LABELS, type SimulationCategory } from '@/platform/models';
 import { can } from '@/platform/permissions';
 import { usePageTitle } from '../usePageTitle';
+import { LegacyImportBanner } from '../library/LegacyImportBanner';
 
 const SORTS: Array<{ value: LibrarySort; label: string }> = [
   { value: 'updated', label: 'Zuletzt geändert' },
@@ -27,6 +28,8 @@ export function LibraryPage() {
   usePageTitle('Meine Simulationen');
   const user = useSession((s) => s.user)!;
   const sims = useSession((s) => s.sims);
+  const libraryError = useSession((s) => s.libraryError);
+  const inCloud = platform.library.storageKind === 'cloud';
   const [params, setParams] = useSearchParams();
   const navigate = useNavigate();
   const [ownerNames, setOwnerNames] = useState<Record<string, string>>({});
@@ -96,7 +99,7 @@ export function LibraryPage() {
     >
       <PageHeader
         title="Meine Simulationen"
-        subtitle={viewAll ? 'Als Administrator/in siehst du die Simulationen aller Konten auf diesem Gerät.' : 'Alle deine gespeicherten Simulationen – lokal in diesem Browser.'}
+        subtitle={inCloud ? 'Ihre Simulationen – sicher in Ihrem Konto gespeichert und auf allen Geräten verfügbar.' : viewAll ? 'Als Administrator/in sehen Sie die Simulationen aller Konten auf diesem Gerät.' : 'Alle Ihre gespeicherten Simulationen – lokal in diesem Browser.'}
         actions={
           <>
             <Button icon={Upload} onClick={() => pickImportFiles()}>
@@ -163,12 +166,29 @@ export function LibraryPage() {
         </span>
       </div>
 
+      <LegacyImportBanner />
+      {libraryError && (
+        <Notice
+          tone="warn"
+          icon={CloudOff}
+          role="alert"
+          className="page-notice"
+          title="Die Bibliothek konnte nicht geladen werden"
+          actions={
+            <Button size="sm" onClick={() => void useSession.getState().refreshLibrary()}>
+              Erneut versuchen
+            </Button>
+          }
+        >
+          {libraryError}
+        </Notice>
+      )}
       {results.length === 0 ? (
-        sims.length === 0 ? (
+        libraryError ? null : sims.length === 0 ? (
           <EmptyState
             icon={FolderOpen}
-            title="Deine Bibliothek ist leer"
-            text="Lege eine neue Simulation an oder importiere eine .opticsim-Datei (auch per Drag & Drop auf diese Seite)."
+            title="Ihre Bibliothek ist leer"
+            text="Legen Sie eine neue Simulation an oder importieren Sie eine .opticsim-Datei (auch per Drag & Drop auf diese Seite)."
             action={
               <>
                 <Button variant="primary" icon={FilePlus2} onClick={() => openAppDialog({ kind: 'new-simulation' })}>
@@ -184,7 +204,7 @@ export function LibraryPage() {
           <EmptyState
             icon={scope === 'favorites' ? Star : SearchX}
             title={scope === 'favorites' && !text ? 'Noch keine Favoriten' : scope === 'archived' && !text ? 'Das Archiv ist leer' : 'Keine Treffer'}
-            text={scope === 'favorites' && !text ? 'Markiere Simulationen mit dem Stern, um sie hier zu sammeln.' : 'Passe Suche oder Filter an.'}
+            text={scope === 'favorites' && !text ? 'Markieren Sie Simulationen mit dem Stern, um sie hier zu sammeln.' : 'Bitte passen Sie Suche oder Filter an.'}
             action={
               filtered ? (
                 <Button onClick={() => setParams(new URLSearchParams(), { replace: true })}>Filter zurücksetzen</Button>

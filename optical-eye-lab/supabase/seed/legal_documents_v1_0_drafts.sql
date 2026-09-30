@@ -42,7 +42,7 @@ OLO-LAB3D ist eine browserbasierte Simulations- und Lernsoftware für Augenoptik
 
 OLO Vision ist nicht bereit und nicht verpflichtet, an Streitbeilegungsverfahren vor einer Verbraucherschlichtungsstelle teilzunehmen.
 $olo$),
-      -- 02_agb.md (038af64c1f12)
+      -- 02_agb.md (602366f88c77)
       ('terms', 'all', '1.0', $olo$Allgemeine Geschäftsbedingungen$olo$, $olo$Ich habe die {link} gelesen und akzeptiere sie.$olo$, $olo$## 1. Geltungsbereich und Anbieter
 
 1.1 Diese Allgemeinen Geschäftsbedingungen (AGB) gelten für alle Verträge über die Nutzung der Software OLO-LAB3D zwischen OLO Vision, Inhaber Jonas Karol Lingener, Forsthausstraße 14, 66709 Weiskirchen, E-Mail: info@olo-vision.de (nachfolgend „OLO Vision“ oder „wir“) und ihren Kundinnen und Kunden (nachfolgend „Kunde“).
@@ -168,7 +168,9 @@ Es gelten die gesetzlichen Mängelrechte. Für Verbraucher gelten insbesondere d
 
 13.3 Im Übrigen ist die Haftung für leichte Fahrlässigkeit ausgeschlossen.
 
-13.4 Simulationen und Einstellungen speichert OLO-LAB3D derzeit **lokal im Browser** des jeweiligen Geräts. OLO Vision übernimmt hierfür keine serverseitige Speicherung oder Datensicherung. Der Kunde ist dafür verantwortlich, wichtige Arbeiten über die Exportfunktion zu sichern. Die Haftung nach Ziffer 13.1 bleibt unberührt.
+13.4 Simulationen, eigene Vorlagen und Einstellungen speichert OLO-LAB3D im Kundenkonto auf Servern in der EU; sie stehen nach der Anmeldung auf jedem unterstützten Gerät zur Verfügung. Endet der Vertrag, bleiben die gespeicherten Inhalte bis zum Ablauf der in der Datenschutzerklärung genannten Speicherdauer erhalten und können nach einer erneuten Buchung weiter genutzt werden; lesen und exportieren ist auch ohne aktive Lizenz möglich. OLO Vision schuldet keine gesonderte Datensicherung für den Kunden; es wird empfohlen, wichtige Arbeiten zusätzlich über die Exportfunktion zu sichern. Die Haftung nach Ziffer 13.1 bleibt unberührt.
+
+[Prüfhinweis: Formulierung zur Datensicherung nach Umstellung auf die Cloud-Speicherung (Version 0.10) anwaltlich prüfen lassen.]
 
 ## 14. Speicherung des Vertragstexts und Vertragssprache
 
@@ -186,7 +188,7 @@ OLO Vision ist nicht bereit und nicht verpflichtet, an Streitbeilegungsverfahren
 
 16.2 Sollten einzelne Bestimmungen dieser AGB unwirksam sein, bleibt die Wirksamkeit der übrigen Bestimmungen unberührt. An die Stelle der unwirksamen Bestimmung treten die gesetzlichen Vorschriften.
 $olo$),
-      -- 03_lizenzbedingungen.md (5855a9c4fb3c)
+      -- 03_lizenzbedingungen.md (c7ff8fc9172f)
       ('license_terms', 'all', '1.0', $olo$Lizenz- und Nutzungsbedingungen$olo$, $olo$Ich akzeptiere die {link} und bestätige, mindestens 18 Jahre alt zu sein oder mit Zustimmung meiner gesetzlichen Vertreter zu handeln.$olo$, $olo$Diese Bedingungen regeln, wer OLO-LAB3D wie nutzen darf. Sie gelten für jedes Kundenkonto, die kostenlose Demo und alle Tarife. Anbieter ist OLO Vision, Inhaber Jonas Karol Lingener, Forsthausstraße 14, 66709 Weiskirchen, E-Mail: info@olo-vision.de.
 
 ## 1. Kundenkonto und Zugangsdaten
@@ -264,9 +266,15 @@ Dem Kunden und allen Nutzenden ist insbesondere untersagt,
 
 8.4 Während der Demo gelten die Nutzungsregeln des zum Kundentyp passenden Tarifs.
 
-## 9. Lokale Speicherung von Simulationen
+## 9. Speicherung von Simulationen im Kundenkonto
 
-Simulationen, Vorlagen und Einstellungen werden derzeit **lokal im Browser** des verwendeten Geräts gespeichert und nicht an OLO Vision übertragen. OLO Vision übernimmt dafür **keine serverseitige Speicherung oder Datensicherung**. Das Löschen von Browserdaten, ein anderer Browser oder ein anderes Gerät können dazu führen, dass diese Daten nicht mehr verfügbar sind. Der Kunde sichert wichtige Arbeiten über die Exportfunktion.
+9.1 Simulationen, eigene Vorlagen und Einstellungen werden im **Kundenkonto** gespeichert (Server in der EU) und stehen nach der Anmeldung auf jedem unterstützten Gerät zur Verfügung. Nur gerätebezogene Darstellungseinstellungen (z. B. Grafikqualität, Panelbreiten) und nicht gespeicherte Zwischenstände zur Absturzsicherung verbleiben im Browser des jeweiligen Geräts.
+
+9.2 Die Inhalte sind an das Kundenkonto gebunden, nicht an die Lizenz. Endet die Lizenz, bleiben sie erhalten; sie können weiterhin angesehen und exportiert, aber erst nach einer erneuten Buchung wieder bearbeitet werden.
+
+9.3 Wird dieselbe Simulation gleichzeitig auf mehreren Geräten bearbeitet, weist OLO-LAB3D vor dem Überschreiben eines neueren Stands darauf hin und bietet an, den eigenen Stand als Kopie zu speichern.
+
+9.4 Es wird empfohlen, wichtige Arbeiten zusätzlich über die Exportfunktion zu sichern.
 
 ## 10. Verfügbarkeit und Wartung
 
@@ -284,9 +292,13 @@ Verstößt der Kunde gegen diese Bedingungen, kann OLO Vision den Zugang nach vo
 
 ## 13. Ende der Nutzung
 
-Mit Ende des Vertrags bzw. der Demo endet das Nutzungsrecht. Das Kundenkonto bleibt bestehen, bis der Kunde seine Löschung verlangt oder die in der Datenschutzerklärung genannte Löschfrist abgelaufen ist; eine erneute Buchung ist in dieser Zeit möglich.
+13.1 Mit Ende des Vertrags bzw. der Demo endet das Nutzungsrecht. Das Kundenkonto und die gespeicherten Inhalte bleiben bestehen, bis der Kunde das Konto löscht oder die in der Datenschutzerklärung genannte Speicherdauer abgelaufen ist; eine erneute Buchung ist in dieser Zeit möglich und stellt die gespeicherten Inhalte wieder zur Bearbeitung bereit.
+
+13.2 Der Kunde kann sein Konto in der Kontoverwaltung **schließen**: Die Nutzung ruht, die Inhalte bleiben 12 Monate erhalten und das Konto kann in dieser Zeit wieder geöffnet werden. Danach wird es gelöscht.
+
+13.3 Der Kunde kann sein Konto in der Kontoverwaltung jederzeit **endgültig löschen**. Konto, Simulationen, Vorlagen und Einstellungen werden dabei sofort und unwiderruflich gelöscht; gesetzlich aufzubewahrende Rechnungs- und Vertragsnachweise bleiben bis zum Ende der Aufbewahrungsfrist gespeichert. Ein laufendes, nicht gekündigtes Abonnement ist vorher zu kündigen.
 $olo$),
-      -- 04_b2b_bedingungen.md (edbd434308d1)
+      -- 04_b2b_bedingungen.md (2243c1b7e891)
       ('b2b_terms', 'b2b', '1.0', $olo$B2B-Zusatzbedingungen$olo$, $olo$Ich bestelle für ein Unternehmen bzw. eine Bildungseinrichtung und akzeptiere die {link}.$olo$, $olo$## 1. Geltungsbereich
 
 1.1 Diese Zusatzbedingungen gelten für Verträge über die Tarife **Business** und **Education** mit Unternehmern im Sinne des § 14 BGB, juristischen Personen des öffentlichen Rechts und öffentlich-rechtlichen Sondervermögen sowie mit Schulen und sonstigen Bildungseinrichtungen, die den Vertrag in Ausübung ihrer beruflichen, gewerblichen oder öffentlichen Tätigkeit schließen (nachfolgend „B2B-Kunde“).
@@ -337,7 +349,7 @@ $olo$),
 
 6.2 Bei leicht fahrlässiger Verletzung einer wesentlichen Vertragspflicht ist die Haftung auf den vertragstypischen, bei Vertragsschluss vorhersehbaren Schaden begrenzt. Im Übrigen ist die Haftung für leichte Fahrlässigkeit ausgeschlossen.
 
-6.3 Für den Verlust von Daten haftet OLO Vision im Rahmen der vorstehenden Regelungen nur in dem Umfang, der auch bei ordnungsgemäßer Datensicherung durch den B2B-Kunden eingetreten wäre. Simulationen werden derzeit lokal im Browser gespeichert; OLO Vision übernimmt hierfür keine Datensicherung.
+6.3 Für den Verlust von Daten haftet OLO Vision im Rahmen der vorstehenden Regelungen nur in dem Umfang, der auch bei ordnungsgemäßer Datensicherung durch den B2B-Kunden eingetreten wäre. Simulationen werden im Kundenkonto gespeichert (Ziffer 9 der Lizenzbedingungen); eine gesonderte Datensicherung für den B2B-Kunden schuldet OLO Vision nicht.
 
 [Prüfhinweis: Eine zusätzliche summenmäßige Haftungshöchstgrenze (z. B. auf die Vergütung der letzten 12 Monate) wurde bewusst nicht aufgenommen, weil pauschale Höchstbeträge in AGB auch gegenüber Unternehmern häufig unwirksam sind. Ob und in welcher Höhe eine Höchstgrenze angemessen ist, sollte anwaltlich geprüft werden.]
 
@@ -345,7 +357,9 @@ $olo$),
 
 7.1 OLO Vision verarbeitet die Daten des Kundenkontos (insbesondere Name und E-Mail-Adresse der registrierenden Person, Einrichtungs- und Rechnungsdaten) als Verantwortlicher; Einzelheiten ergeben sich aus der Datenschutzerklärung.
 
-7.2 Die Simulationsdaten werden derzeit ausschließlich lokal im Browser gespeichert und nicht an OLO Vision übermittelt. Soweit OLO Vision künftig im Auftrag des B2B-Kunden personenbezogene Daten verarbeitet, schließen die Parteien auf Anfrage einen Vertrag über die Auftragsverarbeitung nach Art. 28 DSGVO.
+7.2 Simulationen, Vorlagen und Einstellungen werden im Kundenkonto gespeichert. Sie sollen keine personenbezogenen Daten Dritter (z. B. Namen von Kundinnen, Patienten oder Lernenden) enthalten. Soweit OLO Vision im Auftrag des B2B-Kunden personenbezogene Daten verarbeitet, schließen die Parteien auf Anfrage einen Vertrag über die Auftragsverarbeitung nach Art. 28 DSGVO.
+
+[Prüfhinweis: Mit der Cloud-Speicherung (Version 0.10) können Kunden frei benannte Inhalte ablegen. Prüfen lassen, ob ein AV-Vertrag standardmäßig angeboten werden sollte.]
 
 [Prüfhinweis: Die Rollenverteilung (Verantwortlicher / Auftragsverarbeiter), insbesondere bei öffentlichen Schulen und bei gemeinsamer Nutzung eines Logins, anwaltlich bzw. datenschutzrechtlich prüfen lassen.]
 
@@ -353,7 +367,7 @@ $olo$),
 
 Es gilt das Recht der Bundesrepublik Deutschland unter Ausschluss des UN-Kaufrechts.
 $olo$),
-      -- 05_datenschutz.md (9448cbeb0bf3)
+      -- 05_datenschutz.md (f51b9b7fe8d9)
       ('privacy', 'all', '1.0', $olo$Datenschutzerklärung$olo$, $olo$Ich habe die {link} zur Kenntnis genommen.$olo$, $olo$## 1. Verantwortlicher
 
 Verantwortlich für die Verarbeitung personenbezogener Daten im Zusammenhang mit OLO-LAB3D und der Website https://olo-lab.de ist:
@@ -370,7 +384,7 @@ Ein Datenschutzbeauftragter ist nicht bestellt, da hierzu keine gesetzliche Pfli
 
 OLO-LAB3D ist eine browserbasierte Simulations- und Lernsoftware. Wir verarbeiten nur die Daten, die für Kundenkonto, Lizenz, Zahlung, Nachweise und den sicheren Betrieb erforderlich sind. Wir setzen **keine Analyse-, Tracking-, Werbe- oder Chatdienste** ein und binden keine externen Schriftarten oder Inhalte Dritter ein.
 
-Ihre **Simulationen, Vorlagen und Einstellungen** werden lokal in Ihrem Browser gespeichert und nicht an uns übertragen (siehe Ziffer 9).
+Ihre **Simulationen, Vorlagen und Einstellungen** werden in Ihrem Kundenkonto gespeichert, damit sie Ihnen auf jedem Gerät zur Verfügung stehen (siehe Ziffer 9).
 
 ## 3. Aufruf der Website und Hosting
 
@@ -425,25 +439,31 @@ Wenn Sie über „Verträge hier kündigen“ oder „Vertrag widerrufen“ eine
 
 [Prüfhinweis: Genaue Firmierung und Auftragsverarbeitungsvertrag von united-domains prüfen und ergänzen.]
 
-## 9. Speicherung im Browser
+## 9. Gespeicherte Inhalte und Speicherung im Browser
 
-9.1 OLO-LAB3D speichert im lokalen Speicher Ihres Browsers (Local Storage):
+9.1 **Inhalte im Kundenkonto:** Ihre Simulationen (einschließlich Vorschaubild), eigenen Vorlagen und kontobezogenen Einstellungen speichern wir bei Supabase (Ziffer 4.3) und ordnen sie Ihrem Konto zu. Zugriff hat nur Ihr Konto; technisch ist dies durch Zugriffsregeln der Datenbank abgesichert. Rechtsgrundlage ist Art. 6 Abs. 1 lit. b DSGVO. Bitte legen Sie in Simulationen keine personenbezogenen Daten Dritter ab.
+
+9.2 **Im Browser** (Local Storage) speichert OLO-LAB3D:
 - die Anmeldesitzung,
-- Ihre Simulationen, Vorlagen und Einstellungen,
+- gerätebezogene Darstellungseinstellungen (z. B. Grafikqualität, Panelbreiten),
+- nicht gespeicherte Zwischenstände zur Absturzsicherung,
+- übergangsweise Inhalte aus früheren Versionen von OLO-LAB3D, die nach der Übernahme in Ihr Konto höchstens 30 Tage als Sicherung auf dem Gerät verbleiben,
 - vorübergehend (höchstens 24 Stunden) den auf der Preisseite gewählten Tarif, damit er nach der Registrierung übernommen werden kann.
 
-9.2 Diese Speicherung ist unbedingt erforderlich, um die von Ihnen ausdrücklich gewünschte Anwendung bereitzustellen (§ 25 Abs. 2 Nr. 2 TDDDG). Eine Einwilligung ist dafür nicht erforderlich. Wir setzen keine Cookies zu Analyse- oder Werbezwecken ein.
-
-9.3 Simulationen werden nicht an uns übertragen. Wir haben keinen Zugriff darauf und übernehmen keine Datensicherung. Sie können die Daten jederzeit über die Einstellungen Ihres Browsers löschen.
+9.3 Diese Speicherung im Browser ist unbedingt erforderlich, um die von Ihnen ausdrücklich gewünschte Anwendung bereitzustellen (§ 25 Abs. 2 Nr. 2 TDDDG). Eine Einwilligung ist dafür nicht erforderlich. Wir setzen keine Cookies zu Analyse- oder Werbezwecken ein.
 
 ## 10. Speicherdauer
 
-- **Kundenkonto:** bis zur Löschung auf Ihren Antrag, spätestens 12 Monate nach Ende des letzten Vertrags bzw. nach der letzten relevanten Anmeldung, sofern keine gesetzlichen Aufbewahrungspflichten oder berechtigten Nachweisinteressen eine längere Speicherung erfordern.
+- **Kundenkonto und gespeicherte Inhalte:** bis Sie das Konto löschen, spätestens 12 Monate nach Ende des letzten Vertrags bzw. nach der letzten relevanten Anmeldung. Das Ende einer Lizenz führt nicht zur sofortigen Löschung, damit Sie Ihre Inhalte nach einer erneuten Buchung weiter nutzen können.
+- **Geschlossenes Konto:** 12 Monate ab Schließung; in dieser Zeit können Sie das Konto wieder öffnen. Danach wird es gelöscht.
+- **Nachweis einer Kontolöschung:** Kennung des gelöschten Kontos, Zeitpunkt und ein nicht umkehrbarer Hashwert der E-Mail-Adresse für 3 Jahre (Art. 6 Abs. 1 lit. c und f DSGVO, Nachweis der Erfüllung Ihres Löschverlangens).
 - **Zustimmungs- und Vertragsnachweise, Kündigungs- und Widerrufserklärungen:** 3 Jahre nach Ende des Vertrags (Ende des Kalenderjahres, regelmäßige Verjährungsfrist), soweit keine längeren gesetzlichen Pflichten bestehen.
 - **Rechnungs-, Buchungs- und Steuerunterlagen:** nach den gesetzlichen Aufbewahrungsfristen, insbesondere § 147 AO.
 - **Server-Logdaten:** nach den Vorgaben der Hosting-Dienstleister.
 
-Die Löschung erfolgt derzeit auf Antrag per E-Mail an info@olo-vision.de.
+Sie können Ihr Konto jederzeit selbst in der Kontoverwaltung schließen oder endgültig löschen; alternativ genügt eine E-Mail an info@olo-vision.de. Bei der endgültigen Löschung werden Konto, Profil, Simulationen, Vorlagen und Einstellungen sofort gelöscht; Einrichtungsdaten werden anonymisiert, soweit sie nicht für Rechnungen aufbewahrt werden müssen. Rechnungen und die für sie nötigen Daten bleiben bei Stripe bis zum Ablauf der gesetzlichen Fristen gespeichert.
+
+[Prüfhinweis: Die automatische Löschung nach Ablauf der 12 Monate ist derzeit als Admin-Vorgang umgesetzt (Übersicht fälliger Konten). Vor Veröffentlichung festlegen, ob sie automatisch erfolgen soll, und den Text ggf. anpassen.]
 
 ## 11. Übermittlung in Drittländer
 
