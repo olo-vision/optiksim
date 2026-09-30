@@ -13,7 +13,7 @@ import type { SceneDocument } from '@/model/types';
 import { SCHEMA_VERSION } from '@/model/types';
 import { migrateDocument } from '@/state/persistence';
 import type { CloudBackend } from '@/cloud/backend';
-import type { CloudSimulationPatch, CloudSimulationRow, CloudTemplateRow } from '@/cloud/types';
+import { CloudError, type CloudSimulationPatch, type CloudSimulationRow, type CloudTemplateRow } from '@/cloud/types';
 import { CATEGORY_LABELS, type SimulationCategory, type SimulationMetadata, type SimulationRecord, type SimulationSummary, type Template } from '@/platform/models';
 import { ContentConflictError, type CommitOptions, type ContentRepository } from '@/platform/content';
 import type { Repositories } from '@/platform/repositories';
@@ -60,11 +60,30 @@ export class CloudContentStore implements ContentRepository {
   /** Schreibvorgänge je Simulation nacheinander (Auto-Save und Favorit dürfen sich nicht überholen) */
   private locks = new Map<string, Promise<unknown>>();
 
+  private disposed = false;
+
   constructor(
     private backend: CloudBackend,
     private local: Repositories,
     readonly identity: CloudIdentity,
   ) {}
+
+  /** Abmelden/Kontowechsel: dieser Speicher darf nichts mehr schreiben */
+  dispose() {
+    this.disposed = true;
+  }
+
+  /**
+   * Schutz beim Kontowechsel (z. B. zweiter Tab meldet ein anderes Konto an): Schreiben nur, solange die
+   * Sitzung noch zu diesem Konto gehört – sonst landeten Inhalte im falschen Konto.
+   */
+  async assertActive() {
+    const uid = this.disposed ? null : await this.backend.currentUserId().catch(() => null);
+    if (this.disposed || uid !== this.identity.cloudUserId) {
+      this.disposed = true;
+      throw new CloudError('Sie wurden abgemeldet oder mit einem anderen Konto angemeldet. Ihre Änderungen sind auf diesem Gerät gesichert; bitte melden Sie sich erneut an.', undefined, 'session');
+    }
+  }
 
   private serial<T>(id: string, fn: () => Promise<T>): Promise<T> {
     const prev = this.locks.get(id) ?? Promise.resolve();
@@ -114,6 +133,7 @@ export class CloudContentStore implements ContentRepository {
   /* ------------------------------------ Simulationen ------------------------------------ */
 
   async listSimMeta(): Promise<SimulationMetadata[]> {
+    await this.assertActive();
     const rows = await this.backend.listSimulations();
     const next = new Map<string, SimulationMetadata>();
     for (const r of rows) {
@@ -134,6 +154,7 @@ export class CloudContentStore implements ContentRepository {
   }
 
   async getSim(id: string): Promise<SimulationRecord | null> {
+    await this.assertActive();
     const row = await this.backend.getSimulation(id);
     if (!row) {
       this.metas.delete(id);
@@ -148,6 +169,7 @@ export class CloudContentStore implements ContentRepository {
   }
 
   async createSim(meta: SimulationMetadata, doc: SceneDocument, thumbnail?: string | null): Promise<SimulationMetadata> {
+    await this.assertActive();
     const thumb = usableThumb(thumbnail);
     const row = await this.backend.insertSimulation({
       id: meta.id,
@@ -174,6 +196,7 @@ export class CloudContentStore implements ContentRepository {
 
   commitSim(id: string, doc: SceneDocument, patch: (m: SimulationMetadata) => SimulationMetadata, thumbnail?: string | null, opts?: CommitOptions): Promise<SimulationMetadata | null> {
     return this.serial(id, async () => {
+      await this.assertActive();
       const cur = await this.getSimMeta(id);
       if (!cur) throw new ContentConflictError('Diese Simulation wurde inzwischen an anderer Stelle gelöscht.', true);
       const next = patch(cur);
@@ -196,6 +219,7 @@ export class CloudContentStore implements ContentRepository {
 
   patchSimMeta(id: string, fn: (m: SimulationMetadata) => SimulationMetadata): Promise<SimulationMetadata | null> {
     return this.serial(id, async () => {
+      await this.assertActive();
       const cur = await this.getSimMeta(id);
       if (!cur) return null;
       const next = fn(cur);
@@ -217,6 +241,7 @@ export class CloudContentStore implements ContentRepository {
   async renameSimDoc(): Promise<void> {}
 
   async deleteSim(id: string): Promise<void> {
+    await this.assertActive();
     await this.backend.deleteSimulation(id);
     this.metas.delete(id);
     this.thumbs.delete(id);
@@ -225,11 +250,19 @@ export class CloudContentStore implements ContentRepository {
     await this.local.clearDraft(id).catch(() => undefined);
   }
 
+  private thumbRequests = new Map<string, Promise<string | null>>();
+
   async getThumb(id: string): Promise<string | null> {
     if (this.thumbs.has(id)) return this.thumbs.get(id) ?? null;
     const meta = this.metas.get(id);
     if (meta && !meta.hasThumbnail) return null;
-    const t = await this.backend.getSimulationThumbnail(id);
+    // gleichzeitige Anfragen für dasselbe Bild (Kachel + Liste) nur einmal senden
+    let req = this.thumbRequests.get(id);
+    if (!req) {
+      req = this.backend.getSimulationThumbnail(id).finally(() => this.thumbRequests.delete(id));
+      this.thumbRequests.set(id, req);
+    }
+    const t = await req;
     this.thumbs.set(id, t);
     return t;
   }
@@ -259,6 +292,7 @@ export class CloudContentStore implements ContentRepository {
 
   async saveTemplate(t: Template): Promise<void> {
     if (!t.doc) return;
+    await this.assertActive();
     await this.backend.saveTemplate({
       id: t.id,
       visibility: t.visibility === 'organization' ? 'institution' : 'private',
@@ -271,7 +305,8 @@ export class CloudContentStore implements ContentRepository {
     });
   }
 
-  deleteTemplate(id: string): Promise<void> {
+  async deleteTemplate(id: string): Promise<void> {
+    await this.assertActive();
     return this.backend.deleteTemplate(id);
   }
 

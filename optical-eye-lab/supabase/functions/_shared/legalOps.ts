@@ -32,7 +32,7 @@ import {
 // deno-lint-ignore no-explicit-any
 type Obj = Record<string, any>;
 
-export type MailKind = 'contract_confirmation' | 'cancellation_confirmation' | 'withdrawal_confirmation' | 'declaration_notice' | 'renewal_reminder' | 'b2b_country_notice' | 'account_deleted';
+export type MailKind = 'contract_confirmation' | 'cancellation_confirmation' | 'withdrawal_confirmation' | 'declaration_notice' | 'renewal_reminder' | 'b2b_country_notice' | 'account_deleted' | 'account_deletion_reminder' | 'admin_notice';
 
 export interface DeclarationInput {
   kind: 'cancellation' | 'withdrawal';
@@ -70,6 +70,27 @@ export interface OpsDb {
   /** Checkout-Sessions der letzten Tage ohne erfolgreich versendete Vertragsbestätigung */
   pendingContractConfirmations(days: number): Promise<string[]>;
   markRenewal(subscriptionId: string): Promise<void>;
+  /** Drosselung öffentlicher Endpunkte: true = erlaubt */
+  throttle?(bucket: string, limit: number, windowSeconds: number): Promise<boolean>;
+  /** Erklärungen ohne versendete Eingangsbestätigung (Nachversand) */
+  pendingDeclarationConfirmations?(days: number): Promise<PendingDeclaration[]>;
+  markDeclarationConfirmed?(id: string): Promise<void>;
+}
+
+export interface PendingDeclaration {
+  id: string;
+  kind: 'cancellation' | 'withdrawal';
+  cancellation_type: 'ordinary' | 'extraordinary' | null;
+  name: string;
+  email: string;
+  recipient: string;
+  contract_details: string | null;
+  reason: string | null;
+  received_at: string;
+  first_name: string | null;
+  status: string;
+  result: Obj | null;
+  matched: boolean;
 }
 
 const json = (body: unknown, status: number, headers: Record<string, string> = {}) =>
@@ -102,15 +123,28 @@ export async function sendLogged(deps: Deps, kind: MailKind, message: MailMessag
 /* ------------------------------------------------------------------------------------------------ */
 
 const MAX_PER_HOUR = 3;
+const IP_LIMIT_PER_HOUR = 10;
+const GLOBAL_LIMIT_PER_HOUR = 300;
+
+function clientIp(req: Request): string | null {
+  const fwd = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim();
+  return fwd || req.headers.get('cf-connecting-ip') || req.headers.get('x-real-ip') || null;
+}
+async function sha256Hex(s: string): Promise<string> {
+  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(s));
+  return [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, '0')).join('').slice(0, 32);
+}
 
 function parseDeclaration(body: Obj): DeclarationInput | { error: string; field?: string } {
   const kind = body?.kind;
   if (kind !== 'cancellation' && kind !== 'withdrawal') return { error: 'Unbekannte Erklärung.' };
-  const str = (v: unknown, max: number) => (typeof v === 'string' ? v.trim().slice(0, max) : '');
+  // Steuerzeichen entfernen (keine Zeilenumbrüche in Betreffzeilen, keine unsichtbaren Zeichen in E-Mails)
+  const str = (v: unknown, max: number, multiline = false) =>
+    typeof v === 'string' ? v.replace(multiline ? /[\x00-\x09\x0B\x0C\x0E-\x1F\x7F]/g : /[\x00-\x1F\x7F]/g, ' ').trim().slice(0, max) : '';
   const name = str(body.name, 200);
   const email = str(body.email, 320).toLowerCase();
-  const contractDetails = str(body.contract, 500) || null;
-  const reason = str(body.reason, 2000) || null;
+  const contractDetails = str(body.contract, 500, true) || null;
+  const reason = str(body.reason, 2000, true) || null;
   const cancellationType = kind === 'cancellation' ? (body.cancellationType === 'extraordinary' ? 'extraordinary' : 'ordinary') : null;
   if (!name) return { error: 'Bitte geben Sie Ihren Namen an.', field: 'name' };
   if (!isEmail(email)) return { error: 'Bitte geben Sie die E-Mail-Adresse Ihres Kundenkontos an.', field: 'email' };
@@ -129,6 +163,21 @@ export async function handleConsumerRequest(req: Request, deps: Deps): Promise<R
     const input = parseDeclaration(body);
     if ('error' in input) return json({ error: input.error, field: input.field ?? null, code: 'invalid' }, 422, cors);
     if (!deps.ops) throw new Error('Rechtsbetrieb nicht konfiguriert');
+
+    // Missbrauchsschutz (Spam über das öffentliche Formular): je Absender-IP und insgesamt begrenzen
+    if (deps.ops.throttle) {
+      const ip = clientIp(req);
+      const okIp = ip ? await deps.ops.throttle(`consumer:ip:${await sha256Hex(ip)}`, IP_LIMIT_PER_HOUR, 3600) : true;
+      const okAll = await deps.ops.throttle('consumer:global', GLOBAL_LIMIT_PER_HOUR, 3600);
+      if (!okIp || !okAll) {
+        deps.log?.(`consumer-request: gedrosselt (${okIp ? 'global' : 'IP'})`);
+        return json(
+          { error: 'Gerade gehen sehr viele Anfragen ein. Bitte versuchen Sie es später erneut oder senden Sie Ihre Erklärung per E-Mail an info@olo-vision.de – maßgeblich ist der Zeitpunkt des Absendens.', code: 'rate_limited' },
+          429,
+          cors,
+        );
+      }
+    }
 
     const rec = await deps.ops.recordDeclaration(input);
     const data: DeclarationMailData = {
@@ -153,7 +202,15 @@ export async function handleConsumerRequest(req: Request, deps: Deps): Promise<R
     let status = 'needs_review';
     const result: Obj = {};
     const sub = rec.subscription;
-    if (input.kind === 'cancellation' && input.cancellationType === 'ordinary' && sub?.stripe_subscription_id && sub.status && LIVE_SUBSCRIPTION_STATUSES.includes(sub.status as never)) {
+    // Automatisch bei Stripe kündigen nur, wenn die Adresse zum Inhaber des Kundenkontos gehört
+    // (Administration der Institution); sonst manuelle Prüfung – die Erklärung ist dennoch eingegangen.
+    let holder = true;
+    if (rec.account?.user_id && deps.accountDb) {
+      const prof = await deps.accountDb.getProfile(rec.account.user_id).catch(() => null);
+      holder = !!prof && (prof.role === 'institution_admin' || prof.role === 'super_admin');
+      if (!holder) result.not_account_holder = true;
+    }
+    if (holder && input.kind === 'cancellation' && input.cancellationType === 'ordinary' && sub?.stripe_subscription_id && sub.status && LIVE_SUBSCRIPTION_STATUSES.includes(sub.status as never)) {
       if (sub.cancel_at_period_end) {
         data.endsAt = sub.current_period_end;
         data.alreadyCancelled = true;
@@ -207,7 +264,10 @@ const safeEqual = (a: string, b: string) => {
   return r === 0;
 };
 
-export async function handleMailJobs(req: Request, deps: Deps): Promise<Response> {
+/** Weitere geplante Aufgaben, die mail-jobs mit ausführt (z. B. Aufbewahrung geschlossener Konten) */
+export type ScheduledJob = (deps: Deps) => Promise<Record<string, unknown>>;
+
+export async function handleMailJobs(req: Request, deps: Deps, extraJobs: Record<string, ScheduledJob> = {}): Promise<Response> {
   if (req.method !== 'POST') return json({ error: 'Methode nicht erlaubt.' }, 405);
   const secret = deps.env('CRON_SECRET') ?? '';
   const given = req.headers.get('x-cron-secret') ?? '';
@@ -222,13 +282,56 @@ export async function handleMailJobs(req: Request, deps: Deps): Promise<Response
     const list = await deps.ops.renewalCandidates(14);
     let sent = 0;
     for (const c of list) {
-      const ok = await sendLogged(deps, 'renewal_reminder', renewalReminderMail(c.email, [c.first_name, c.last_name].filter(Boolean).join(' '), c.current_period_end), c.subscription_id);
-      if (ok) {
-        await deps.ops.markRenewal(c.subscription_id);
-        sent++;
+      try {
+        const ok = await sendLogged(deps, 'renewal_reminder', renewalReminderMail(c.email, [c.first_name, c.last_name].filter(Boolean).join(' '), c.current_period_end), c.subscription_id);
+        if (ok) {
+          await deps.ops.markRenewal(c.subscription_id);
+          sent++;
+        }
+      } catch (e) {
+        deps.log?.(`mail-jobs/renewal ${c.subscription_id}: ${errMsg(e)}`);
       }
     }
-    return json({ confirmations, reminders: { checked: list.length, sent } }, 200);
+    // Eingangsbestätigungen für Kündigung/Widerruf nachholen (§ 312k BGB), wenn der Versand fehlschlug
+    let declarations = 0;
+    if (deps.ops.pendingDeclarationConfirmations && deps.ops.markDeclarationConfirmed) {
+      for (const d of await deps.ops.pendingDeclarationConfirmations(7)) {
+        try {
+          const data: DeclarationMailData = {
+            id: d.id,
+            kind: d.kind,
+            cancellationType: d.cancellation_type,
+            name: d.name,
+            email: d.email,
+            contractDetails: d.contract_details,
+            reason: d.reason,
+            receivedAt: d.received_at,
+            firstName: d.first_name,
+            endsAt: typeof d.result?.cancel_at === 'string' ? d.result.cancel_at : null,
+            alreadyCancelled: d.result?.already_cancelled === true,
+            unmatched: !d.matched,
+          };
+          const mail = d.kind === 'withdrawal' ? withdrawalConfirmationMail(data) : cancellationConfirmationMail(data);
+          mail.to = d.recipient;
+          if (await sendLogged(deps, d.kind === 'withdrawal' ? 'withdrawal_confirmation' : 'cancellation_confirmation', mail, d.id)) {
+            await deps.ops.markDeclarationConfirmed(d.id);
+            declarations++;
+          }
+        } catch (e) {
+          deps.log?.(`mail-jobs/declaration ${d.id}: ${errMsg(e)}`);
+        }
+      }
+    }
+    const extra: Record<string, unknown> = {};
+    for (const [name, job] of Object.entries(extraJobs)) {
+      try {
+        extra[name] = await job(deps);
+      } catch (e) {
+        deps.log?.(`mail-jobs/${name}: ${errMsg(e)}`);
+        extra[name] = { error: true };
+      }
+    }
+    return json({ confirmations, reminders: { checked: list.length, sent }, declarations, ...extra }, 200);
   } catch (e) {
     deps.log?.(`mail-jobs: ${errMsg(e)}`);
     return json({ error: 'Fehler.' }, 500);
@@ -246,7 +349,7 @@ export async function handleMailJobs(req: Request, deps: Deps): Promise<Response
  */
 export async function enforceNoAutoRenewal(snapshot: SubscriptionSnapshot, eventId: string, deps: Deps): Promise<boolean> {
   if (!endsAutomatically(snapshot.plan, snapshot.billing_interval)) return false;
-  if (snapshot.cancel_at_period_end || !LIVE_SUBSCRIPTION_STATUSES.includes(snapshot.status as never)) return false;
+  if (snapshot.cancel_at_period_end || snapshot.cancel_at || !LIVE_SUBSCRIPTION_STATUSES.includes(snapshot.status as never)) return false;
   await deps.stripe.request('POST', `subscriptions/${encodeURIComponent(snapshot.subscription_id)}`, { cancel_at_period_end: 'true' }, `no-renewal-${snapshot.subscription_id}-${eventId}`);
   deps.log?.(`stripe-webhook: private Jahreslizenz ${snapshot.subscription_id} endet automatisch (keine Verlängerung)`);
   return true;

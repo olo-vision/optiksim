@@ -86,6 +86,12 @@ function ErrorLine({ error }: { error: FieldError }) {
 
 /* --------------------------------- Anmelden --------------------------------- */
 
+/** Nur interne Pfade als Rücksprungziel (kein Weiterleiten auf fremde Seiten) */
+export function safeNext(v: string | null): string | null {
+  if (!v || !v.startsWith('/') || v.startsWith('//') || v.startsWith('/\\') || /[\r\n]/.test(v)) return null;
+  return v;
+}
+
 export function CloudLoginPage() {
   usePageTitle('Anmelden');
   const user = useCloud((s) => s.user);
@@ -95,15 +101,22 @@ export function CloudLoginPage() {
   const [password, setPassword] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<FieldError>(null);
-  if (user) return <Navigate to={params.get('next') || cloudLandingPath()} replace />;
+  const next = safeNext(params.get('next'));
+  const sessionExpired = useCloud((s) => s.sessionExpired);
+  if (user) return <Navigate to={next || cloudLandingPath()} replace />;
 
   const submit = async (e: FormEvent) => {
     e.preventDefault();
     setBusy(true);
     setError(null);
     try {
+      if (!email.trim() || !password) {
+        setError({ msg: 'Bitte geben Sie E-Mail-Adresse und Passwort ein.', field: !email.trim() ? 'email' : 'password' });
+        setBusy(false);
+        return;
+      }
       await useCloud.getState().signIn(email, password);
-      navigate(params.get('next') || cloudLandingPath(), { replace: true });
+      navigate(next || cloudLandingPath(), { replace: true });
     } catch (err) {
       setError(toFieldError(err));
       setBusy(false);
@@ -128,6 +141,11 @@ export function CloudLoginPage() {
       {params.get('reset') && (
         <p className="auth-note auth-note--ok">
           <CheckCircle2 size={14} /> Passwort geändert. Bitte melden Sie sich mit dem neuen Passwort an.
+        </p>
+      )}
+      {sessionExpired && (
+        <p className="auth-note auth-note--warn" data-testid="session-expired-note">
+          <Info size={14} /> <span>Ihre Sitzung ist abgelaufen. Bitte melden Sie sich erneut an – ungespeicherte Änderungen sind auf diesem Gerät gesichert und werden danach zur Wiederherstellung angeboten.</span>
         </p>
       )}
       {params.get('deleted') && (
@@ -228,6 +246,8 @@ export function RegisterPage() {
     setBusy(true);
     try {
       const consentDocumentIds = docs ? requiredDocs(docs).filter((d) => checked.has(d.id)).map((d) => d.id) : [];
+      // Paketwahl an genau dieses Konto binden (E-Mail-Bestätigung → Anmeldung ggf. später)
+      if (intent) saveIntent(intent, f.email);
       const r = await useCloud.getState().signUp({ ...f, contactName: org ? `${f.firstName} ${f.lastName}`.trim() : '', consentDocumentIds });
       if (r.needsConfirmation) setConfirmMail(f.email.trim());
       else navigate(intent ? `/license?${intentQuery(intent)}` : cloudLandingPath(), { replace: true });
@@ -400,10 +420,15 @@ export function ForgotPasswordPage() {
 
 /* --------------------------- Passwort zurücksetzen --------------------------- */
 
+/** Kam die Seite über den Link aus der „Passwort zurücksetzen“-E-Mail? (vor der Auswertung durch Supabase gemerkt) */
+const ARRIVED_WITH_RECOVERY_LINK =
+  typeof window !== 'undefined' && window.location.pathname === '/reset-password' && /type=recovery|[?&#](code|access_token|token_hash)=/.test(window.location.hash + window.location.search);
+
 export function ResetPasswordPage() {
   usePageTitle('Neues Passwort');
   const navigate = useNavigate();
   const user = useCloud((s) => s.user);
+  const recovery = useCloud((s) => s.recovery);
   const status = useCloud((s) => s.status);
   const [pw, setPw] = useState('');
   const [pw2, setPw2] = useState('');
@@ -435,7 +460,14 @@ export function ResetPasswordPage() {
   if (!user)
     return (
       <AuthFrame title="Neues Passwort" footer={<Link to="/forgot-password">Neuen Link anfordern</Link>}>
-        <p className="auth-note">{status === 'loading' || !waited ? 'Link wird geprüft …' : 'Der Link ist ungültig oder abgelaufen. Bitte fordere einen neuen an.'}</p>
+        <p className="auth-note">{status === 'loading' || !waited ? 'Link wird geprüft …' : 'Der Link ist ungültig oder abgelaufen. Bitte fordern Sie einen neuen an.'}</p>
+      </AuthFrame>
+    );
+  // Ohne Link aus der E-Mail kein Passwortwechsel ohne das aktuelle Passwort (Kontoverwaltung prüft es)
+  if (!recovery && !ARRIVED_WITH_RECOVERY_LINK)
+    return (
+      <AuthFrame title="Passwort ändern" footer={<Link to="/account">Zur Kontoverwaltung</Link>}>
+        <p className="auth-note">Sie sind angemeldet. Ihr Passwort ändern Sie in der Kontoverwaltung unter „Anmeldung und Sicherheit“ – dort mit Ihrem aktuellen Passwort.</p>
       </AuthFrame>
     );
   return (

@@ -29,6 +29,32 @@ export interface CloudProfile {
   accountStatus?: 'active' | 'closed';
   closedAt?: string | null;
   deletionDueAt?: string | null;
+  /** 0.10.1: Erinnerung vor der automatischen Löschung versendet */
+  deletionReminderSentAt?: string | null;
+  /** 0.10.1: Löschantrag (von der Administration erfasst) */
+  deletionRequestedAt?: string | null;
+  deletionRequestNote?: string | null;
+}
+
+/** Admin-Center: Konten mit besonderem Status (Lizenz abgelaufen · geschlossen · Löschung beantragt) */
+export type AccountLifecycleCategory = 'license_ended' | 'closed' | 'deletion_requested';
+export interface AccountLifecycleRow {
+  category: AccountLifecycleCategory;
+  userId: string;
+  email: string;
+  firstName: string;
+  lastName: string;
+  institutionName: string;
+  licenseStatus: string | null;
+  licenseSource: string | null;
+  licenseValidUntil: string | null;
+  closedAt: string | null;
+  deletionDueAt: string | null;
+  deletionReminderSentAt: string | null;
+  deletionRequestedAt: string | null;
+  deletionRequestNote: string | null;
+  simulations: number;
+  lastSignInAt: string | null;
 }
 
 export interface CloudInstitution {

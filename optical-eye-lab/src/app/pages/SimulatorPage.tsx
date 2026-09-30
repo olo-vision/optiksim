@@ -220,7 +220,7 @@ function SimulatorNav() {
         )}
         items={[
           { heading: true, label: 'Simulation' },
-          { label: 'Speichern', icon: Save, shortcut: `${MOD}S`, onSelect: () => void saveCurrent(), disabled: saving, description: 'Lokal in der Bibliothek' },
+          { label: 'Speichern', icon: Save, shortcut: `${MOD}S`, onSelect: () => void saveCurrent(), disabled: saving, description: platform.library.storageKind === 'cloud' ? 'In Ihrem Konto' : 'Lokal in der Bibliothek' },
           { label: 'Speichern unter …', icon: SaveAll, shortcut: `${MOD}⇧S`, onSelect: () => shell?.saveAs() },
           { label: 'Umbenennen …', icon: Pencil, onSelect: () => shell?.rename() },
           { label: 'Duplizieren', icon: Copy, onSelect: () => shell?.duplicate(), description: 'Kopie des aktuellen Stands anlegen' },

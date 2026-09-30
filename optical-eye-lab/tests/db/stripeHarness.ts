@@ -28,6 +28,8 @@ export class FakeStripe implements StripeApi {
   /** bei Stripe vorhandene Kunden (angelegte + addCustomer); nur bei strictCustomers geprüft */
   customerIds = new Set<string>();
   strictCustomers = false;
+  /** angelegte Checkout-Sessions (Status open/expired) */
+  sessions: Obj[] = [];
   addCustomer(id: string) {
     this.customerIds.add(id);
   }
@@ -43,8 +45,16 @@ export class FakeStripe implements StripeApi {
       res = { id: `cus_${++this.n}`, email: params.email, metadata: { institution_id: params['metadata[institution_id]'] } };
       this.customerIds.add(res.id);
     }
-    else if (method === 'POST' && path === 'checkout/sessions') res = { id: `cs_${++this.n}`, url: `https://checkout.stripe.test/cs_${this.n}`, customer: params.customer };
-    else if (method === 'POST' && /^checkout\/sessions\/[^/]+\/expire$/.test(path)) res = { id: path.split('/')[2], status: 'expired' };
+    else if (method === 'POST' && path === 'checkout/sessions') {
+      res = { id: `cs_${++this.n}`, url: `https://checkout.stripe.test/cs_${this.n}`, customer: params.customer, status: 'open', created: Math.floor(Date.now() / 1000) };
+      this.sessions.push(res);
+    } else if (method === 'GET' && path === 'checkout/sessions') res = { object: 'list', data: this.sessions.filter((x) => x.customer === params.customer && x.status === (params.status ?? x.status)).map((x) => ({ ...x })) };
+    else if (method === 'POST' && /^checkout\/sessions\/[^/]+\/expire$/.test(path)) {
+      const id = path.split('/')[2];
+      const cs = this.sessions.find((x) => x.id === id);
+      if (cs) cs.status = 'expired';
+      res = { id, status: 'expired' };
+    }
     else if (method === 'POST' && path === 'billing_portal/sessions') {
       // wie Stripe: ohne gespeicherte Standard-Konfiguration nur mit ausdrücklicher configuration
       if (!this.portalDefaultConfigured && !params.configuration)
@@ -115,7 +125,7 @@ export function pgBillingDb(db: PGlite, h: ReturnType<typeof helpers>): BillingD
     async getAccount(userId) {
       const r = (
         await q<Obj>(
-          `select p.user_id, p.email, p.role, i.id as institution_id, i.type, i.name, l.status, l.source
+          `select p.user_id, p.email, p.role, p.account_status, i.id as institution_id, i.type, i.name, l.status, l.source
              , i.country from public.profiles p join public.institutions i on i.id = p.institution_id
              left join lateral (select * from public.licenses l2 where l2.institution_id = i.id order by l2.created_at desc limit 1) l on true
             where p.user_id = $1`,
@@ -123,7 +133,7 @@ export function pgBillingDb(db: PGlite, h: ReturnType<typeof helpers>): BillingD
         )
       )[0];
       if (!r) return null;
-      return { userId: r.user_id, email: r.email, role: r.role, institutionId: r.institution_id, institutionType: r.type, institutionName: r.name, country: r.country, license: r.status ? { status: r.status, source: r.source } : null };
+      return { userId: r.user_id, email: r.email, role: r.role, institutionId: r.institution_id, institutionType: r.type, institutionName: r.name, country: r.country, license: r.status ? { status: r.status, source: r.source } : null, accountStatus: r.account_status === 'closed' ? 'closed' : 'active' };
     },
     async getCustomerId(inst) {
       return (await q<{ c: string }>('select stripe_customer_id as c from public.billing_customers where institution_id = $1', [inst]))[0]?.c ?? null;
@@ -137,6 +147,15 @@ export function pgBillingDb(db: PGlite, h: ReturnType<typeof helpers>): BillingD
     },
     async eventBegin(id, type, created) {
       return (await q<{ ok: boolean }>('select public.stripe_event_begin($1, $2, $3) as ok', [id, type, created]))[0].ok;
+    },
+    async eventClaim(id, type, created) {
+      return (await q<{ r: 'start' | 'done' | 'busy' }>('select public.stripe_event_claim($1, $2, $3) as r', [id, type, created]))[0].r;
+    },
+    async missingLegalTypes(customerType) {
+      return (await q<{ r: string[] }>(`select public.legal_required_types_missing('checkout', $1::public.institution_type) as r`, [customerType]))[0].r ?? [];
+    },
+    async replaceCustomer(inst, cus) {
+      await q('select public.billing_replace_customer($1, $2)', [inst, cus]);
     },
     async eventFinish(id, status, error) {
       await q('select public.stripe_event_finish($1, $2, $3)', [id, status, error ?? null]);
@@ -161,6 +180,15 @@ export function pgOpsDb(db: PGlite, h: ReturnType<typeof helpers>): OpsDb {
   const q = <T = Obj>(sql: string, params: unknown[] = []) => h.asService(async () => (await db.query<T>(sql, params)).rows);
   const iso = (v: unknown) => (v instanceof Date ? v.toISOString() : (v as string | null));
   return {
+    async throttle(bucket, limit, windowSeconds) {
+      return (await q<{ ok: boolean }>('select public.throttle_hit($1, $2, $3) as ok', [bucket, limit, windowSeconds]))[0].ok;
+    },
+    async pendingDeclarationConfirmations(days) {
+      return (await q<Obj>('select * from public.declaration_confirmations_pending($1)', [days])).map((r) => ({ ...r, received_at: iso(r.received_at) })) as never;
+    },
+    async markDeclarationConfirmed(id) {
+      await q('select public.declaration_mark_confirmed($1)', [id]);
+    },
     async recordDeclaration(i) {
       return (await q<{ r: Obj }>('select public.consumer_declaration_record($1, $2, $3, $4, $5, $6) as r', [i.kind, i.cancellationType, i.name, i.email, i.contractDetails, i.reason]))[0].r as never;
     },
@@ -201,6 +229,8 @@ export class FakeMailer implements Mailer {
 
 /* ------------------------------ Kontoverwaltung als service_role ------------------------------ */
 
+const isoOf = (v: unknown) => (v instanceof Date ? v.toISOString() : v == null ? null : String(v));
+
 export function pgAccountDb(db: PGlite, h: ReturnType<typeof helpers>): AccountDb {
   const q = <T = Obj>(sql: string, params: unknown[] = []) => h.asService(async () => (await db.query<T>(sql, params)).rows);
   return {
@@ -214,6 +244,15 @@ export function pgAccountDb(db: PGlite, h: ReturnType<typeof helpers>): AccountD
       // wie auth.admin.deleteUser (Supabase-intern, außerhalb der API-Rollen)
       await db.exec('reset role');
       await db.query('delete from auth.users where id = $1', [userId]);
+    },
+    async retentionReminderCandidates(days) {
+      return (await q<Obj>('select * from public.retention_reminder_candidates($1)', [days])).map((r) => ({ ...r, deletion_due_at: isoOf(r.deletion_due_at), delete_not_before: isoOf(r.delete_not_before) })) as never;
+    },
+    async markDeletionReminded(userId) {
+      await q('select public.retention_mark_reminded($1)', [userId]);
+    },
+    async retentionDueAccounts(limit) {
+      return (await q<Obj>('select * from public.retention_due_accounts($1)', [limit])).map((r) => ({ ...r, deletion_due_at: isoOf(r.deletion_due_at) })) as never;
     },
   };
 }

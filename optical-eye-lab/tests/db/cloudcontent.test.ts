@@ -204,7 +204,7 @@ import type { Deps } from '../../supabase/functions/_shared/handlers';
 describe('Edge Function delete-account', () => {
   const stripe = new FakeStripe();
   const mailer = new FakeMailer();
-  let caller: { id: string; email: string; issuedAt?: number } | null = null;
+  let caller: { id: string; email: string; authenticatedAt?: number } | null = null;
   const deps = (): Deps => ({ env: (k) => ({ STRIPE_SECRET_KEY: 'sk_test_x', SITE_URL: 'https://olo-lab.de' })[k], authUser: async () => caller, db: pgBillingDb(db, h), ops: pgOpsDb(db, h), accountDb: pgAccountDb(db, h), mailer, stripe });
   const call = async (body: Obj) => {
     const res = await handleDeleteAccount(new Request('https://fn.test', { method: 'POST', headers: { Origin: 'https://olo-lab.de' }, body: JSON.stringify(body) }), deps());
@@ -225,21 +225,21 @@ describe('Edge Function delete-account', () => {
   it('ohne Anmeldung, ohne Bestätigungswort oder mit alter Anmeldung: nichts passiert', async () => {
     caller = null;
     expect((await call({ confirm: 'LÖSCHEN' })).status).toBe(401);
-    caller = { id: dora, email: 'dora@web.de', issuedAt: fresh() };
+    caller = { id: dora, email: 'dora@web.de', authenticatedAt: fresh() };
     expect((await call({ confirm: 'ja' })).body.code).toBe('confirm_required');
-    caller = { id: dora, email: 'dora@web.de', issuedAt: Math.floor(Date.now() / 1000) - 3600 };
+    caller = { id: dora, email: 'dora@web.de', authenticatedAt: Math.floor(Date.now() / 1000) - 3600 };
     expect((await call({ confirm: 'LÖSCHEN' })).body.code).toBe('reauth_required');
     expect(await h.rows('select id from public.user_simulations where owner_user_id = $1', [dora])).toHaveLength(1);
   });
 
   it('fremdes Konto nur durch Super-Admin', async () => {
-    caller = { id: bert, email: 'bert@optik.de', issuedAt: fresh() };
+    caller = { id: bert, email: 'bert@optik.de', authenticatedAt: fresh() };
     expect((await call({ confirm: 'LÖSCHEN', targetUserId: dora })).status).toBe(403);
   });
 
   it('laufendes, ungekündigtes Abo verhindert die Löschung mit klarer Meldung', async () => {
     await db.query(`insert into public.subscriptions (institution_id, stripe_subscription_id, status, plan) values ($1, 'sub_dora', 'active', 'private')`, [doraInst]);
-    caller = { id: dora, email: 'dora@web.de', issuedAt: fresh() };
+    caller = { id: dora, email: 'dora@web.de', authenticatedAt: fresh() };
     const r = await call({ confirm: 'löschen' });
     expect(r.status).toBe(409);
     expect(r.body.error).toContain('kündigen Sie es zuerst');
@@ -247,7 +247,7 @@ describe('Edge Function delete-account', () => {
   });
 
   it('eigenes Konto: Inhalte und Stammdaten weg, Auth-Benutzer gelöscht, Stripe-Kunde markiert, Bestätigung per E-Mail', async () => {
-    caller = { id: dora, email: 'dora@web.de', issuedAt: fresh() };
+    caller = { id: dora, email: 'dora@web.de', authenticatedAt: fresh() };
     const r = await call({ confirm: 'LÖSCHEN' });
     expect(r).toEqual({ status: 200, body: { ok: true, alreadyDeleted: false } });
     expect(await h.rows('select id from public.user_simulations where owner_user_id = $1', [dora])).toEqual([]);

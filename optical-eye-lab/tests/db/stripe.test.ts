@@ -61,7 +61,7 @@ describe('Checkout (create-checkout-session) mit Datenbank', () => {
     const r2 = await handleCheckout(post({ plan: 'business' }), deps());
     expect(r2.status).toBe(200);
     expect(stripe.calls.filter((c) => c.path === 'customers')).toHaveLength(1);
-    const sessions = stripe.calls.filter((c) => c.path === 'checkout/sessions');
+    const sessions = stripe.calls.filter((c) => c.path === 'checkout/sessions' && c.method === 'POST');
     expect(sessions.map((c) => c.params.customer)).toEqual([sessions[0].params.customer, sessions[0].params.customer]);
     expect(sessions[0].params['line_items[0][price]']).toBe(DEFAULT_PRICE_IDS.business);
     aliceCustomer = sessions[0].params.customer;
@@ -320,6 +320,7 @@ describe('Sicherheit', () => {
     const before = await h.licenseOf(alice);
     await db.exec(readMigration('20260929090000_service_role_grants.sql'));
     await db.exec(readMigration('20261001090000_cloud_content_accounts.sql'));
+    await db.exec(readMigration('20261002090000_account_retention.sql'));
     expect(await h.licenseOf(alice)).toEqual(before);
   });
 });

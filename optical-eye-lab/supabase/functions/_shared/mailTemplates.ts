@@ -212,12 +212,37 @@ export function b2bCountryNoticeMail(to: string, info: { email: string; institut
   };
 }
 
-/** Bestätigung der endgültigen Kontolöschung (an die frühere Adresse) */
-export function accountDeletedMail(to: string, name: string | null): MailMessage {
+/** Interner Hinweis an den Betreiber (MAIL_NOTIFY_TO) */
+export function adminNoticeMail(to: string, title: string, lines: string[]): MailMessage {
+  return { to, subject: `[OLO-LAB3D] ${title}`, text: lines.join('\n') };
+}
+
+/** Erinnerung: geschlossenes Konto wird nach Ablauf der 12-Monats-Frist gelöscht */
+export function accountDeletionReminderMail(to: string, name: string | null, deleteOn: string | null): MailMessage {
   const lines = [
     hello(name),
     '',
-    `Ihr ${PRODUCT_NAME}-Konto wurde auf Ihren Wunsch endgültig gelöscht. Ihre gespeicherten Simulationen, Vorlagen, Einstellungen sowie Ihre Profil- und Kontaktdaten wurden entfernt.`,
+    `Sie haben Ihr ${PRODUCT_NAME}-Konto geschlossen. Wie angekündigt bewahren wir geschlossene Konten 12 Monate auf. Am ${fmtDate(deleteOn)} (frühestens) werden Ihr Konto und alle gespeicherten Simulationen, Vorlagen und Einstellungen endgültig gelöscht.`,
+    '',
+    'Wenn Sie Ihre Inhalte behalten möchten:',
+    '- Melden Sie sich unter https://olo-lab.de/login an und öffnen Sie unter „Konto → Daten und Datenschutz“ Ihr Konto wieder, oder',
+    '- exportieren Sie Ihre Simulationen dort über „Alle exportieren“ als Datei.',
+    '',
+    'Wenn Sie nichts unternehmen, erfolgt die Löschung automatisch. Rechnungen und gesetzlich erforderliche Nachweise bewahren wir getrennt nach den jeweiligen Fristen auf.',
+    '',
+    'Bei Fragen erreichen Sie uns unter info@olo-vision.de.',
+  ];
+  return { to, subject: `Ihr geschlossenes ${PRODUCT_NAME}-Konto wird am ${fmtDate(deleteOn)} gelöscht`, text: lines.join('\n') + FOOTER };
+}
+
+/** Bestätigung der endgültigen Kontolöschung (an die frühere Adresse) */
+export function accountDeletedMail(to: string, name: string | null, reason: 'request' | 'retention' = 'request'): MailMessage {
+  const lines = [
+    hello(name),
+    '',
+    reason === 'retention'
+      ? `Ihr ${PRODUCT_NAME}-Konto war seit 12 Monaten geschlossen und wurde nun wie angekündigt endgültig gelöscht. Ihre gespeicherten Simulationen, Vorlagen, Einstellungen sowie Ihre Profil- und Kontaktdaten wurden entfernt.`
+      : `Ihr ${PRODUCT_NAME}-Konto wurde auf Ihren Wunsch endgültig gelöscht. Ihre gespeicherten Simulationen, Vorlagen, Einstellungen sowie Ihre Profil- und Kontaktdaten wurden entfernt.`,
     '',
     'Aufbewahrt werden nur Daten, zu deren Aufbewahrung wir gesetzlich verpflichtet sind oder die wir zum Nachweis benötigen (z. B. Rechnungen beim Zahlungsdienstleister, Nachweise über Vertragszustimmungen, Kündigungen und Widerrufe). Diese Daten werden nach Ablauf der jeweiligen Fristen gelöscht.',
     '',

@@ -61,7 +61,7 @@ describe.each([
     currentUser = { id: alice, email: 'alice@optik.de' };
     const res = await handleCheckout(post({ plan: 'business' }), deps());
     expect(res.status).toBe(200);
-    const session = stripe.calls.find((c) => c.path === 'checkout/sessions')!;
+    const session = stripe.calls.find((c) => c.path === 'checkout/sessions' && c.method === 'POST')!;
     expect(session.params.client_reference_id).toBe(aliceInst);
     expect(session.params['subscription_data[metadata][institution_id]']).toBe(aliceInst);
     expect(session.params['line_items[0][price]']).toBe(DEFAULT_PRICE_IDS.business);
@@ -73,7 +73,7 @@ describe.each([
     currentUser = { id: bob, email: 'bob@schule.de' };
     const res = await handleCheckout(post({ plan: 'education', institution_id: aliceInst, customer: 'cus_1', client_reference_id: aliceInst }), deps());
     expect(res.status).toBe(200);
-    const session = stripe.calls.find((c) => c.path === 'checkout/sessions')!;
+    const session = stripe.calls.find((c) => c.path === 'checkout/sessions' && c.method === 'POST')!;
     expect(session.params.client_reference_id).toBe(bobInst);
     expect(session.params.customer).not.toBe('cus_1');
     // Bob kann nicht den Tarif von Alices Institution (Business) buchen

@@ -12,11 +12,12 @@
  *    idempotent über public.stripe_events; Abo-Daten werden frisch von der Stripe-API geladen.
  *  - Keine Secrets, Tokens oder Payloads in Logs.
  */
-import { checkoutSubmitMessage, corsHeaders, isBillingInterval, PLAN_MISMATCH_MESSAGE, planAllowedFor, priceIdFor, resolveSiteUrl, type BillingInterval, type EnvGetter } from './stripeConfig.ts';
+import { checkoutSubmitMessage, corsHeaders, isBillingInterval, liveConfigProblems, PLAN_MISMATCH_MESSAGE, planAllowedFor, priceIdFor, resolveSiteUrl, stripeMode, type BillingInterval, type EnvGetter } from './stripeConfig.ts';
 import { isPlan, LIVE_SUBSCRIPTION_STATUSES, type InstitutionType, type LicensePlan, type LicenseStatus } from './licenseStatus.ts';
 import { verifyStripeSignature } from './stripeSignature.ts';
 import { idOf, snapshotFromSubscription, subscriptionIdFromInvoice, type SubscriptionSnapshot } from './stripeObjects.ts';
-import { afterCheckoutCompleted, enforceNoAutoRenewal, type OpsDb } from './legalOps.ts';
+import { afterCheckoutCompleted, enforceNoAutoRenewal, sendLogged, type OpsDb } from './legalOps.ts';
+import { adminNoticeMail } from './mailTemplates.ts';
 import { isPortalNotConfigured, isResourceMissing, StripeError } from './stripeError.ts';
 import type { Mailer } from './mailer.ts';
 import type { AccountDb } from './accountOps.ts';
@@ -34,6 +35,8 @@ export interface BillingAccount {
   /** Land der Rechnungsanschrift aus der Registrierung (ISO, z. B. DE) */
   country?: string | null;
   license: { status: LicenseStatus; source: 'stripe' | 'manual' } | null;
+  /** Kontostatus (geschlossene Konten dürfen nicht kaufen) */
+  accountStatus?: 'active' | 'closed';
 }
 
 export interface BillingDb {
@@ -50,6 +53,12 @@ export interface BillingDb {
   checkCheckoutConsents(userId: string, documentIds: string[]): Promise<{ ok: boolean; outdated: boolean; missing: Array<{ id: string; type: string; version: string }> }>;
   /** Phase 8: Zustimmungen mit Checkout-Session protokollieren (prüft erneut; Fehlercodes OLC01/OLC02) */
   recordCheckoutConsents(userId: string, documentIds: string[], checkoutSessionId: string, plan: LicensePlan, interval: BillingInterval): Promise<number>;
+  /** Produktionshärtung: Pflicht-Rechtstexte ohne aktive Version (leer = vollständig) */
+  missingLegalTypes?(customerType: InstitutionType): Promise<string[]>;
+  /** gespeicherten Stripe-Kunden ersetzen (z. B. Testkunde nach Umstellung auf Live) */
+  replaceCustomer?(institutionId: string, customerId: string): Promise<void>;
+  /** wie eventBegin, unterscheidet aber „erledigt“ von „läuft gerade“ */
+  eventClaim?(id: string, type: string, createdIso: string | null): Promise<'start' | 'done' | 'busy'>;
 }
 
 export interface StripeApi {
@@ -58,8 +67,11 @@ export interface StripeApi {
 
 export interface Deps {
   env: EnvGetter;
-  /** Benutzer aus dem Authorization-Header (von Supabase Auth geprüft) oder null; issuedAt = iat des JWT (s) */
-  authUser(req: Request): Promise<{ id: string; email: string; issuedAt?: number } | null>;
+  /**
+   * Benutzer aus dem Authorization-Header (von Supabase Auth geprüft) oder null;
+   * authenticatedAt = Zeitpunkt der letzten Passwort-/Code-Anmeldung (amr-Claim, s) – nicht iat
+   */
+  authUser(req: Request): Promise<{ id: string; email: string; authenticatedAt?: number } | null>;
   db: BillingDb;
   stripe: StripeApi;
   now?: () => number;
@@ -112,6 +124,12 @@ async function authorize(req: Request, deps: Deps, cors: Record<string, string>)
   if (!account) return { response: json({ error: 'Zu Ihrem Konto gibt es kein Profil.', code: 'no_profile' }, 403, cors) };
   if (!ADMIN_ROLES.has(account.role)) return { response: json({ error: 'Nur die Administration Ihres Kundenkontos kann das Abonnement verwalten.', code: 'forbidden' }, 403, cors) };
   if (!deps.env('STRIPE_SECRET_KEY')) return { response: json({ error: 'Die Online-Zahlung ist noch nicht eingerichtet.', code: 'stripe_not_configured' }, 503, cors) };
+  // Live-Betrieb nur mit vollständiger Konfiguration (keine Test-Price-IDs, Steuersatz, https-Adresse)
+  const problems = liveConfigProblems(deps.env);
+  if (problems.length) {
+    deps.log?.(`Stripe-Konfiguration unvollständig (${stripeMode(deps.env)}): ${problems.join('; ')}`);
+    return { response: json({ error: 'Die Online-Zahlung ist gerade nicht verfügbar. Bitte versuchen Sie es später erneut oder schreiben Sie an info@olo-vision.de.', code: 'stripe_not_configured' }, 503, cors) };
+  }
   return { account };
 }
 
@@ -145,6 +163,17 @@ async function checkout(req: Request, deps: Deps): Promise<Response> {
   }
   const consentIds = Array.isArray(body?.consents) ? body.consents.filter((x): x is string => typeof x === 'string' && UUID_RE.test(x)).slice(0, 20) : [];
 
+  if (account.accountStatus === 'closed') {
+    return json({ error: 'Ihr Konto ist geschlossen. Bitte öffnen Sie es unter „Konto“ zuerst wieder.', code: 'account_closed' }, 409, cors);
+  }
+  // Live-Betrieb: ohne veröffentlichte Pflicht-Rechtstexte kein Verkauf (fail closed)
+  if (stripeMode(deps.env) === 'live' && deps.db.missingLegalTypes) {
+    const missing = await deps.db.missingLegalTypes(account.institutionType);
+    if (missing.length) {
+      deps.log?.(`create-checkout-session: Pflicht-Rechtstexte nicht veröffentlicht: ${missing.join(', ')}`);
+      return json({ error: 'Die Buchung ist gerade nicht möglich. Bitte versuchen Sie es später erneut oder schreiben Sie an info@olo-vision.de.', code: 'legal_not_published' }, 503, cors);
+    }
+  }
   if (account.license?.source === 'manual' && account.license.status === 'active') {
     return json({ error: 'Für Ihr Konto ist eine Sonderlizenz freigeschaltet. Bitte wenden Sie sich an info@olo-vision.de.', code: 'manual_license' }, 409, cors);
   }
@@ -171,6 +200,14 @@ async function checkout(req: Request, deps: Deps): Promise<Response> {
     const list: Obj[] = Array.isArray(existing?.data) ? existing.data : [];
     if (list.some((x) => LIVE_SUBSCRIPTION_STATUSES.includes(x?.status))) {
       return json({ error: 'Es besteht bereits ein Abonnement. Sie können es unter „Abonnement verwalten“ ändern.', code: 'subscription_exists' }, 409, cors);
+    }
+    // Offene (unbezahlte) Checkout-Sessions dieses Kunden schließen – sonst könnten zwei Tabs zwei Abos abschließen
+    const open = await deps.stripe.request('GET', 'checkout/sessions', { customer: customerId, status: 'open', limit: '10' }).catch(() => null);
+    // (Sessions der letzten 2 Minuten bleiben: ein Doppelklick erhält per Idempotenz dieselbe Session zurück)
+    const nowSec = Math.floor((deps.now?.() ?? Date.now()) / 1000);
+    for (const cs of Array.isArray(open?.data) ? (open!.data as Obj[]) : []) {
+      const created = typeof cs?.created === 'number' ? cs.created : 0;
+      if (typeof cs?.id === 'string' && nowSec - created > 120) await deps.stripe.request('POST', `checkout/sessions/${encodeURIComponent(cs.id)}/expire`).catch(() => undefined);
     }
     const site = resolveSiteUrl(origin, deps.env);
     const bucket = Math.floor((deps.now?.() ?? Date.now()) / 60000);
@@ -211,7 +248,7 @@ async function checkout(req: Request, deps: Deps): Promise<Response> {
       'checkout/sessions',
       params,
       // Doppelklick/Wiederholung innerhalb einer Minute → dieselbe Session statt einer zweiten
-      `checkout-${account.institutionId}-${plan}-${interval}-${consentIds.slice().sort().join('.').slice(0, 120)}-${bucket}`,
+      `checkout-${account.institutionId}-${plan}-${interval}-${consentIds.slice().sort().join('.').slice(0, 120)}-${site.replace(/[^a-z0-9]/gi, '').slice(-40)}-${bucket}`,
     );
     if (typeof session.url !== 'string' || typeof session.id !== 'string') throw new Error('Checkout-Session ohne URL/ID');
     sessionId = session.id;
@@ -243,7 +280,19 @@ async function checkout(req: Request, deps: Deps): Promise<Response> {
 /** Genau ein Stripe Customer je Institution: vorhandenen verwenden, sonst anlegen und speichern */
 async function ensureCustomer(account: BillingAccount, deps: Deps): Promise<string> {
   const existing = await deps.db.getCustomerId(account.institutionId);
-  if (existing) return existing;
+  let replace = false;
+  if (existing) {
+    // Gespeicherten Kunden prüfen: fehlt er (z. B. Testkunde nach Umstellung auf Live), neu anlegen
+    try {
+      const c = await deps.stripe.request('GET', `customers/${encodeURIComponent(existing)}`);
+      if (c?.deleted !== true) return existing;
+    } catch (e) {
+      if (!isResourceMissing(e)) throw e;
+    }
+    if (!deps.db.replaceCustomer) throw new Error(`Stripe-Kunde ${existing} fehlt (Test/Live?)`);
+    deps.log?.(`create-checkout-session: Stripe-Kunde ${existing} fehlt (Test/Live?) – wird ersetzt`);
+    replace = true;
+  }
   const customer = await deps.stripe.request(
     'POST',
     'customers',
@@ -255,10 +304,14 @@ async function ensureCustomer(account: BillingAccount, deps: Deps): Promise<stri
       'metadata[institution_type]': account.institutionType,
     },
     // Stripe-Idempotenz: parallele Anfragen erzeugen keinen zweiten Kunden
-    `customer-${account.institutionId}`,
+    `customer-${account.institutionId}${replace ? `-r-${existing}` : ''}`,
   );
   const id = idOf(customer);
   if (!id) throw new Error('Stripe-Kunde ohne ID');
+  if (replace && deps.db.replaceCustomer) {
+    await deps.db.replaceCustomer(account.institutionId, id);
+    return id;
+  }
   return deps.db.linkCustomer(account.institutionId, id);
 }
 
@@ -393,7 +446,7 @@ async function webhook(req: Request, deps: Deps): Promise<Response> {
   });
   if (!valid) return json({ error: 'Ungültige Signatur.' }, 400);
 
-  let event: { id?: string; type?: string; created?: number; data?: { object?: Obj } };
+  let event: { id?: string; type?: string; created?: number; livemode?: boolean; data?: { object?: Obj } };
   try {
     event = JSON.parse(payload);
   } catch {
@@ -404,9 +457,20 @@ async function webhook(req: Request, deps: Deps): Promise<Response> {
   const obj = event.data?.object ?? {};
   if (!id.startsWith('evt_') || !type) return json({ error: 'Ungültiges Ereignis.' }, 400);
   if (!HANDLED.has(type)) return json({ received: true, ignored: type }, 200);
+  // Test- und Live-Ereignisse nie vermischen: nur Ereignisse im Modus des Secret Keys verarbeiten
+  const mode = stripeMode(deps.env);
+  if (typeof event.livemode === 'boolean' && mode !== 'none' && event.livemode !== (mode === 'live')) {
+    deps.log?.(`stripe-webhook: ${type} ${id} ignoriert – Ereignis ${event.livemode ? 'live' : 'test'}, Schlüssel ${mode}`);
+    return json({ received: true, ignored: 'anderer Stripe-Modus' }, 200);
+  }
 
   const created = typeof event.created === 'number' ? new Date(event.created * 1000).toISOString() : null;
-  if (!(await deps.db.eventBegin(id, type, created))) return json({ received: true, duplicate: true }, 200);
+  if (deps.db.eventClaim) {
+    const claim = await deps.db.eventClaim(id, type, created);
+    if (claim === 'done') return json({ received: true, duplicate: true }, 200);
+    // wird gerade (parallel) verarbeitet → Stripe soll später erneut zustellen
+    if (claim === 'busy') return json({ error: 'Wird bereits verarbeitet.' }, 409);
+  } else if (!(await deps.db.eventBegin(id, type, created))) return json({ received: true, duplicate: true }, 200);
 
   try {
     const result = await processEvent(type, id, obj, deps);
@@ -414,6 +478,12 @@ async function webhook(req: Request, deps: Deps): Promise<Response> {
     return json({ received: true, ...(result ? { license_status: result.license_status ?? null } : { ignored: 'ohne Abo' }) }, 200);
   } catch (e) {
     const code = (e as { code?: string })?.code;
+    if (isResourceMissing(e)) {
+      // Abo existiert (in diesem Stripe-Modus) nicht – nicht 3 Tage lang wiederholen
+      await deps.db.eventFinish(id, 'ignored', errMsg(e));
+      deps.log?.(`stripe-webhook ${type}: ignoriert – Stripe-Objekt nicht gefunden`);
+      return json({ received: true, ignored: 'nicht gefunden' }, 200);
+    }
     if (code === 'P0002') {
       // Abo ohne Bezug zu einer Institution (z. B. im Stripe-Dashboard angelegt) – nicht endlos wiederholen
       await deps.db.eventFinish(id, 'ignored', errMsg(e));
@@ -432,7 +502,14 @@ async function processEvent(type: string, eventId: string, obj: Obj, deps: Deps)
     // immer den AKTUELLEN Stand von Stripe laden – Reihenfolge und Alter der Ereignisse spielen so keine Rolle
     const sub = await deps.stripe.request('GET', `subscriptions/${encodeURIComponent(subscriptionId)}`);
     const snapshot = snapshotFromSubscription(sub, { eventId, eventType: type, paymentFailed, env: deps.env, checkoutSessionId });
-    const result = await deps.db.applySubscription(snapshot);
+    let result = await deps.db.applySubscription(snapshot);
+    // Parallele Zustellungen: hat sich der Stand bei Stripe inzwischen geändert, den neueren nachziehen
+    const again = await deps.stripe.request('GET', `subscriptions/${encodeURIComponent(subscriptionId)}`).catch(() => null);
+    if (again) {
+      const fresh = snapshotFromSubscription(again, { eventId, eventType: type, paymentFailed, env: deps.env, checkoutSessionId });
+      const key = (x: SubscriptionSnapshot) => JSON.stringify([x.status, x.cancel_at_period_end, x.cancel_at, x.current_period_end, x.price_id]);
+      if (key(fresh) !== key(snapshot)) result = await deps.db.applySubscription(fresh);
+    }
     // private Jahreslizenz: keine automatische Verlängerung (Stripe meldet die Änderung anschließend erneut)
     await enforceNoAutoRenewal(snapshot, eventId, deps);
     return result;
@@ -449,6 +526,7 @@ async function processEvent(type: string, eventId: string, obj: Obj, deps: Deps)
       const result = await sync(subId, false, idOf(obj));
       // Vertragsbestätigung per E-Mail (einmal je Session; Fehler verhindern die Freischaltung nie)
       if (type !== 'checkout.session.async_payment_failed') await afterCheckoutCompleted(obj, deps);
+      await warnDuplicateSubscriptions(obj, subId, deps);
       return result;
     }
     case 'customer.subscription.created':
@@ -473,6 +551,30 @@ async function processEvent(type: string, eventId: string, obj: Obj, deps: Deps)
     }
     default:
       return null;
+  }
+}
+
+/**
+ * Sicherheitsnetz gegen Doppelbuchungen: Hat der Kunde nach einem Checkout mehr als ein laufendes Abo,
+ * wird der Betreiber per E-Mail informiert (Erstattung/Kündigung ist eine Einzelfallentscheidung).
+ */
+async function warnDuplicateSubscriptions(session: Obj, subId: string, deps: Deps): Promise<void> {
+  try {
+    const customer = idOf(session.customer);
+    const notifyTo = deps.mailer?.notifyTo;
+    if (!customer || !notifyTo) return;
+    const list = await deps.stripe.request('GET', 'subscriptions', { customer, status: 'all', limit: '20' });
+    const live = (Array.isArray(list?.data) ? (list.data as Obj[]) : []).filter((x) => LIVE_SUBSCRIPTION_STATUSES.includes(x?.status));
+    if (live.length > 1) {
+      deps.log?.(`stripe-webhook: Kunde ${customer} hat ${live.length} laufende Abos`);
+      await sendLogged(deps, 'admin_notice', adminNoticeMail(notifyTo, 'Doppeltes Abonnement – bitte prüfen', [
+        `Der Stripe-Kunde ${customer} hat ${live.length} laufende Abonnements (neu: ${subId}).`,
+        `Abonnements: ${live.map((x) => x.id).join(', ')}`,
+        'Bitte im Stripe-Dashboard prüfen und das überzählige Abonnement kündigen bzw. erstatten.',
+      ]), `duplicate-${subId}`);
+    }
+  } catch (e) {
+    deps.log?.(`stripe-webhook: Doppelabo-Prüfung – ${errMsg(e)}`);
   }
 }
 

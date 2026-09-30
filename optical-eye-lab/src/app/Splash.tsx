@@ -1,7 +1,7 @@
 /** Startbildschirm (beim Laden der lokalen Daten und beim Öffnen einer Simulation). */
 import { BrandMark, useProductName } from './Brand';
 
-export function Splash({ message = 'Lokale Daten werden geladen …' }: { message?: string }) {
+export function Splash({ message = 'OLO-LAB3D wird geladen …' }: { message?: string }) {
   const name = useProductName();
   return (
     <div className="splash" role="status" aria-live="polite">

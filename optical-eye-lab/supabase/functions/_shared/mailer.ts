@@ -51,7 +51,7 @@ export interface MailConfig {
   warning: string | null;
 }
 
-const EMAIL_RE = /^[^\s@<>]+@[^\s@<>]+\.[^\s@<>]{2,}$/;
+const EMAIL_RE = /^[A-Za-z0-9.!#$%&'*+/=?^_`{|}~-]+@[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?(?:\.[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?)*\.[A-Za-z]{2,}$/;
 export const isEmail = (s: unknown): s is string => typeof s === 'string' && s.length <= 320 && EMAIL_RE.test(s.trim());
 
 /** reine Adresse aus "Name <adresse>" */

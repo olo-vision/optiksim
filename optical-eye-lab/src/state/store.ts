@@ -132,6 +132,8 @@ interface AppState {
   loadPreset: (id: string) => void;
   loadDocument: (doc: SceneDocument, message?: string) => void;
   saveCurrent: (opts?: { silent?: boolean }) => Promise<boolean>;
+  /** Ungespeicherten Stand sofort als lokalen Entwurf sichern (z. B. bevor die Sitzung endet) */
+  flushDraft: () => void;
   resetScene: () => void;
   /** Öffnet eine Bibliothekssimulation im Simulator (setzt Verlauf und Baseline zurück) */
   openSimulation: (simId: string, doc: SceneDocument, savedAt: number | null) => void;
@@ -388,6 +390,11 @@ export const useAppStore = create<AppState>()((set, get) => ({
     set({ doc, baseline: doc, past: [], future: [], dirty: false, selectedId: null, selectedEyePart: null, dialog: null });
     get().sendCameraCommand({ type: 'focus-scene' });
     if (message) get().notify(message, 'success');
+  },
+
+  flushDraft: () => {
+    const st = get();
+    if (st.dirty && st.simId) hooks.writeDraft?.(st.doc);
   },
 
   saveCurrent: async (opts) => {

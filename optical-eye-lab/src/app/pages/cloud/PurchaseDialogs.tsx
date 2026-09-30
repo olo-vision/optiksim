@@ -8,6 +8,7 @@
  *   die Demo direkt.
  */
 import { useCallback, useState } from 'react';
+import { useBfcacheReset } from '../../useBfcacheReset';
 import { useNavigate } from 'react-router';
 import { CircleCheck, Clock3, CreditCard, Lock, ShieldCheck, Sparkles } from 'lucide-react';
 import { Dialog } from '@/ui/common/overlays';
@@ -32,6 +33,7 @@ export function CheckoutDialog({ plan, interval, onClose }: { plan: LicensePlan;
   const { docs, error, reload } = useRequiredLegalDocs('checkout', type);
   const { checked, toggle, reset } = useConsentState();
   const [busy, setBusy] = useState(false);
+  useBfcacheReset(useCallback(() => setBusy(false), []));
   const [problem, setProblem] = useState<string | null>(null);
   const info = planInfo(plan)!;
   const price = planPrice(info, interval);

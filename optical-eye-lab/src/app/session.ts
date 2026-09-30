@@ -3,6 +3,7 @@
  * Einstellungen liegen (als einzige Quelle) in `useAppStore.prefs` und werden hier je Benutzer
  * geladen bzw. gespeichert.
  */
+import { useEffect } from 'react';
 import { create } from 'zustand';
 import { platform } from './platformInstance';
 import { configureStoreHooks, useAppStore } from '@/state/store';
@@ -13,6 +14,8 @@ import { applyAccent } from '@/platform/branding';
 import { DEFAULT_USER_PREFS, type UserPreferences } from '@/platform/preferences';
 import { StorageQuotaError } from '@/platform/storage';
 import { CLOUD_ENABLED } from '@/cloud/config';
+import { CloudError } from '@/cloud/types';
+import { translateError } from '@/cloud/errors';
 import { mergePrefs, syncedPrefs, type PrefsRemote } from './cloudPrefs';
 
 interface SessionState {
@@ -38,6 +41,8 @@ interface SessionState {
   activateExternal: (user: User) => Promise<User>;
   signOut: () => Promise<void>;
   refreshLibrary: () => Promise<void>;
+  /** eine gespeicherte Simulation in der Liste aktualisieren/ergänzen (ohne Serveranfrage) */
+  upsertSimMeta: (meta: SimulationMetadata) => void;
   refreshUser: () => Promise<void>;
   dismissMigration: () => void;
 }
@@ -50,10 +55,15 @@ let pendingPrefs: { userId: string; prefs: UserPreferences } | null = null;
 let prefsRemote: PrefsRemote | null = null;
 let remoteTimer: number | undefined;
 let pendingRemote: UserPreferences | null = null;
+let lastRemoteKey = '';
 
 /** Vom Cloud-Modus vor der Aktivierung des Arbeitsbereichs gesetzt (null = nur lokal) */
-export function setPrefsRemote(r: PrefsRemote | null) {
-  void flushRemotePrefs();
+export function setPrefsRemote(r: PrefsRemote | null, opts: { discard?: boolean } = {}) {
+  // beim Kontowechsel NICHT mehr senden (die Sitzung gehört evtl. schon einem anderen Konto)
+  if (opts.discard) {
+    window.clearTimeout(remoteTimer);
+    pendingRemote = null;
+  } else void flushRemotePrefs();
   prefsRemote = r;
 }
 
@@ -92,14 +102,18 @@ if (typeof window !== 'undefined') {
 /** Fehlermeldung für die Oberfläche */
 export function errorMessage(e: unknown): string {
   if (e instanceof StorageQuotaError) return 'Der lokale Speicher des Browsers ist voll. Bitte löschen Sie nicht mehr benötigte Simulationen oder exportieren Sie sie als Datei.';
-  if (e instanceof Error && e.message) return e.message;
-  return 'Unbekannter Fehler.';
+  if (e instanceof CloudError) return e.message;
+  // eigene (deutsche) Fehlermeldungen der Anwendung
+  if (e instanceof Error && e.message && (e.constructor === Error || /Error$/.test(e.constructor.name)) && !['TypeError', 'RangeError', 'SyntaxError', 'ReferenceError', 'EvalError', 'URIError', 'DOMException', 'AbortError'].includes(e.name) && !/^Auth|Postgrest|Functions/.test(e.name)) return e.message;
+  // technische Fehler (Netzwerk, Supabase, JavaScript) → verständliche deutsche Meldung
+  return translateError(e).message;
 }
 
 async function activate(user: User) {
   const [org, devicePrefs] = await Promise.all([platform.repos.getOrg(user.organizationId), platform.loadPrefs(user.id)]);
   let prefs = devicePrefs;
   const remote = prefsRemote;
+  lastRemoteKey = '';
   if (remote) {
     try {
       const account = await remote.load();
@@ -111,12 +125,17 @@ async function activate(user: User) {
     }
   }
   useAppStore.getState().applyUserPrefs(prefs);
+  lastRemoteKey = JSON.stringify(syncedPrefs(prefs));
   configureStoreHooks({
     persistPrefs: (p: UserPreferences) => {
       pendingPrefs = { userId: user.id, prefs: p };
       window.clearTimeout(prefsTimer);
       prefsTimer = window.setTimeout(flushPrefs, 250);
       if (prefsRemote) {
+        // nur senden, wenn sich der kontobezogene Anteil geändert hat (Panelbreite o. ä. bleibt lokal)
+        const key = JSON.stringify(syncedPrefs(p));
+        if (key === lastRemoteKey) return;
+        lastRemoteKey = key;
         pendingRemote = p;
         window.clearTimeout(remoteTimer);
         remoteTimer = window.setTimeout(flushRemotePrefs, 1000);
@@ -187,6 +206,9 @@ export const useSession = create<SessionState>()((set, get) => ({
     }
   },
 
+  upsertSimMeta: (meta) =>
+    set((st) => ({ sims: st.sims.some((m) => m.id === meta.id) ? st.sims.map((m) => (m.id === meta.id ? meta : m)) : [meta, ...st.sims] })),
+
   refreshUser: async () => {
     const cur = get().user;
     if (!cur) return;
@@ -226,3 +248,10 @@ export async function runAction<T>(fn: (user: User) => Promise<T>, success?: str
 }
 
 export { DEFAULT_USER_PREFS };
+
+/** Seiten mit Simulationsliste: beim Öffnen aktuellen Stand laden (Änderungen anderer Geräte, zuletzt geöffnet) */
+export function useLibraryRefreshOnMount() {
+  useEffect(() => {
+    void useSession.getState().refreshLibrary();
+  }, []);
+}

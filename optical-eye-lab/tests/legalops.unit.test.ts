@@ -156,6 +156,15 @@ describe('Rechtstexte 1.0 (docs/legal)', () => {
     expect(text('09_hinweis_wertersatz.md')).not.toMatch(/erlischt (sofort|mit Beginn)/);
     const lic = text('03_lizenzbedingungen.md');
     for (const s of ['eine Betriebsstätte unter einer konkreten Geschäftsanschrift', 'Homeoffice', 'kein Medizinprodukt', 'an das Kundenkonto gebunden, nicht an die Lizenz', 'endgültig löschen', 'einmalig für 2 Stunden']) expect(lic).toContain(s);
+    // 0.10.1: Lizenzende ist kein Löschwunsch; 12-Monats-Frist nur für geschlossene Konten (mit Erinnerung)
+    const ds = text('05_datenschutz.md');
+    expect(ds).toContain('führt nicht zur Löschung');
+    expect(ds).toContain('12 Monate ab der Schließung');
+    expect(ds).toMatch(/erinnern wir Sie per E-Mail/);
+    expect(ds).not.toMatch(/12 Monate nach (dem )?Ende des (letzten )?Vertrags/);
+    expect(ds).not.toMatch(/letzten relevanten Anmeldung/);
+    expect(lic).toContain('kein Löschgrund');
+    expect(text('02_agb.md')).not.toContain('bis zum Ablauf der in der Datenschutzerklärung genannten Speicherdauer');
     // 0.10.0: Cloud-Speicherung – keine veralteten Aussagen zur reinen Browser-Speicherung
     for (const f of ['02_agb.md', '03_lizenzbedingungen.md', '04_b2b_bedingungen.md', '05_datenschutz.md']) expect(text(f)).not.toMatch(/derzeit (\*\*)?(ausschließlich )?lokal im Browser/);
   });

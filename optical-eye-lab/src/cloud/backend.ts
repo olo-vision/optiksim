@@ -3,7 +3,7 @@
  *   SupabaseBackend – echte Anmeldung/Datenbank (Produktion)
  *   MockBackend     – Nachbau im Browser (nur Tests/Entwicklung, VITE_AUTH_MODE=mock)
  */
-import type { AccountOverview, CloudSimulationFull, CloudSimulationPatch, CloudSimulationRow, CloudTemplateRow, NewCloudSimulation, AdminAccountRow, AdminConsentRow, AdminDeclarationRow, ConsumerDeclarationInput, ConsumerDeclarationReceipt, DeclarationStatus, AdminLegalDocument, BillingInterval, CloudAccount, CloudUser, InstitutionType, LegalConsentContext, LegalDocRef, LegalDocSummary, LegalDocument, LegalDraftInput, LicensePlan, LicenseSource, LicenseStatus, RegistrationInput } from './types';
+import type { AccountLifecycleRow, AccountOverview, CloudSimulationFull, CloudSimulationPatch, CloudSimulationRow, CloudTemplateRow, NewCloudSimulation, AdminAccountRow, AdminConsentRow, AdminDeclarationRow, ConsumerDeclarationInput, ConsumerDeclarationReceipt, DeclarationStatus, AdminLegalDocument, BillingInterval, CloudAccount, CloudUser, InstitutionType, LegalConsentContext, LegalDocRef, LegalDocSummary, LegalDocument, LegalDraftInput, LicensePlan, LicenseSource, LicenseStatus, RegistrationInput } from './types';
 
 export type AuthEvent = 'SIGNED_IN' | 'SIGNED_OUT' | 'TOKEN_REFRESHED' | 'USER_UPDATED' | 'PASSWORD_RECOVERY' | 'INITIAL_SESSION' | string;
 
@@ -17,6 +17,8 @@ export interface CloudBackend {
   readonly kind: 'supabase' | 'mock';
   /** Sitzung wiederherstellen (Seitenaufruf, Neuladen) */
   getUser(): Promise<CloudUser | null>;
+  /** ID des aktuell angemeldeten Benutzers aus der lokalen Sitzung (ohne Serveranfrage) – Schutz beim Kontowechsel */
+  currentUserId(): Promise<string | null>;
   onAuthChange(cb: (event: AuthEvent, user: CloudUser | null) => void): () => void;
   signUp(input: RegistrationInput, emailRedirectTo: string): Promise<SignUpResult>;
   signIn(email: string, password: string): Promise<CloudUser>;
@@ -90,7 +92,12 @@ export interface CloudBackend {
   /** Endgültig löschen (Edge Function delete-account); vorher reauthenticate() */
   deleteAccount(confirm: string, targetUserId?: string): Promise<void>;
   /** Super-Admin: geschlossene Konten */
-  adminClosedAccounts(): Promise<Array<{ userId: string; email: string; institutionName: string; closedAt: string | null; deletionDueAt: string | null; simulations: number }>>;
+  /** Super-Admin: Lizenz abgelaufen · Konto geschlossen (Löschung fällig) · Löschung beantragt */
+  adminAccountLifecycle(): Promise<AccountLifecycleRow[]>;
+  /** Super-Admin: Löschantrag (z. B. per E-Mail) erfassen bzw. zurücknehmen */
+  adminSetDeletionRequest(userId: string, requested: boolean, note?: string | null): Promise<void>;
+  /** Super-Admin: Löschantrag über die E-Mail-Adresse des Kontos erfassen → Benutzer-ID */
+  adminRequestDeletionByEmail(email: string, note?: string | null): Promise<string>;
 
   /** Super-Admin: Lizenz wieder an Stripe übergeben bzw. als Sonderlizenz markieren */
   adminSetLicenseSource(licenseId: string, source: LicenseSource): Promise<void>;

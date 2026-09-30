@@ -45,7 +45,7 @@ function hs256(payload, secret = 'legacy-jwt-secret') {
   return `${h}.${p}.${b64u(crypto.createHmac('sha256', secret).update(`${h}.${p}`).digest())}`;
 }
 const now = () => Math.floor(Date.now() / 1000);
-const claims = (extra = {}) => ({ sub: USER_ID, email: 'anna@optik.de', role: 'authenticated', aud: 'authenticated', iss: `${BASE}/auth/v1`, iat: now(), exp: now() + 3600, ...extra });
+const claims = (extra = {}) => ({ sub: USER_ID, email: 'anna@optik.de', role: 'authenticated', aud: 'authenticated', iss: `${BASE}/auth/v1`, iat: now(), exp: now() + 3600, amr: [{ method: 'password', timestamp: now() }], ...extra });
 
 /* ------------------------------ Supabase-Nachbau ------------------------------ */
 const log = [];
@@ -87,6 +87,10 @@ const server = http.createServer((req, res) => {
       if (table === 'billing_customers') return rows(url.search.includes('institution_id=eq.inst-own') && customerRow ? [customerRow] : []);
       if (table === 'rpc/checkout_consent_check') return send(200, { ok: true, outdated: false, missing: [] });
       if (table === 'rpc/stripe_event_begin') return send(200, true);
+      if (table === 'rpc/stripe_event_claim') return send(200, 'start');
+      if (table === 'rpc/throttle_hit') return send(200, true);
+      if (table === 'rpc/declaration_confirmations_pending') return send(200, []);
+      if (table === 'rpc/declaration_mark_confirmed') return send(200, null);
       if (table === 'rpc/stripe_event_finish') return send(200, null);
       // Rechtsbetrieb (consumer-request, mail-jobs)
       if (table === 'rpc/consumer_declaration_record') return send(200, { id: '00000000-0000-4000-8000-000000000001', received_at: new Date().toISOString(), recent_count: 0, account: null, subscription: null });
@@ -284,7 +288,7 @@ try {
   const sig = crypto.createHmac('sha256', 'whsec_edge_test').update(`${t}.${payload}`).digest('hex');
   clearLog();
   r = await call(PORT, { body: payload, headers: { 'stripe-signature': `t=${t},v1=${sig}` } });
-  check('Webhook: gültige Signatur ohne JWT → Idempotenz-RPC über Admin-Client', restCalls().some((e) => e.path === '/rest/v1/rpc/stripe_event_begin'));
+  check('Webhook: gültige Signatur ohne JWT → Idempotenz-RPC über Admin-Client', restCalls().some((e) => e.path === '/rest/v1/rpc/stripe_event_claim'));
   check('Webhook: DB-Anfragen nur mit Secret Key', restCalls().every((e) => e.apikey === SECRET));
   check('Webhook: Stripe nicht erreichbar → 500 + Ereignis als fehlgeschlagen markiert (Stripe wiederholt)', r.status === 500 && restCalls().some((e) => e.path === '/rest/v1/rpc/stripe_event_finish' && e.body.includes('failed')), `${r.status}`);
   fn.child.kill();
@@ -305,15 +309,16 @@ try {
   await new Promise((r2) => setTimeout(r2, 500));
 
   /* ---------- delete-account (Benutzer-JWT, frische Anmeldung, „LÖSCHEN“) ---------- */
-  fn = await startFunction('delete-account', PORT, { SMTP_HOST: '127.0.0.1', SMTP_PORT: String(smtp.port), SMTP_USER: 'info@olo-vision.de', SMTP_PASSWORD: 'nicht-echt', MAIL_FROM: 'OLO Vision <info@olo-vision.de>' });
+  fn = await startFunction('delete-account', PORT, { STRIPE_SECRET_KEY: '', SMTP_HOST: '127.0.0.1', SMTP_PORT: String(smtp.port), SMTP_USER: 'info@olo-vision.de', SMTP_PASSWORD: 'nicht-echt', MAIL_FROM: 'OLO Vision <info@olo-vision.de>' });
   clearLog();
   r = await call(PORT, { body: { confirm: 'LÖSCHEN' } });
   check('Löschen ohne Token → 401, ohne DB-Zugriff', r.status === 401 && restCalls().length === 0);
   r = await call(PORT, { token: es256(claims()), body: { confirm: 'ja' } });
   check('Löschen ohne Bestätigungswort → 422', r.status === 422 && r.json?.code === 'confirm_required');
   clearLog();
-  r = await call(PORT, { token: es256(claims({ iat: now() - 3600 })), body: { confirm: 'LÖSCHEN' } });
-  check('Löschen mit alter Anmeldung → 401 reauth_required, ohne Löschung', r.status === 401 && r.json?.code === 'reauth_required' && !restCalls().some((e) => e.path.includes('delete_account_data')));
+  // frisch ausgestelltes Token (Refresh), aber letzte Passwort-Anmeldung vor 1 Stunde → nicht ausreichend
+  r = await call(PORT, { token: es256(claims({ amr: [{ method: 'password', timestamp: now() - 3600 }] })), body: { confirm: 'LÖSCHEN' } });
+  check('Löschen mit alter Anmeldung (auch nach Token-Refresh) → 401 reauth_required, ohne Löschung', r.status === 401 && r.json?.code === 'reauth_required' && !restCalls().some((e) => e.path.includes('delete_account_data')));
   clearLog();
   const mailsBefore = smtp.messages.length;
   r = await call(PORT, { token: es256(claims()), body: { confirm: 'LÖSCHEN', targetUserId: OTHER_INST } });

@@ -5,7 +5,9 @@
  * Begriffe (auch in den Rechtstexten so verwendet):
  *  - Abonnement kündigen   → über „Abonnement verwalten“ (Stripe) oder /kuendigen; Zugriff bis Laufzeitende
  *  - Lizenzende            → Inhalte bleiben erhalten, Bearbeiten erst wieder mit aktiver Lizenz
- *  - Konto schließen       → umkehrbar; Anmeldung möglich, Nutzung gesperrt; Löschung nach 12 Monaten
+ *  - Konto schließen       → umkehrbar; Anmeldung möglich, Nutzung gesperrt; automatische Löschung nach
+ *                            12 Monaten (Erinnerungs-E-Mail 30 Tage vorher)
+ *  - Lizenzende ist KEIN Löschwunsch: Konto und Inhalte bleiben bestehen
  *  - Konto löschen         → endgültig und sofort (Art. 17 DSGVO); gesetzlich aufzubewahrende
  *                            Rechnungs- und Vertragsnachweise bleiben bis zum Fristende gespeichert
  */
@@ -15,7 +17,7 @@ import { Building2, Database, Download, FileText, KeyRound, LockKeyhole, LogOut,
 import { Button, Notice, PageHeader, Pill, TextField } from '@/ui/ds';
 import { confirmDialog } from '@/ui/ds/modals';
 import { usePageTitle } from '../../usePageTitle';
-import { cloudBackend, useCloud } from '../../cloudSession';
+import { cloudBackend, purgeLocalAccountData, useCloud } from '../../cloudSession';
 import { useSession } from '../../session';
 import { LegalFooterLinks } from './LegalPages';
 import { BillingSummary } from './Billing';
@@ -298,7 +300,10 @@ function DeleteAccountForm({ onCancel }: { onCancel: () => void }) {
           const b = cloudBackend();
           await b.reauthenticate(pw);
           await b.deleteAccount(word);
+          const uid = useCloud.getState().user?.id;
+          const simIds = useSession.getState().sims.map((m) => m.id);
           await useCloud.getState().signOut().catch(() => undefined);
+          if (uid) await purgeLocalAccountData(uid, simIds);
           navigate('/login?deleted=1', { replace: true });
         } catch (x) {
           const t = translateError(x);
@@ -335,7 +340,7 @@ function PrivacySection() {
   const close = async () => {
     const ok = await confirmDialog({
       title: 'Konto schließen?',
-      message: 'Sie können sich weiterhin anmelden, Ihre Daten exportieren und das Konto jederzeit wieder öffnen. OLO-LAB3D ist währenddessen nicht nutzbar. Nach 12 Monaten wird das geschlossene Konto mit allen Inhalten gelöscht.',
+      message: 'Sie können sich weiterhin anmelden, Ihre Daten exportieren und das Konto jederzeit wieder öffnen. OLO-LAB3D ist währenddessen nicht nutzbar. Nach 12 Monaten wird das geschlossene Konto mit allen Inhalten automatisch gelöscht – etwa 30 Tage vorher erinnern wir Sie per E-Mail.',
       confirmLabel: 'Konto schließen',
       tone: 'danger',
     });
@@ -378,7 +383,7 @@ function PrivacySection() {
           <div className="account-row__main">
             <strong>Gespeicherte Inhalte</strong>
             <span data-testid="account-content-count">
-              {ov ? `${ov.simulations} ${ov.simulations === 1 ? 'Simulation' : 'Simulationen'} · ${ov.templates} eigene ${ov.templates === 1 ? 'Vorlage' : 'Vorlagen'}` : '…'} – in Ihrem Konto gespeichert, auf allen Geräten verfügbar. Sie bleiben auch nach dem Ende einer Lizenz erhalten.
+              {ov ? `${ov.simulations} ${ov.simulations === 1 ? 'Simulation' : 'Simulationen'} · ${ov.templates} eigene ${ov.templates === 1 ? 'Vorlage' : 'Vorlagen'}` : '…'} – in Ihrem Konto gespeichert, auf allen Geräten verfügbar. Sie bleiben auch nach dem Ende einer Lizenz erhalten – gelöscht wird nur, wenn Sie Ihr Konto schließen oder löschen.
             </span>
           </div>
           <Button size="sm" icon={Download} onClick={() => void exportLibrary()} disabled={!sims} data-testid="account-export">
@@ -398,7 +403,7 @@ function PrivacySection() {
           <div className="account-row" data-testid="account-closed-row">
             <div className="account-row__main">
               <strong>Konto geschlossen</strong>
-              <span>Geschlossen am {formatDate(ov?.closedAt)}. Ohne erneute Öffnung wird das Konto am {formatDate(ov?.deletionDueAt)} gelöscht.</span>
+              <span>Geschlossen am {formatDate(ov?.closedAt)}. Ohne erneute Öffnung wird das Konto ab dem {formatDate(ov?.deletionDueAt)} automatisch gelöscht; wir erinnern Sie vorher per E-Mail.</span>
             </div>
             <Button size="sm" variant="primary" icon={RotateCcw} loading={busy === 'reopen'} onClick={() => void reopen()} data-testid="account-reopen">
               Konto wieder öffnen
@@ -408,7 +413,7 @@ function PrivacySection() {
           <div className="account-row">
             <div className="account-row__main">
               <strong>Konto schließen</strong>
-              <span>Umkehrbar: Nutzung ruht, Inhalte bleiben 12 Monate erhalten und stehen nach dem Wiederöffnen wieder zur Verfügung.</span>
+              <span>Umkehrbar: Die Nutzung ruht, Ihre Inhalte bleiben 12 Monate erhalten und stehen nach dem Wiederöffnen wieder zur Verfügung. Danach wird das Konto automatisch gelöscht (mit Erinnerung per E-Mail).</span>
             </div>
             <Button size="sm" icon={LockKeyhole} loading={busy === 'close'} disabled={!ov?.canClose} onClick={() => void close()} data-testid="account-close">
               Konto schließen

@@ -181,7 +181,9 @@ export class LocalContentMigration {
     return 'imported';
   }
 
-  private insert(meta: SimulationMetadata, doc: Parameters<CloudContentStore['createSim']>[1], thumb: string | null) {
+  private async insert(meta: SimulationMetadata, doc: Parameters<CloudContentStore['createSim']>[1], thumb: string | null) {
+    // vor JEDEM Schreiben: gehört die Sitzung noch zu diesem Konto? (Kontowechsel während der Übernahme)
+    await this.store.assertActive();
     return this.backend
       .insertSimulation({
         id: meta.id,

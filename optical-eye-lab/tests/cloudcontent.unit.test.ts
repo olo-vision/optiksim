@@ -332,3 +332,70 @@ describe('Fehlerabbildung', () => {
     expect(new CloudError('x', undefined, 'OLL01').code).toBe('OLL01');
   });
 });
+
+describe('Produktions-Härtung (Browser)', () => {
+  it('Kontowechsel: der alte Inhaltsspeicher schreibt nie in das neue Konto', async () => {
+    await signUp('anna@optik.de');
+    await signUp('bernd@optik.de');
+    const a = await device('anna@optik.de');
+    const rec = await a.lib.create(a.user, { name: 'Anna', doc: doc('Anna') });
+    // im selben Browser meldet sich (z. B. in einem zweiten Tab) Bernd an → dieselbe Sitzung gehört jetzt Bernd
+    await a.backend.signIn('bernd@optik.de', 'Geheim123');
+    const err = await a.lib.save(a.user, rec.meta.id, doc('Anna geändert')).catch((e) => e);
+    expect(err).toMatchObject({ code: 'session' });
+    await expect(a.lib.create(a.user, { name: 'Falsches Konto', doc: doc() })).rejects.toMatchObject({ code: 'session' });
+    const b = await device('bernd@optik.de');
+    expect(await b.lib.list(b.user)).toEqual([]);
+    // entsorgter Speicher bleibt gesperrt
+    a.store.dispose();
+    await a.backend.signIn('anna@optik.de', 'Geheim123');
+    await expect(a.lib.create(a.user, { name: 'x', doc: doc() })).rejects.toMatchObject({ code: 'session' });
+  });
+
+  it('Übernahme lokaler Daten bricht beim Kontowechsel ab (nichts landet im falschen Konto)', async () => {
+    const annaId = await signUp('anna@optik.de');
+    await signUp('bernd@optik.de');
+    const local = new MemoryStorageProvider();
+    const repos = new Repositories(local);
+    const lu = makeUser({ id: `sb_${annaId}`, firstName: 'A', lastName: 'B', email: 'anna@optik.de', role: 'trainer' });
+    await new LibraryService(repos).create(lu, { name: 'Lokal A', doc: doc('Lokal A') });
+    const a = await device('anna@optik.de', local);
+    await a.backend.signIn('bernd@optik.de', 'Geheim123');
+    await expect(new LocalContentMigration(a.repos, a.store, a.backend).run()).rejects.toMatchObject({ code: 'session' });
+    const b = await device('bernd@optik.de');
+    expect(await b.lib.list(b.user)).toEqual([]);
+  });
+
+  it('technische Fehlermeldungen werden nie roh angezeigt', async () => {
+    const { translateError } = await import('@/cloud/errors');
+    expect(translateError({ code: 'PGRST301', message: 'JWT expired' })).toMatchObject({ code: 'session' });
+    expect(translateError({ message: 'missing email or phone' }).message).toBe('Bitte geben Sie E-Mail-Adresse und Passwort ein.');
+    expect(translateError({ code: '57014', message: 'canceling statement due to statement timeout' }).message).toMatch(/zu lange/);
+    expect(translateError({ code: 'XX000', message: 'internal error at foo.c:12' }).message).toMatch(/^Es ist ein unerwarteter Fehler aufgetreten.*Code XX000/);
+    // eigene deutsche Datenbankmeldungen bleiben lesbar
+    expect(translateError({ code: 'P0002', message: 'Zu dieser E-Mail-Adresse gibt es kein Konto.' }).message).toBe('Zu dieser E-Mail-Adresse gibt es kein Konto.');
+    // Link-Ablauf nur bei Auth-Links, nicht bei jeder Meldung mit „expired“
+    expect(translateError({ code: 'otp_expired', message: 'Email link is invalid or has expired' }).message).toMatch(/Link ist abgelaufen/);
+  });
+});
+
+describe('Paketwahl und Rücksprung', () => {
+  const store = new Map<string, string>();
+  (globalThis as { localStorage?: unknown }).localStorage = { getItem: (k: string) => store.get(k) ?? null, setItem: (k: string, v: string) => void store.set(k, v), removeItem: (k: string) => void store.delete(k) };
+  it('Demo-Wahl ohne Kontobezug startet nie für ein anderes Konto; Registrierungs-Wahl nur für dieses Konto', async () => {
+    const { saveIntent, loadIntent, clearIntent } = await import('@/cloud/intent');
+    saveIntent({ plan: 'demo', interval: 'monthly' });
+    expect(loadIntent('fremd@web.de')).toBeNull();
+    expect(loadIntent()).toMatchObject({ plan: 'demo' });
+    saveIntent({ plan: 'business', interval: 'yearly' }, 'Anna@Optik.de');
+    expect(loadIntent('anna@optik.de')).toMatchObject({ plan: 'business', interval: 'yearly' });
+    expect(loadIntent('bernd@optik.de')).toBeNull();
+    clearIntent();
+    expect(loadIntent()).toBeNull();
+  });
+  it('Rücksprungziel nur innerhalb der Anwendung', async () => {
+    const { safeNext } = await import('@/app/pages/cloud/AuthPages');
+    expect(safeNext('/simulations/sim_1')).toBe('/simulations/sim_1');
+    for (const bad of ['//evil.example', 'https://evil.example', '/\\evil.example', 'javascript:alert(1)', null]) expect(safeNext(bad)).toBeNull();
+  });
+});

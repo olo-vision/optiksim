@@ -260,7 +260,7 @@ describe('Ende-zu-Ende: Kauf → Vertragsbestätigung, Kündigung/Widerruf, Mail
     const ids = (await required('checkout', 'private')).filter((x) => x.required).map((x) => x.id);
     const res = await handleCheckout(post({ plan: 'private', interval: 'yearly', consents: ids }), deps());
     expect(res.status).toBe(200);
-    const call = stripe.calls.find((c) => c.path === 'checkout/sessions')!;
+    const call = stripe.calls.find((c) => c.path === 'checkout/sessions' && c.method === 'POST')!;
     expect(call.params['subscription_data[default_tax_rates][0]']).toBe('txr_19inkl');
     expect(call.params['custom_text[submit][message]']).toContain('Mit Klick auf „Abonnieren“ bestellen Sie OLO-LAB3D Private zahlungspflichtig: 199,00 € für 12 Monate inkl. 19 % USt.; Laufzeit 12 Monate, endet automatisch');
     sessionId = (await h.rows<{ s: string }>(`select distinct checkout_session_id as s from public.legal_consents where user_id = $1 and context = 'checkout'`, [uid]))[0].s;
@@ -397,7 +397,7 @@ describe('Ende-zu-Ende: Kauf → Vertragsbestätigung, Kündigung/Widerruf, Mail
     expect(mailer.sent.some((m) => m.to === 'pia@web.de' && m.subject.startsWith('Vertragsbestätigung'))).toBe(true);
     expect(mailer.sent.some((m) => m.to === 'pia@web.de' && m.subject.startsWith('Ihre Jahreslizenz'))).toBe(true);
     const r2 = await (await cron(env.CRON_SECRET)).json();
-    expect(r2).toEqual({ confirmations: 0, reminders: { checked: 0, sent: 0 } });
+    expect(r2).toEqual({ confirmations: 0, reminders: { checked: 0, sent: 0 }, declarations: 0 });
   });
 
   it('ohne SMTP-Konfiguration läuft alles weiter; Versuch wird als „skipped“ protokolliert', async () => {

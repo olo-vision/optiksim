@@ -63,6 +63,8 @@ export function demoRemainingMs(account: CloudAccount | null, now: Date): number
 export function canStartDemo(account: CloudAccount | null, state: AccessState): boolean {
   if (!account?.profile || account.billing?.demoUsed) return false;
   if (account.profile.role !== 'institution_admin' && account.profile.role !== 'super_admin') return false;
+  // geschlossenes Konto: erst wieder öffnen (serverseitig ebenso gesperrt)
+  if (state === 'account-closed' || account.profile.accountStatus === 'closed') return false;
   return !canUseSimulator(state) && state !== 'demo-ended';
 }
 

@@ -223,6 +223,54 @@ await safe('Konto schließen', async () => {
   check('Inhalte nach Wiederöffnen vorhanden', (await libraryNames()).length === 3);
 });
 
+// 6b) Admin-Center: Lizenz abgelaufen · Konto geschlossen · Löschung beantragt; automatische Löschung
+const CLARA = 'clara@cloud-optik.de';
+await safe('Aufbewahrung', async () => {
+  await logout();
+  await register({ type: 'private', first: 'Clara', last: 'Closed', email: CLARA });
+  await mock('setLicenseStatus', CLARA, 'active');
+  await open('account');
+  await page.click('[data-testid="account-close"]');
+  await page.click('.dialog__footer button:has-text("Konto schließen")');
+  await page.waitForSelector('[data-testid="account-closed-row"]');
+  check('Hinweis: Löschung mit Erinnerung', (await text('[data-testid="account-closed-row"]')).includes('wir erinnern Sie vorher per E-Mail'));
+  await open('license');
+  check('Geschlossenes Konto: keine Buchung/Demo, Hinweis auf Wiederöffnen', await vis('[data-testid="plans-account-closed"]') && (await page.locator('[data-testid="plan-cards"]').count()) === 0);
+  await open('reset-password');
+  check('Passwort-Reset-Seite ohne E-Mail-Link: kein Passwortwechsel ohne aktuelles Passwort', (await page.locator('[data-testid="reset-form"]').count()) === 0 && (await vis('text=Kontoverwaltung')));
+  await logout();
+  await mock('setLicenseStatus', BERND, 'expired');
+  await mock('setRole', ANNA, 'super_admin');
+  await login(ANNA);
+  await open('admin/accounts');
+  const row = (email) => `[data-testid="lifecycle-row"][data-email="${email}"]`;
+  check('Leer: keine Löschanträge', (await page.locator('[data-testid="lifecycle-row"]').count()) === 0);
+  await page.click('.ds-tab:has-text("Konto geschlossen")');
+  check('Kategorie „Konto geschlossen“ mit Fälligkeitsdatum', await vis(row(CLARA)) && /\d{4}/.test(await text(`${row(CLARA)} [data-testid="lifecycle-due"]`)));
+  await page.click('.ds-tab:has-text("Lizenz abgelaufen")');
+  check('Kategorie „Lizenz abgelaufen“ (kein Löschwunsch)', await vis(row(BERND)) && (await text('[data-testid="lifecycle-desc"]')).includes('kein Löschwunsch'));
+  await shot('07_admin_lifecycle');
+  // Löschantrag per E-Mail erfassen und zurücknehmen
+  const req = page.locator('[data-testid="admin-request"]');
+  await req.getByLabel('E-Mail-Adresse des Kontos').fill(BERND);
+  await req.getByLabel('Notiz (optional)').fill('E-Mail vom 30.09.');
+  await req.locator('button[type=submit]').click();
+  check('Kategorie „Löschung beantragt“', await vis(row(BERND)) && (await text(row(BERND))).includes('E-Mail vom 30.09.'));
+  await page.click(`${row(BERND)} button:has-text("Antrag zurücknehmen")`);
+  await page.waitForTimeout(600);
+  check('Antrag zurückgenommen', (await page.locator(row(BERND)).count()) === 0);
+  // automatische Löschung (Nachbau des Jobs): Erinnerung, dann Löschung frühestens 14 Tage danach
+  await mock('setDeletionDue', CLARA, 20);
+  const r1 = await mock('runRetention');
+  check('Erinnerung 30 Tage vor Fristende', r1.reminded === 1 && r1.deleted === 0 && (await serverDb()).mails.some((m) => m.kind === 'account_deletion_reminder' && m.to === CLARA));
+  await mock('setDeletionDue', CLARA, -1, 5);
+  check('Keine Löschung < 14 Tage nach Erinnerung', (await mock('runRetention')).deleted === 0);
+  await mock('setDeletionDue', CLARA, -1, 20);
+  check('Automatische Löschung des geschlossenen Kontos', (await mock('runRetention')).deleted === 1 && !(await serverDb()).users.some((u) => u.email === CLARA));
+  check('Konto mit abgelaufener Lizenz bleibt', (await serverDb()).users.some((u) => u.email === BERND));
+  await mock('setLicenseStatus', BERND, 'active');
+});
+
 // 7) Endgültig löschen
 await safe('Konto löschen', async () => {
   await open('account');

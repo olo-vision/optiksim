@@ -7,7 +7,7 @@ import { createClient, type SupabaseClient, type User as SbUser } from '@supabas
 import type { CloudBackend } from './backend';
 import { translateError } from './errors';
 import { registrationMetadata, validateRegistration } from './validation';
-import type { AccountOverview, CloudSimulationFull, CloudSimulationPatch, CloudSimulationRow, CloudTemplateRow, NewCloudSimulation, AdminAccountRow, AdminConsentRow, AdminDeclarationRow, ConsumerDeclarationInput, ConsumerDeclarationReceipt, AdminLegalDocument, BillingInterval, BillingStatus, CloudAccount, CloudInstitution, CloudLicense, CloudProfile, CloudUser, InstitutionType, LegalConsentContext, LegalDocRef, LegalDocSummary, LegalDocument, LegalDraftInput, LicensePlan, LicenseSource, LicenseStatus, SubscriptionStatus } from './types';
+import type { AccountLifecycleRow, AccountOverview, CloudSimulationFull, CloudSimulationPatch, CloudSimulationRow, CloudTemplateRow, NewCloudSimulation, AdminAccountRow, AdminConsentRow, AdminDeclarationRow, ConsumerDeclarationInput, ConsumerDeclarationReceipt, AdminLegalDocument, BillingInterval, BillingStatus, CloudAccount, CloudInstitution, CloudLicense, CloudProfile, CloudUser, InstitutionType, LegalConsentContext, LegalDocRef, LegalDocSummary, LegalDocument, LegalDraftInput, LicensePlan, LicenseSource, LicenseStatus, SubscriptionStatus } from './types';
 import { CloudError } from './types';
 
 const toUser = (u: SbUser | null | undefined): CloudUser | null => (u ? { id: u.id, email: u.email ?? '' } : null);
@@ -214,9 +214,15 @@ export class SupabaseBackend implements CloudBackend {
     return toUser(data.user)!;
   }
 
+  /** Abmelden nur auf DIESEM Gerät (andere Geräte bleiben angemeldet) */
   async signOut() {
-    const { error } = await this.client.auth.signOut();
+    const { error } = await this.client.auth.signOut({ scope: 'local' });
     if (error) throw translateError(error);
+  }
+
+  async currentUserId() {
+    const { data } = await this.client.auth.getSession();
+    return data.session?.user?.id ?? null;
   }
 
   async requestPasswordReset(email: string, redirectTo: string) {
@@ -592,17 +598,39 @@ export class SupabaseBackend implements CloudBackend {
     if (error) throw await functionError(error, 'Die Löschung konnte gerade nicht abgeschlossen werden. Bitte versuchen Sie es erneut.');
   }
 
-  async adminClosedAccounts() {
-    const { data, error } = await this.client.rpc('admin_closed_accounts');
+  async adminAccountLifecycle(): Promise<AccountLifecycleRow[]> {
+    const { data, error } = await this.client.rpc('admin_account_lifecycle');
     if (error) throw translateError(error);
+    const str = (v: unknown) => (v == null ? null : String(v));
     return ((data ?? []) as Row[]).map((r) => ({
+      category: r.category as AccountLifecycleRow['category'],
       userId: String(r.user_id),
       email: String(r.email ?? ''),
+      firstName: String(r.first_name ?? ''),
+      lastName: String(r.last_name ?? ''),
       institutionName: String(r.institution_name ?? ''),
-      closedAt: r.closed_at ? String(r.closed_at) : null,
-      deletionDueAt: r.deletion_due_at ? String(r.deletion_due_at) : null,
+      licenseStatus: str(r.license_status),
+      licenseSource: str(r.license_source),
+      licenseValidUntil: str(r.license_valid_until),
+      closedAt: str(r.closed_at),
+      deletionDueAt: str(r.deletion_due_at),
+      deletionReminderSentAt: str(r.deletion_reminder_sent_at),
+      deletionRequestedAt: str(r.deletion_requested_at),
+      deletionRequestNote: str(r.deletion_request_note),
       simulations: Number(r.simulations ?? 0),
+      lastSignInAt: str(r.last_sign_in_at),
     }));
+  }
+
+  async adminRequestDeletionByEmail(email: string, note?: string | null) {
+    const { data, error } = await this.client.rpc('admin_request_deletion_by_email', { p_email: email, p_note: note ?? null });
+    if (error) throw translateError(error);
+    return String(data);
+  }
+
+  async adminSetDeletionRequest(userId: string, requested: boolean, note?: string | null) {
+    const { error } = await this.client.rpc('admin_set_deletion_request', { p_user: userId, p_requested: requested, p_note: note ?? null });
+    if (error) throw translateError(error);
   }
 
   async openCustomerPortal() {

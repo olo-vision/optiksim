@@ -61,18 +61,25 @@ function identityClient(): SupabaseClient {
 }
 
 /** iat (Ausstellungszeit, Sekunden) aus einem bereits geprüften JWT */
-function issuedAtOf(token: string): number | undefined {
+/**
+ * Zeitpunkt der letzten ECHTEN Anmeldung (Passwort/Einmalcode) aus dem amr-Claim des geprüften JWT.
+ * Anders als iat ändert er sich beim Token-Refresh nicht – eine gestohlene Sitzung kann so keine
+ * „frische Anmeldung“ vortäuschen.
+ */
+function authenticatedAtOf(token: string): number | undefined {
   try {
     const part = token.split('.')[1] ?? '';
     const payload = JSON.parse(atob(part.replace(/-/g, '+').replace(/_/g, '/').padEnd(Math.ceil(part.length / 4) * 4, '=')));
-    return typeof payload.iat === 'number' ? payload.iat : undefined;
+    const amr = Array.isArray(payload.amr) ? (payload.amr as Array<{ method?: unknown; timestamp?: unknown }>) : [];
+    const ts = amr.filter((a) => a && (a.method === 'password' || a.method === 'otp') && typeof a.timestamp === 'number').map((a) => a.timestamp as number);
+    return ts.length ? Math.max(...ts) : undefined;
   } catch {
     return undefined;
   }
 }
 
-/** Benutzer-JWT prüfen → { id, email, issuedAt } oder null */
-async function authUser(req: Request): Promise<{ id: string; email: string; issuedAt?: number } | null> {
+/** Benutzer-JWT prüfen → { id, email, authenticatedAt } oder null */
+async function authUser(req: Request): Promise<{ id: string; email: string; authenticatedAt?: number } | null> {
   const token = bearerToken(req);
   if (!token) return null;
   // a) lokal gegen die JWKS (aktuelle asymmetrische JWT-Signaturschlüssel)
@@ -80,7 +87,7 @@ async function authUser(req: Request): Promise<{ id: string; email: string; issu
     const { data, error } = await verifyCredentials({ token, apikey: null }, { auth: 'user' });
     if (!error && data?.userClaims?.id) {
       if (data.userClaims.role !== 'authenticated') return null;
-      return { id: data.userClaims.id, email: data.userClaims.email ?? '', issuedAt: issuedAtOf(token) };
+      return { id: data.userClaims.id, email: data.userClaims.email ?? '', authenticatedAt: authenticatedAtOf(token) };
     }
   } catch {
     /* JWKS nicht verfügbar → Rückfall */
@@ -89,7 +96,7 @@ async function authUser(req: Request): Promise<{ id: string; email: string; issu
   const { data, error } = await identityClient().auth.getUser(token);
   if (error || !data.user) return null;
   if (data.user.role && data.user.role !== 'authenticated') return null;
-  return { id: data.user.id, email: data.user.email ?? '', issuedAt: issuedAtOf(token) };
+  return { id: data.user.id, email: data.user.email ?? '', authenticatedAt: authenticatedAtOf(token) };
 }
 
 /* ------------------------------------------------------------------------------------------------ */
@@ -108,7 +115,7 @@ const fail = (e: { message: string; code?: string } | null) => {
 function billingDb(admin: SupabaseClient): BillingDb {
   const db: BillingDb = {
     async getAccount(userId): Promise<BillingAccount | null> {
-      const { data: p, error } = await admin.from('profiles').select('user_id, email, role, institution_id').eq('user_id', userId).maybeSingle();
+      const { data: p, error } = await admin.from('profiles').select('user_id, email, role, institution_id, account_status').eq('user_id', userId).maybeSingle();
       fail(error);
       if (!p) return null;
       const [{ data: inst, error: e1 }, { data: lic, error: e2 }] = await Promise.all([
@@ -127,7 +134,22 @@ function billingDb(admin: SupabaseClient): BillingDb {
         institutionName: inst.name,
         country: inst.country ?? null,
         license: lic ? { status: lic.status, source: lic.source } : null,
+        accountStatus: p.account_status === 'closed' ? 'closed' : 'active',
       };
+    },
+    async missingLegalTypes(customerType) {
+      const { data, error } = await admin.rpc('legal_required_types_missing', { p_context: 'checkout', p_customer_type: customerType });
+      fail(error);
+      return Array.isArray(data) ? (data as string[]) : [];
+    },
+    async replaceCustomer(institutionId, customerId) {
+      const { error } = await admin.rpc('billing_replace_customer', { p_institution: institutionId, p_customer: customerId });
+      fail(error);
+    },
+    async eventClaim(id, type, createdIso) {
+      const { data, error } = await admin.rpc('stripe_event_claim', { p_id: id, p_type: type, p_created: createdIso });
+      fail(error);
+      return data === 'start' || data === 'busy' ? data : 'done';
     },
     async getCustomerId(institutionId) {
       const { data, error } = await admin.from('billing_customers').select('stripe_customer_id').eq('institution_id', institutionId).maybeSingle();
@@ -191,6 +213,20 @@ function billingDb(admin: SupabaseClient): BillingDb {
 /** Rechtsbetrieb (Migration 20260930090000_legal_operations.sql) – nur über security-definer-Funktionen */
 function opsDb(admin: SupabaseClient): OpsDb {
   return {
+    async throttle(bucket, limit, windowSeconds) {
+      const { data, error } = await admin.rpc('throttle_hit', { p_bucket: bucket, p_limit: limit, p_window_seconds: windowSeconds });
+      fail(error);
+      return data !== false;
+    },
+    async pendingDeclarationConfirmations(days) {
+      const { data, error } = await admin.rpc('declaration_confirmations_pending', { p_days: days });
+      fail(error);
+      return (data ?? []) as Awaited<ReturnType<NonNullable<OpsDb['pendingDeclarationConfirmations']>>>;
+    },
+    async markDeclarationConfirmed(id) {
+      const { error } = await admin.rpc('declaration_mark_confirmed', { p_id: id });
+      fail(error);
+    },
     async recordDeclaration(i) {
       const { data, error } = await admin.rpc('consumer_declaration_record', {
         p_kind: i.kind,
@@ -252,6 +288,20 @@ function accountDb(admin: SupabaseClient): AccountDb {
       // bereits gelöscht → in Ordnung (wiederholter Aufruf)
       if (error && !/not.?found/i.test(error.message)) throw new DbError(error.message);
     },
+    async retentionReminderCandidates(days) {
+      const { data, error } = await admin.rpc('retention_reminder_candidates', { p_days: days });
+      fail(error);
+      return (data ?? []) as Awaited<ReturnType<AccountDb['retentionReminderCandidates']>>;
+    },
+    async markDeletionReminded(userId) {
+      const { error } = await admin.rpc('retention_mark_reminded', { p_user: userId });
+      fail(error);
+    },
+    async retentionDueAccounts(limit) {
+      const { data, error } = await admin.rpc('retention_due_accounts', { p_limit: limit });
+      fail(error);
+      return (data ?? []) as Awaited<ReturnType<AccountDb['retentionDueAccounts']>>;
+    },
   };
 }
 
@@ -277,7 +327,20 @@ const stripe: StripeApi = {
     } else if (params && Object.keys(params).length) {
       url += `?${new URLSearchParams(params)}`;
     }
-    const res = await fetch(url, { method, headers, body });
+    // Zeitlimit (hängende Verbindung blockiert sonst Webhook/Checkout); GET bzw. idempotente POSTs werden
+    // bei 429/5xx/Netzwerkfehler einmal wiederholt
+    const retryable = method === 'GET' || !!idempotencyKey;
+    let res: Response | null = null;
+    for (let attempt = 0; attempt < (retryable ? 2 : 1); attempt++) {
+      try {
+        res = await fetch(url, { method, headers, body, signal: AbortSignal.timeout(15_000) });
+        if (!(retryable && (res.status === 429 || res.status >= 500)) || attempt === 1) break;
+      } catch (e) {
+        if (!retryable || attempt === 1) throw e;
+      }
+      await new Promise((r) => setTimeout(r, 800));
+    }
+    if (!res) throw new Error('Stripe nicht erreichbar');
     const data = (await res.json().catch(() => ({}))) as Record<string, unknown>;
     if (!res.ok) {
       const err = (data.error ?? {}) as { type?: string; code?: string; message?: string; param?: string };
@@ -303,6 +366,9 @@ export function realDeps(): Deps {
     applySubscription: (...a) => lazyDb().applySubscription(...a),
     checkCheckoutConsents: (...a) => lazyDb().checkCheckoutConsents(...a),
     recordCheckoutConsents: (...a) => lazyDb().recordCheckoutConsents(...a),
+    missingLegalTypes: (...a) => lazyDb().missingLegalTypes!(...a),
+    replaceCustomer: (...a) => lazyDb().replaceCustomer!(...a),
+    eventClaim: (...a) => lazyDb().eventClaim!(...a),
   };
   const lazyOps = (): OpsDb => opsDb((admin ??= createServerAdminClient()));
   const ops: OpsDb = {
@@ -313,12 +379,18 @@ export function realDeps(): Deps {
     renewalCandidates: (...a) => lazyOps().renewalCandidates(...a),
     markRenewal: (...a) => lazyOps().markRenewal(...a),
     pendingContractConfirmations: (...a) => lazyOps().pendingContractConfirmations(...a),
+    throttle: (...a) => lazyOps().throttle!(...a),
+    pendingDeclarationConfirmations: (...a) => lazyOps().pendingDeclarationConfirmations!(...a),
+    markDeclarationConfirmed: (...a) => lazyOps().markDeclarationConfirmed!(...a),
   };
   const lazyAccounts = (): AccountDb => accountDb((admin ??= createServerAdminClient()));
   const accounts: AccountDb = {
     getProfile: (...a) => lazyAccounts().getProfile(...a),
     deleteAccountData: (...a) => lazyAccounts().deleteAccountData(...a),
     deleteAuthUser: (...a) => lazyAccounts().deleteAuthUser(...a),
+    retentionReminderCandidates: (...a) => lazyAccounts().retentionReminderCandidates(...a),
+    markDeletionReminded: (...a) => lazyAccounts().markDeletionReminded(...a),
+    retentionDueAccounts: (...a) => lazyAccounts().retentionDueAccounts(...a),
   };
   const log = (m: string) => console.error(m);
   return { env, authUser, db, stripe, log, ops, mailer: mailerFromEnv(env, log), accountDb: accounts };

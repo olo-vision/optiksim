@@ -23,8 +23,10 @@ import { DEFAULT_BRANDING } from '@/platform/branding';
 import { platform } from './platformInstance';
 import { flushPendingPrefs, setPrefsRemote, useSession } from './session';
 import { CloudContentStore } from './cloudContent';
-import { LocalContentMigration, type LocalImportReport } from './cloudMigration';
+import { LocalContentMigration, MIGRATION_KEYS, type LocalImportReport } from './cloudMigration';
 import { useAppStore } from '@/state/store';
+import { closeAllModals } from '@/ui/ds/modals';
+import { clearIntent } from '@/cloud/intent';
 
 let backend: CloudBackend | null = null;
 export function cloudBackend(): CloudBackend {
@@ -49,11 +51,21 @@ export const cloudContentStore = () => contentStore;
 
 /** Arbeitsbereich beim Abmelden/Kontowechsel vollständig lösen: keine Zwischenspeicher des alten Kontos */
 async function detachWorkspace() {
+  const hadSession = !!contentStore || !!useSession.getState().user;
+  // ungespeicherte Änderungen als lokalen Entwurf sichern, bevor Speicher-Hooks entfernt werden
+  useAppStore.getState().flushDraft();
+  // offene Dialoge (z. B. Konfliktdialog) des alten Kontos schließen
+  closeAllModals();
+  contentStore?.dispose();
+  migrationRun = null;
+  setPrefsRemote(null, { discard: true });
   if (useSession.getState().user) await useSession.getState().signOut();
   platform.useContent(null);
   contentStore = null;
-  setPrefsRemote(null);
   useCloud.setState({ localImport: null });
+  // Paketwahl gehört zur Sitzung (nicht an den nächsten Benutzer dieses Browsers weitergeben) – nur nach
+  // einer echten Abmeldung, nicht beim Start ohne Anmeldung (Registrierung → E-Mail-Bestätigung)
+  if (hadSession) clearIntent();
 }
 
 let migrationRun: Promise<void> | null = null;
@@ -120,7 +132,14 @@ async function activateWorkspace(account: CloudAccount) {
   if (contentStore?.identity.cloudUserId !== account.userId) {
     contentStore = new CloudContentStore(cloudBackend(), platform.repos, { cloudUserId: account.userId, workspaceUserId: id, organizationId: org.id });
     platform.useContent(contentStore);
-    setPrefsRemote({ load: () => cloudBackend().getPreferences(), save: (prefs) => cloudBackend().savePreferences(prefs) });
+    const owner = account.userId;
+    setPrefsRemote({
+      load: () => cloudBackend().getPreferences(),
+      // nur speichern, solange die Sitzung noch zu diesem Konto gehört
+      save: async (prefs) => {
+        if ((await cloudBackend().currentUserId()) === owner) await cloudBackend().savePreferences(prefs);
+      },
+    });
   }
   const cur = useSession.getState().user;
   if (cur?.id === user.id) {
@@ -154,6 +173,11 @@ interface CloudState {
   tick: () => void;
   /** Phase 8: kostenlose Demo starten (serverseitig geprüft) und Konto neu laden */
   startDemo: (consentDocumentIds: string[]) => Promise<void>;
+  /** Sitzung ist abgelaufen bzw. wurde auf dem Server beendet (nicht durch „Abmelden“) */
+  sessionExpired: boolean;
+  /** Start ohne Verbindung: Sitzung vorhanden, Konto noch nicht geladen */
+  offline: boolean;
+  retryConnection: () => Promise<void>;
   /** 0.10.0: Ergebnis der Übernahme lokaler Inhalte (u. a. wartender Altbestand) */
   localImport: LocalImportReport | null;
   /** Altbestand dieses Geräts (frühere Version) nach Bestätigung in das Konto übernehmen */
@@ -165,18 +189,41 @@ let unsubscribe: (() => void) | null = null;
 
 const origin = () => (typeof window !== 'undefined' ? window.location.origin : '');
 
+/** Passwort-Wiederherstellung: tab-gebunden merken, damit ein Neuladen der Reset-Seite den Link-Status nicht verliert */
+const RECOVERY_FLAG = 'olo-recovery';
+function recoveryFlag(v?: boolean): boolean {
+  try {
+    if (v === true) sessionStorage.setItem(RECOVERY_FLAG, '1');
+    else if (v === false) sessionStorage.removeItem(RECOVERY_FLAG);
+    return sessionStorage.getItem(RECOVERY_FLAG) === '1';
+  } catch {
+    return false;
+  }
+}
+
 export const useCloud = create<CloudState>()((set, get) => {
   /** Ladevorgänge nacheinander ausführen (Ereignis + Aktion können gleichzeitig auslösen). */
   let chain: Promise<void> = Promise.resolve();
+  /** Benutzer, dessen Laden gerade eingereiht ist (verhindert doppeltes Laden bei der Anmeldung) */
+  let pendingLoadId: string | null = null;
+  let signingOut = false;
+  let offlineUser: CloudUser | null = null;
   function load(user: CloudUser | null): Promise<void> {
-    const next = chain.catch(() => undefined).then(() => doLoad(user));
+    pendingLoadId = user?.id ?? null;
+    const next = chain.catch(() => undefined).then(() => doLoad(user)).finally(() => {
+      if (pendingLoadId === (user?.id ?? null)) pendingLoadId = null;
+    });
     chain = next;
     return next;
   }
   /** Konto laden und Arbeitsbereich aktivieren. */
   async function doLoad(user: CloudUser | null) {
     if (!user) {
-      set({ user: null, account: null, access: 'signed-out' });
+      // ohne Sitzung kein Passwort-Reset über den Link-Status
+      if (get().recovery) set({ recovery: recoveryFlag(false) });
+      // nicht selbst abgemeldet → Sitzung abgelaufen/auf dem Server beendet: Hinweis auf der Anmeldeseite
+      const expired = !signingOut && !!get().user;
+      set({ user: null, account: null, access: 'signed-out', ...(expired ? { sessionExpired: true } : {}) });
       await detachWorkspace();
       return;
     }
@@ -189,7 +236,7 @@ export const useCloud = create<CloudState>()((set, get) => {
     syncServerTime(account.billing?.serverNow);
     await activateWorkspace(account);
     const access = accessState(account, serverDate());
-    set({ user, account, access, error: null });
+    set({ user, account, access, error: null, sessionExpired: false, offline: false });
     // Übernahme lokaler Daten nur mit Schreibrecht (aktive Lizenz); sonst bleiben sie unverändert liegen
     if (canUseSimulator(access)) void runLocalImport();
   }
@@ -200,9 +247,22 @@ export const useCloud = create<CloudState>()((set, get) => {
     error: null,
     user: null,
     account: null,
-    recovery: false,
+    recovery: recoveryFlag(),
     access: 'signed-out',
     localImport: null,
+    sessionExpired: false,
+    offline: false,
+
+    retryConnection: async () => {
+      const u = offlineUser ?? (await cloudBackend().getUser().catch(() => null));
+      try {
+        await load(u);
+        offlineUser = null;
+        set({ offline: false, error: null });
+      } catch (e) {
+        set({ error: translateError(e).message });
+      }
+    },
 
     init: () => {
       if (!CLOUD_ENABLED) return Promise.resolve();
@@ -216,13 +276,25 @@ export const useCloud = create<CloudState>()((set, get) => {
           const b = cloudBackend();
           unsubscribe?.();
           unsubscribe = b.onAuthChange((event, user) => {
-            if (event === 'PASSWORD_RECOVERY') set({ recovery: true });
+            if (event === 'PASSWORD_RECOVERY') set({ recovery: recoveryFlag(true) });
             if (event === 'SIGNED_OUT') void load(null);
-            else if ((event === 'SIGNED_IN' || event === 'USER_UPDATED' || event === 'PASSWORD_RECOVERY') && user && user.id !== get().user?.id) void load(user).catch((e) => set({ error: translateError(e).message }));
+            else if ((event === 'SIGNED_IN' || event === 'USER_UPDATED' || event === 'PASSWORD_RECOVERY') && user && user.id !== get().user?.id && user.id !== pendingLoadId) void load(user).catch((e) => set({ error: translateError(e).message }));
             // E-Mail-Änderung bestätigt: Konto neu laden (neue Adresse anzeigen)
             else if (event === 'USER_UPDATED' && user && user.email !== get().user?.email) void load(user).catch(() => undefined);
           });
-          await load(await b.getUser());
+          const u = await b.getUser();
+          try {
+            await load(u);
+          } catch (e) {
+            // ohne Verbindung gestartet: Sitzung behalten, erneut versuchen sobald online
+            if (u && translateError(e).code === 'network') {
+              offlineUser = u;
+              set({ offline: true, status: 'ready', error: translateError(e).message });
+              window.addEventListener('online', () => void get().retryConnection(), { once: true });
+              return;
+            }
+            throw e;
+          }
           set({ status: 'ready' });
         } catch (e) {
           set({ status: 'ready', error: translateError(e).message });
@@ -239,8 +311,10 @@ export const useCloud = create<CloudState>()((set, get) => {
 
     signIn: async (email, password) => {
       try {
+        set({ sessionExpired: false });
         const u = await cloudBackend().signIn(email, password);
-        await load(u);
+        if (pendingLoadId === u.id) await chain;
+        else await load(u);
       } catch (e) {
         throw translateError(e);
       }
@@ -259,11 +333,14 @@ export const useCloud = create<CloudState>()((set, get) => {
     signOut: async () => {
       // Offene Einstellungen noch mit der gültigen Sitzung speichern
       await flushPendingPrefs().catch(() => undefined);
+      signingOut = true;
       try {
         await cloudBackend().signOut();
       } finally {
-        set({ user: null, account: null, access: 'signed-out', recovery: false });
+        recoveryFlag(false);
+        set({ user: null, account: null, access: 'signed-out', recovery: false, sessionExpired: false });
         await detachWorkspace();
+        signingOut = false;
       }
     },
 
@@ -292,6 +369,7 @@ export const useCloud = create<CloudState>()((set, get) => {
     updatePassword: async (password) => {
       try {
         await cloudBackend().updatePassword(password);
+        recoveryFlag(false);
         set({ recovery: false });
       } catch (e) {
         throw translateError(e);
@@ -347,10 +425,12 @@ export function startAccessWatch(): () => void {
     const st = useCloud.getState();
     const demo = st.access === 'demo';
     st.tick();
-    if (demo && Date.now() - lastServerCheck > 60_000) serverCheck();
+    // Demo: jede Minute; sonst alle 15 Minuten (Kündigung/Sperre/Schließen auf einem anderen Gerät bemerken)
+    if (st.user && Date.now() - lastServerCheck > (demo ? 60_000 : 15 * 60_000)) serverCheck();
   }, 1000);
   const onVisible = () => {
-    if (document.visibilityState === 'visible' && useCloud.getState().user) {
+    // beim Zurückkehren in den Tab – höchstens einmal pro Minute
+    if (document.visibilityState === 'visible' && useCloud.getState().user && Date.now() - lastServerCheck > 60_000) {
       serverCheck();
       // Änderungen anderer Geräte übernehmen
       contentStore?.invalidate();
@@ -362,6 +442,27 @@ export function startAccessWatch(): () => void {
     window.clearInterval(timer);
     document.removeEventListener('visibilitychange', onVisible);
   };
+}
+
+/**
+ * Nach der endgültigen Kontolöschung: lokale Spuren dieses Kontos im Browser entfernen (gemeinsam genutzte
+ * Geräte, z. B. in der Schule): Arbeitsbereichs-Benutzer, Einstellungen, Entwürfe, lokale Kopien, Marker.
+ */
+export async function purgeLocalAccountData(cloudUserId: string, simIds: string[] = []) {
+  const wsId = workspaceUserId(cloudUserId);
+  const repos = platform.repos;
+  try {
+    const user = await repos.getUser(wsId);
+    for (const m of await repos.listSimMeta()) if (m.ownerId === wsId) await repos.deleteSim(m.id);
+    for (const id of simIds) await repos.clearDraft(id);
+    for (const t of await repos.listCustomTemplates()) if (t.createdBy === wsId) await repos.deleteTemplate(t.id);
+    await repos.deleteUser(wsId);
+    if (user?.organizationId && !(await repos.listUsers()).some((u) => u.organizationId === user.organizationId)) await repos.deleteOrg(user.organizationId);
+    await repos.storage.remove(MIGRATION_KEYS.account(cloudUserId));
+    clearIntent();
+  } catch {
+    /* lokale Aufräumarbeit ist optional */
+  }
 }
 
 /** Darf der Simulator (Dashboard, Module, Simulationen) genutzt werden? Lokaler Modus: immer. */

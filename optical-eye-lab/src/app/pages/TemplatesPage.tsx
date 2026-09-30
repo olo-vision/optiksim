@@ -3,7 +3,7 @@
  */
 import { useMemo, useState } from 'react';
 import { FilePlus2, LayoutTemplate, Lock, SearchX, Trash2, Users } from 'lucide-react';
-import { useSession, runAction } from '../session';
+import { useSession, runAction, useLibraryRefreshOnMount } from '../session';
 import { platform } from '../platformInstance';
 import { Button, EmptyState, PageHeader, Pill, SearchInput } from '@/ui/ds';
 import { openAppDialog } from '../library/actions';
@@ -14,6 +14,7 @@ import { can } from '@/platform/permissions';
 import { usePageTitle } from '../usePageTitle';
 
 export function TemplatesPage() {
+  useLibraryRefreshOnMount();
   usePageTitle('Vorlagen');
   const user = useSession((s) => s.user)!;
   const templates = useSession((s) => s.templates);

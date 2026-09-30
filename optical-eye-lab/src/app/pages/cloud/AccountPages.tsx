@@ -98,7 +98,7 @@ export function LicensePage() {
   const allowed = canUseSimulator(access);
   const returning = params.get('checkout') === 'success';
   // Paketwahl aus Landingpage/Registrierung (URL, sonst gemerkte Auswahl) – öffnet den passenden Schritt
-  const [intent] = useState(() => parseIntent(params.get('plan'), params.get('interval')) ?? loadIntent());
+  const [intent] = useState(() => parseIntent(params.get('plan'), params.get('interval')) ?? loadIntent(account?.email ?? null));
   const demoEnded = access === 'demo-ended';
   // Während der Bestätigung keine erneute Buchung anbieten (der Webhook kommt gleich)
   const confirming = returning && !allowed;

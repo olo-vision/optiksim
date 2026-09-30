@@ -2,7 +2,7 @@
  * Routing (react-router, Browser-History). Alle Routen sind neu-ladbar
  * (Netlify: public/_redirects, Vite-Preview: SPA-Fallback).
  */
-import { useEffect, useState, type ReactNode } from 'react';
+import { lazy, Suspense, useEffect, useState, type ReactNode } from 'react';
 import { createBrowserRouter, isRouteErrorResponse, Navigate, Outlet, useLocation, useRouteError } from 'react-router';
 import { AlertTriangle, Compass } from 'lucide-react';
 import { useSession } from './session';
@@ -18,9 +18,15 @@ import { SettingsPage } from './pages/SettingsPage';
 import { ProfilePage } from './pages/ProfilePage';
 import { AdminUsersPage } from './pages/AdminUsersPage';
 import { AdminOrganizationPage } from './pages/AdminOrganizationPage';
-import { NewSimulationRoute, SimulatorPage } from './pages/SimulatorPage';
 import { ModuleEntryRoute, ModulesPage } from './pages/ModulesPage';
-import { ModulePage } from './pages/ModulePage';
+/*
+ * Simulator und Module (Three.js, Raytracing – der größte Teil des Codes) erst bei Bedarf laden:
+ * Startseite, Tarife, Anmeldung und Konto sind so deutlich schneller.
+ */
+const SimulatorPage = lazy(() => import('./pages/SimulatorPage').then((m) => ({ default: m.SimulatorPage })));
+const NewSimulationRoute = lazy(() => import('./pages/SimulatorPage').then((m) => ({ default: m.NewSimulationRoute })));
+const ModulePage = lazy(() => import('./pages/ModulePage').then((m) => ({ default: m.ModulePage })));
+const lazyView = (el: ReactNode) => <Suspense fallback={<Splash message="Simulator wird geladen …" />}>{el}</Suspense>;
 import { ModalHost } from '@/ui/ds/modals';
 import { TooltipLayer } from '@/ui/common/TooltipLayer';
 import { Button, EmptyState } from '@/ui/ds';
@@ -100,7 +106,20 @@ function IndexRedirect() {
 function RequireAuth({ children }: { children: ReactNode }) {
   const user = useSession((s) => s.user);
   const cloudUser = useCloud((s) => s.user);
+  const offline = useCloud((s) => s.offline);
   const loc = useLocation();
+  // Start ohne Verbindung: Sitzung ist vorhanden – nicht zur Anmeldung schicken, sondern erneut versuchen
+  if (CLOUD_ENABLED && !cloudUser && offline)
+    return (
+      <div className="page-center">
+        <EmptyState
+          icon={AlertTriangle}
+          title="Keine Verbindung zum Server"
+          text="Bitte prüfen Sie Ihre Internetverbindung. Sobald die Verbindung besteht, geht es automatisch weiter."
+          action={<Button onClick={() => void useCloud.getState().retryConnection()}>Erneut versuchen</Button>}
+        />
+      </div>
+    );
   if (!(CLOUD_ENABLED ? cloudUser : user)) return <Navigate to={`/login?next=${encodeURIComponent(loc.pathname + loc.search)}`} replace />;
   return <>{children}</>;
 }
@@ -258,9 +277,7 @@ export const router = createBrowserRouter([
         path: 'simulations/new',
         element: (
           <RequireAuth>
-            <RequireLicense>
-              <NewSimulationRoute />
-            </RequireLicense>
+            <RequireLicense>{lazyView(<NewSimulationRoute />)}</RequireLicense>
           </RequireAuth>
         ),
       },
@@ -268,9 +285,7 @@ export const router = createBrowserRouter([
         path: 'modules/:moduleId/:simId',
         element: (
           <RequireAuth>
-            <RequireLicense>
-              <ModulePage />
-            </RequireLicense>
+            <RequireLicense>{lazyView(<ModulePage />)}</RequireLicense>
           </RequireAuth>
         ),
       },
@@ -278,9 +293,7 @@ export const router = createBrowserRouter([
         path: 'simulations/:id',
         element: (
           <RequireAuth>
-            <RequireLicense>
-              <SimulatorPage />
-            </RequireLicense>
+            <RequireLicense>{lazyView(<SimulatorPage />)}</RequireLicense>
           </RequireAuth>
         ),
       },

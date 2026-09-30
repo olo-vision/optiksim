@@ -88,9 +88,18 @@ Ablauf der endgültigen Löschung (Edge Function `delete-account`):
 5. Der Auth-Benutzer wird gelöscht und eine Bestätigungs-E-Mail an die bisherige Adresse gesendet.
 6. Der Ablauf ist wiederholbar: Bricht ein Schritt ab, setzt ein erneuter Aufruf richtig fort.
 
-**Offene Betreiberentscheidung:** Die Datenschutzerklärung nennt 12 Monate nach Vertragsende bzw. Schließung.
-- Heute zeigt das Admin-Center fällige geschlossene Konten an; gelöscht wird manuell.
-- Eine automatische Löschung (Cron über `mail-jobs` o. ä.) und eine Liste inaktiver, nicht geschlossener Konten sind noch nicht umgesetzt.
+**Aufbewahrung (Betreiberentscheidung vom 30.09.2026, Migration `20261002090000_account_retention.sql`):**
+- Lizenzende und Kündigung sind **kein Löschwunsch**. Konto und Simulationen bleiben unbefristet erhalten, bis der Kunde schließt oder löscht.
+- Die 12-Monats-Frist gilt nur für **ausdrücklich geschlossene** Konten.
+  - `mail-jobs` erinnert 30 Tage vor Fristende per E-Mail (`account_deletion_reminder`).
+  - Gelöscht wird frühestens 14 Tage nach erfolgreich versendeter Erinnerung, dann automatisch mit Auslöser `retention`.
+  - Ohne funktionierenden E-Mail-Versand wird nie automatisch gelöscht.
+  - Abschaltbar mit `ACCOUNT_AUTO_DELETE=off`.
+- Das Admin-Center („Kontoschließung & Löschung“) zeigt drei getrennte Listen:
+  - Lizenz abgelaufen
+  - Konto geschlossen – Löschung fällig am [Datum], mit Erinnerungsstatus
+  - Löschung beantragt (Anträge per E-Mail erfassen, zurücknehmen, ausführen)
+- Rechnungen (Stripe), Zustimmungs-, Kündigungs- und Widerrufsnachweise und der Löschnachweis haben eigene Fristen. Siehe Datenschutzerklärung Ziffer 10.4.
 
 ## 7. „Abonnement verwalten“ (Customer Portal)
 

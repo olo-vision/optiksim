@@ -42,7 +42,7 @@ OLO-LAB3D ist eine browserbasierte Simulations- und Lernsoftware für Augenoptik
 
 OLO Vision ist nicht bereit und nicht verpflichtet, an Streitbeilegungsverfahren vor einer Verbraucherschlichtungsstelle teilzunehmen.
 $olo$),
-      -- 02_agb.md (602366f88c77)
+      -- 02_agb.md (11feafd45185)
       ('terms', 'all', '1.0', $olo$Allgemeine Geschäftsbedingungen$olo$, $olo$Ich habe die {link} gelesen und akzeptiere sie.$olo$, $olo$## 1. Geltungsbereich und Anbieter
 
 1.1 Diese Allgemeinen Geschäftsbedingungen (AGB) gelten für alle Verträge über die Nutzung der Software OLO-LAB3D zwischen OLO Vision, Inhaber Jonas Karol Lingener, Forsthausstraße 14, 66709 Weiskirchen, E-Mail: info@olo-vision.de (nachfolgend „OLO Vision“ oder „wir“) und ihren Kundinnen und Kunden (nachfolgend „Kunde“).
@@ -168,7 +168,7 @@ Es gelten die gesetzlichen Mängelrechte. Für Verbraucher gelten insbesondere d
 
 13.3 Im Übrigen ist die Haftung für leichte Fahrlässigkeit ausgeschlossen.
 
-13.4 Simulationen, eigene Vorlagen und Einstellungen speichert OLO-LAB3D im Kundenkonto auf Servern in der EU; sie stehen nach der Anmeldung auf jedem unterstützten Gerät zur Verfügung. Endet der Vertrag, bleiben die gespeicherten Inhalte bis zum Ablauf der in der Datenschutzerklärung genannten Speicherdauer erhalten und können nach einer erneuten Buchung weiter genutzt werden; lesen und exportieren ist auch ohne aktive Lizenz möglich. OLO Vision schuldet keine gesonderte Datensicherung für den Kunden; es wird empfohlen, wichtige Arbeiten zusätzlich über die Exportfunktion zu sichern. Die Haftung nach Ziffer 13.1 bleibt unberührt.
+13.4 Simulationen, eigene Vorlagen und Einstellungen speichert OLO-LAB3D im Kundenkonto auf Servern in der EU; sie stehen nach der Anmeldung auf jedem unterstützten Gerät zur Verfügung. Endet der Vertrag, bleiben die gespeicherten Inhalte erhalten, solange das Kundenkonto besteht (Ziffer 13 der Lizenz- und Nutzungsbedingungen), und können nach einer erneuten Buchung weiter genutzt werden; lesen und exportieren ist auch ohne aktive Lizenz möglich. OLO Vision schuldet keine gesonderte Datensicherung für den Kunden; es wird empfohlen, wichtige Arbeiten zusätzlich über die Exportfunktion zu sichern. Die Haftung nach Ziffer 13.1 bleibt unberührt.
 
 [Prüfhinweis: Formulierung zur Datensicherung nach Umstellung auf die Cloud-Speicherung (Version 0.10) anwaltlich prüfen lassen.]
 
@@ -188,7 +188,7 @@ OLO Vision ist nicht bereit und nicht verpflichtet, an Streitbeilegungsverfahren
 
 16.2 Sollten einzelne Bestimmungen dieser AGB unwirksam sein, bleibt die Wirksamkeit der übrigen Bestimmungen unberührt. An die Stelle der unwirksamen Bestimmung treten die gesetzlichen Vorschriften.
 $olo$),
-      -- 03_lizenzbedingungen.md (c7ff8fc9172f)
+      -- 03_lizenzbedingungen.md (83c7b7827232)
       ('license_terms', 'all', '1.0', $olo$Lizenz- und Nutzungsbedingungen$olo$, $olo$Ich akzeptiere die {link} und bestätige, mindestens 18 Jahre alt zu sein oder mit Zustimmung meiner gesetzlichen Vertreter zu handeln.$olo$, $olo$Diese Bedingungen regeln, wer OLO-LAB3D wie nutzen darf. Sie gelten für jedes Kundenkonto, die kostenlose Demo und alle Tarife. Anbieter ist OLO Vision, Inhaber Jonas Karol Lingener, Forsthausstraße 14, 66709 Weiskirchen, E-Mail: info@olo-vision.de.
 
 ## 1. Kundenkonto und Zugangsdaten
@@ -292,9 +292,9 @@ Verstößt der Kunde gegen diese Bedingungen, kann OLO Vision den Zugang nach vo
 
 ## 13. Ende der Nutzung
 
-13.1 Mit Ende des Vertrags bzw. der Demo endet das Nutzungsrecht. Das Kundenkonto und die gespeicherten Inhalte bleiben bestehen, bis der Kunde das Konto löscht oder die in der Datenschutzerklärung genannte Speicherdauer abgelaufen ist; eine erneute Buchung ist in dieser Zeit möglich und stellt die gespeicherten Inhalte wieder zur Bearbeitung bereit.
+13.1 Mit Ende des Vertrags bzw. der Demo endet das Nutzungsrecht. Das Ende des Vertrags ist **kein Löschgrund**: Das Kundenkonto und die gespeicherten Inhalte bleiben bestehen, bis der Kunde das Konto schließt oder löscht. Eine erneute Buchung stellt die gespeicherten Inhalte wieder zur Bearbeitung bereit.
 
-13.2 Der Kunde kann sein Konto in der Kontoverwaltung **schließen**: Die Nutzung ruht, die Inhalte bleiben 12 Monate erhalten und das Konto kann in dieser Zeit wieder geöffnet werden. Danach wird es gelöscht.
+13.2 Der Kunde kann sein Konto in der Kontoverwaltung **schließen**: Die Nutzung ruht, die Inhalte bleiben 12 Monate ab der Schließung erhalten und das Konto kann in dieser Zeit wieder geöffnet werden. Etwa 30 Tage vor Ablauf erhält der Kunde eine Erinnerung per E-Mail; danach wird das Konto mit allen Inhalten automatisch gelöscht, frühestens 14 Tage nach der Erinnerung.
 
 13.3 Der Kunde kann sein Konto in der Kontoverwaltung jederzeit **endgültig löschen**. Konto, Simulationen, Vorlagen und Einstellungen werden dabei sofort und unwiderruflich gelöscht; gesetzlich aufzubewahrende Rechnungs- und Vertragsnachweise bleiben bis zum Ende der Aufbewahrungsfrist gespeichert. Ein laufendes, nicht gekündigtes Abonnement ist vorher zu kündigen.
 $olo$),
@@ -367,7 +367,7 @@ $olo$),
 
 Es gilt das Recht der Bundesrepublik Deutschland unter Ausschluss des UN-Kaufrechts.
 $olo$),
-      -- 05_datenschutz.md (f51b9b7fe8d9)
+      -- 05_datenschutz.md (0db59d62cc49)
       ('privacy', 'all', '1.0', $olo$Datenschutzerklärung$olo$, $olo$Ich habe die {link} zur Kenntnis genommen.$olo$, $olo$## 1. Verantwortlicher
 
 Verantwortlich für die Verarbeitung personenbezogener Daten im Zusammenhang mit OLO-LAB3D und der Website https://olo-lab.de ist:
@@ -431,7 +431,7 @@ Wenn Sie über „Verträge hier kündigen“ oder „Vertrag widerrufen“ eine
 
 ## 8. E-Mail-Kommunikation
 
-8.1 Wir versenden ausschließlich E-Mails, die für Konto und Vertrag erforderlich sind, insbesondere zur Bestätigung der E-Mail-Adresse, zum Zurücksetzen des Passworts, Vertrags-, Kündigungs- und Widerrufsbestätigungen sowie Hinweise zum Ablauf eines Abonnements. Wir versenden keine Werbe-E-Mails oder Newsletter.
+8.1 Wir versenden ausschließlich E-Mails, die für Konto und Vertrag erforderlich sind, insbesondere zur Bestätigung der E-Mail-Adresse, zum Zurücksetzen des Passworts, Vertrags-, Kündigungs- und Widerrufsbestätigungen, Hinweise zum Ablauf eines Abonnements, die Erinnerung vor der automatischen Löschung eines geschlossenen Kontos sowie die Bestätigung einer Kontolöschung. Wir versenden keine Werbe-E-Mails oder Newsletter.
 
 8.2 Wenn Sie uns per E-Mail kontaktieren, verarbeiten wir Ihre Angaben zur Bearbeitung der Anfrage (Art. 6 Abs. 1 lit. b bzw. f DSGVO).
 
@@ -452,18 +452,21 @@ Wenn Sie über „Verträge hier kündigen“ oder „Vertrag widerrufen“ eine
 
 9.3 Diese Speicherung im Browser ist unbedingt erforderlich, um die von Ihnen ausdrücklich gewünschte Anwendung bereitzustellen (§ 25 Abs. 2 Nr. 2 TDDDG). Eine Einwilligung ist dafür nicht erforderlich. Wir setzen keine Cookies zu Analyse- oder Werbezwecken ein.
 
-## 10. Speicherdauer
+## 10. Speicherdauer und Löschung
 
-- **Kundenkonto und gespeicherte Inhalte:** bis Sie das Konto löschen, spätestens 12 Monate nach Ende des letzten Vertrags bzw. nach der letzten relevanten Anmeldung. Das Ende einer Lizenz führt nicht zur sofortigen Löschung, damit Sie Ihre Inhalte nach einer erneuten Buchung weiter nutzen können.
-- **Geschlossenes Konto:** 12 Monate ab Schließung; in dieser Zeit können Sie das Konto wieder öffnen. Danach wird es gelöscht.
-- **Nachweis einer Kontolöschung:** Kennung des gelöschten Kontos, Zeitpunkt und ein nicht umkehrbarer Hashwert der E-Mail-Adresse für 3 Jahre (Art. 6 Abs. 1 lit. c und f DSGVO, Nachweis der Erfüllung Ihres Löschverlangens).
-- **Zustimmungs- und Vertragsnachweise, Kündigungs- und Widerrufserklärungen:** 3 Jahre nach Ende des Vertrags (Ende des Kalenderjahres, regelmäßige Verjährungsfrist), soweit keine längeren gesetzlichen Pflichten bestehen.
-- **Rechnungs-, Buchungs- und Steuerunterlagen:** nach den gesetzlichen Aufbewahrungsfristen, insbesondere § 147 AO.
+10.1 **Kundenkonto und gespeicherte Inhalte** (Profil- und Einrichtungsdaten, Simulationen, Vorlagen, Einstellungen): Wir speichern sie, solange Ihr Kundenkonto besteht. Grundlage ist der mit der Registrierung geschlossene Nutzungsvertrag über das Kundenkonto (Art. 6 Abs. 1 lit. b DSGVO), der unabhängig von einer Lizenz besteht. Das **Ende einer Lizenz, eine Kündigung oder das Ende der Demo führt nicht zur Löschung**: Ihr Konto bleibt bestehen, damit Sie Ihre Inhalte bei einer späteren Buchung wieder vorfinden. Wenn Sie das nicht wünschen, können Sie Ihr Konto jederzeit schließen oder löschen (Ziffern 10.2 und 10.3).
+
+[Prüfhinweis: Konten ohne Lizenz werden bewusst nicht automatisch gelöscht (Betreiberentscheidung). Prüfen lassen, ob für dauerhaft inaktive Konten eine zusätzliche Regel erforderlich ist, z. B. eine Nachfrage per E-Mail nach mehrjähriger Inaktivität.]
+
+10.2 **Konto schließen:** Sie können Ihr Konto in der Kontoverwaltung schließen. Ein geschlossenes Konto bewahren wir **12 Monate ab der Schließung** auf; in dieser Zeit können Sie es jederzeit wieder öffnen und Ihre Inhalte exportieren. Etwa 30 Tage vor Ablauf der Frist erinnern wir Sie per E-Mail; die Löschung erfolgt frühestens 14 Tage nach dieser Erinnerung. Danach werden Konto, Profil, Simulationen, Vorlagen und Einstellungen **automatisch gelöscht** und Einrichtungsdaten anonymisiert, soweit sie nicht nach Ziffer 10.4 aufbewahrt werden müssen.
+
+10.3 **Endgültige Löschung auf Ihren Wunsch:** Sie können Ihr Konto in der Kontoverwaltung jederzeit endgültig löschen oder die Löschung per E-Mail an info@olo-vision.de verlangen. Die Löschung erfolgt in der Kontoverwaltung sofort, bei einem Antrag per E-Mail unverzüglich, spätestens innerhalb eines Monats. Läuft noch ein Abonnement, benötigen wir die Vertragsdaten bis zu dessen Ende; die Löschung erfolgt dann mit Vertragsende.
+
+10.4 **Getrennt aufbewahrt** – nach ihren jeweils eigenen Fristen und unabhängig vom Kundenkonto:
+- **Rechnungs-, Buchungs- und Steuerunterlagen:** nach den gesetzlichen Aufbewahrungsfristen, insbesondere § 147 AO. Rechnungen und die dafür nötigen Daten liegen bei Stripe.
+- **Zustimmungs- und Vertragsnachweise, Kündigungs- und Widerrufserklärungen, Versandnachweise vertragsbezogener E-Mails:** 3 Jahre nach Ende des Vertrags (Ende des Kalenderjahres, regelmäßige Verjährungsfrist), soweit keine längeren gesetzlichen Pflichten bestehen (Art. 6 Abs. 1 lit. c und f DSGVO).
+- **Nachweis einer Kontolöschung:** Kennung des gelöschten Kontos, Zeitpunkt, Auslöser und ein nicht umkehrbarer Hashwert der E-Mail-Adresse für 3 Jahre (Art. 6 Abs. 1 lit. c und f DSGVO, Nachweis der Erfüllung Ihres Löschverlangens).
 - **Server-Logdaten:** nach den Vorgaben der Hosting-Dienstleister.
-
-Sie können Ihr Konto jederzeit selbst in der Kontoverwaltung schließen oder endgültig löschen; alternativ genügt eine E-Mail an info@olo-vision.de. Bei der endgültigen Löschung werden Konto, Profil, Simulationen, Vorlagen und Einstellungen sofort gelöscht; Einrichtungsdaten werden anonymisiert, soweit sie nicht für Rechnungen aufbewahrt werden müssen. Rechnungen und die für sie nötigen Daten bleiben bei Stripe bis zum Ablauf der gesetzlichen Fristen gespeichert.
-
-[Prüfhinweis: Die automatische Löschung nach Ablauf der 12 Monate ist derzeit als Admin-Vorgang umgesetzt (Übersicht fälliger Konten). Vor Veröffentlichung festlegen, ob sie automatisch erfolgen soll, und den Text ggf. anpassen.]
 
 ## 11. Übermittlung in Drittländer
 

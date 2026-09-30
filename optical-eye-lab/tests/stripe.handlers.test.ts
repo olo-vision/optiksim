@@ -121,6 +121,7 @@ function setup(opts: { user?: string | null; customers?: Record<string, string>;
     request: async (method, path, params = {}, key) => {
       calls.push({ method, path, params, key });
       if (path === 'customers') return { id: 'cus_new' };
+      if (method === 'GET' && path === 'checkout/sessions') return { object: 'list', data: [] };
       if (path === 'checkout/sessions') return { id: 'cs_1', url: 'https://checkout.stripe.test/cs_1' };
       if (path.endsWith('/expire')) return { id: 'cs_1', status: 'expired' };
       if (path === 'billing_portal/sessions') return { url: `https://portal.test/${params.customer}` };
@@ -154,7 +155,7 @@ describe('create-checkout-session', () => {
     const res = await handleCheckout(req({ plan }), t.deps);
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ url: 'https://checkout.stripe.test/cs_1' });
-    const s = t.calls.find((c) => c.path === 'checkout/sessions')!;
+    const s = t.calls.find((c) => c.path === 'checkout/sessions' && c.method === 'POST')!;
     expect(s.params).toMatchObject({
       mode: 'subscription',
       'line_items[0][price]': price,
@@ -181,7 +182,7 @@ describe('create-checkout-session', () => {
     const t = setup({ user: 'u_business', customers: { inst_b: 'cus_own', inst_e: 'cus_foreign' } });
     const res = await handleCheckout(req({ plan: 'business', price: 'price_billig', priceId: 'price_billig', customer: 'cus_foreign', institution_id: 'inst_e', success_url: 'https://evil.example' }), t.deps);
     expect(res.status).toBe(200);
-    const s = t.calls.find((c) => c.path === 'checkout/sessions')!;
+    const s = t.calls.find((c) => c.path === 'checkout/sessions' && c.method === 'POST')!;
     expect(s.params.customer).toBe('cus_own');
     expect(s.params['line_items[0][price]']).toBe(DEFAULT_PRICE_IDS.business);
     expect(s.params.client_reference_id).toBe('inst_b');
@@ -216,7 +217,7 @@ describe('create-checkout-session', () => {
     const t = setup({ user: 'u_business', customers: { inst_b: 'cus_own' }, stripeLive: ['cus_own'] });
     const res = await handleCheckout(req({ plan: 'business' }), t.deps);
     expect(res.status).toBe(409);
-    expect(t.calls.some((c) => c.path === 'checkout/sessions')).toBe(false);
+    expect(t.calls.some((c) => c.path === 'checkout/sessions' && c.method === 'POST')).toBe(false);
   });
 
   it('ohne STRIPE_SECRET_KEY: 503, fremde Origin → konfigurierte Basis-URL', async () => {
@@ -224,7 +225,7 @@ describe('create-checkout-session', () => {
     const t = setup({ user: 'u_private', env: { SITE_URL: 'https://app.olo-lab3d.de' } });
     const res = await handleCheckout(req({ plan: 'private' }, 'https://evil.example'), t.deps);
     expect(res.headers.get('Access-Control-Allow-Origin')).toBe('https://app.olo-lab3d.de');
-    expect(t.calls.find((c) => c.path === 'checkout/sessions')!.params.success_url).toBe('https://app.olo-lab3d.de/license?checkout=success');
+    expect(t.calls.find((c) => c.path === 'checkout/sessions' && c.method === 'POST')!.params.success_url).toBe('https://app.olo-lab3d.de/license?checkout=success');
   });
 });
 
@@ -389,14 +390,14 @@ describe('create-checkout-session – Phase 8', () => {
     const t = setup({ user });
     const res = await handleCheckout(req({ plan, interval, consents: [DOC] }), t.deps);
     expect(res.status).toBe(200);
-    const s = t.calls.find((c) => c.path === 'checkout/sessions')!;
+    const s = t.calls.find((c) => c.path === 'checkout/sessions' && c.method === 'POST')!;
     expect(s.params).toMatchObject({ 'line_items[0][price]': price, 'metadata[billing_interval]': interval, 'subscription_data[metadata][billing_interval]': interval });
     expect(t.recorded).toEqual([{ u: user, ids: [DOC], sid: 'cs_1', plan, interval }]);
   });
   it('ohne Intervall → monatlich (kompatibel); unbekanntes Intervall → 400', async () => {
     const t = setup({ user: 'u_private' });
     await handleCheckout(req({ plan: 'private' }), t.deps);
-    expect(t.calls.find((c) => c.path === 'checkout/sessions')!.params['line_items[0][price]']).toBe('price_1UKgZZDi0mx4WWPoSxzWozbG');
+    expect(t.calls.find((c) => c.path === 'checkout/sessions' && c.method === 'POST')!.params['line_items[0][price]']).toBe('price_1UKgZZDi0mx4WWPoSxzWozbG');
     const t2 = setup({ user: 'u_private' });
     expect((await handleCheckout(req({ plan: 'private', interval: 'weekly' }), t2.deps)).status).toBe(400);
     expect(t2.calls).toHaveLength(0);
@@ -424,10 +425,10 @@ describe('create-checkout-session – Phase 8', () => {
   it('B2B: Rechnungsadresse Pflicht + USt-IdNr.-Erfassung; B2C: ohne USt-IdNr.', async () => {
     const b = setup({ user: 'u_education' });
     await handleCheckout(req({ plan: 'education', interval: 'yearly' }), b.deps);
-    expect(b.calls.find((c) => c.path === 'checkout/sessions')!.params).toMatchObject({ billing_address_collection: 'required', 'tax_id_collection[enabled]': 'true', 'customer_update[address]': 'auto' });
+    expect(b.calls.find((c) => c.path === 'checkout/sessions' && c.method === 'POST')!.params).toMatchObject({ billing_address_collection: 'required', 'tax_id_collection[enabled]': 'true', 'customer_update[address]': 'auto' });
     const p = setup({ user: 'u_private' });
     await handleCheckout(req({ plan: 'private', interval: 'yearly' }), p.deps);
-    const params = p.calls.find((c) => c.path === 'checkout/sessions')!.params;
+    const params = p.calls.find((c) => c.path === 'checkout/sessions' && c.method === 'POST')!.params;
     expect(params.billing_address_collection).toBe('auto');
     expect(params['tax_id_collection[enabled]']).toBeUndefined();
   });

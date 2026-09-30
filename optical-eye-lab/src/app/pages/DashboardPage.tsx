@@ -4,7 +4,7 @@
 import { useMemo } from 'react';
 import { useNavigate } from 'react-router';
 import { ArrowRight, Boxes, Clock, FilePlus2, FolderOpen, LayoutTemplate, Settings, Star, Upload } from 'lucide-react';
-import { useSession } from '../session';
+import { useSession, useLibraryRefreshOnMount } from '../session';
 import { Button, EmptyState, PageHeader } from '@/ui/ds';
 import { openAppDialog, pickImportFiles } from '../library/actions';
 import { SimulationCard, TemplateGlyph } from '../library/visuals';
@@ -21,6 +21,7 @@ function greeting(d = new Date()) {
 }
 
 export function DashboardPage() {
+  useLibraryRefreshOnMount();
   usePageTitle('Dashboard');
   const user = useSession((s) => s.user)!;
   const org = useSession((s) => s.org);

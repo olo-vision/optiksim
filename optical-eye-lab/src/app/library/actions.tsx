@@ -42,7 +42,7 @@ export async function deleteSimulation(meta: SimulationMetadata): Promise<boolea
       title: 'Simulation löschen?',
       message: (
         <>
-          „<strong>{meta.name}</strong>“ wird dauerhaft aus diesem Browser gelöscht. Das kann nicht rückgängig gemacht werden.
+          „<strong>{meta.name}</strong>“ wird dauerhaft {platform.library.storageKind === 'cloud' ? 'aus Ihrem Konto (auf allen Geräten)' : 'aus diesem Browser'} gelöscht. Das kann nicht rückgängig gemacht werden.
         </>
       ),
       confirmLabel: 'Löschen',

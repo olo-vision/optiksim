@@ -5,7 +5,8 @@
  * Wichtig: Der URL-Parameter ?checkout=success schaltet NICHTS frei. Die Seite lädt nur den Status aus
  * Supabase neu – freigeschaltet ist erst, wenn der Stripe-Webhook die Lizenz serverseitig aktiviert hat.
  */
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { useBfcacheReset } from '../../useBfcacheReset';
 import { useNavigate } from 'react-router';
 import { serverNow } from '@/cloud/serverClock';
 import { ArrowRight, BadgeCheck, CalendarClock, CircleAlert, CreditCard, Loader2, RefreshCcw } from 'lucide-react';
@@ -23,6 +24,7 @@ import { useAppStore } from '@/state/store';
 export function ManageSubscriptionButton({ variant = 'secondary', size }: { variant?: 'primary' | 'secondary' | 'ghost'; size?: 'sm' | 'md' }) {
   const canManage = useCloud((s) => s.account?.billing?.canManage ?? false);
   const [busy, setBusy] = useState(false);
+  useBfcacheReset(useCallback(() => setBusy(false), []));
   const [error, setError] = useState<string | null>(null);
   if (!canManage) return null;
   return (

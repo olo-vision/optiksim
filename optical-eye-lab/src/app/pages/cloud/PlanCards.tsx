@@ -84,6 +84,17 @@ export function PlanCards({ current, intent, showDemo = true }: { current?: Lice
     setCheckout({ plan, interval });
   };
 
+  // Geschlossenes Konto: keine Buchung/Demo (serverseitig ebenso gesperrt) – erst wieder öffnen
+  if (access === 'account-closed')
+    return (
+      <p className="auth-note auth-note--warn" data-testid="plans-account-closed">
+        <Lock size={14} />
+        <span>
+          Ihr Konto ist geschlossen. Bitte öffnen Sie es zuerst unter <a href="/account#privacy">Konto → Daten und Datenschutz</a> wieder – danach können Sie wieder buchen. Ihre gespeicherten Inhalte sind noch vorhanden.
+        </span>
+      </p>
+    );
+
   return (
     <div className="plans" data-testid="plan-cards">
       <div className="plans__toolbar">

@@ -36,6 +36,14 @@ type Req = ConfirmReq | PromptReq;
 const useModals = create<{ stack: Req[] }>()(() => ({ stack: [] }));
 let nextId = 1;
 
+/** Alle offenen Dialoge schließen (wie „Abbrechen“) – z. B. beim Abmelden/Kontowechsel */
+export function closeAllModals() {
+  const stack = useModals.getState().stack;
+  if (!stack.length) return;
+  useModals.setState({ stack: [] });
+  for (const r of stack) (r as { resolve: (v: unknown) => void }).resolve(r.kind === 'confirm' ? false : null);
+}
+
 function push(r: Req) {
   useModals.setState((s) => ({ stack: [...s.stack, r] }));
 }

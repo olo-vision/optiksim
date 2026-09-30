@@ -10,9 +10,10 @@ import { Button, EmptyState, PageHeader } from '@/ui/ds';
 import { usePageTitle } from '../usePageTitle';
 import { ModuleGrid } from '../modules/ModuleTiles';
 import { resolveModuleSession } from '../modules/moduleSessions';
-import { errorMessage } from '../session';
+import { errorMessage, useLibraryRefreshOnMount } from '../session';
 
 export function ModulesPage() {
+  useLibraryRefreshOnMount();
   usePageTitle('Module');
   return (
     <div className="page">

@@ -103,8 +103,8 @@ Verstößt der Kunde gegen diese Bedingungen, kann OLO Vision den Zugang nach vo
 
 ## 13. Ende der Nutzung
 
-13.1 Mit Ende des Vertrags bzw. der Demo endet das Nutzungsrecht. Das Kundenkonto und die gespeicherten Inhalte bleiben bestehen, bis der Kunde das Konto löscht oder die in der Datenschutzerklärung genannte Speicherdauer abgelaufen ist; eine erneute Buchung ist in dieser Zeit möglich und stellt die gespeicherten Inhalte wieder zur Bearbeitung bereit.
+13.1 Mit Ende des Vertrags bzw. der Demo endet das Nutzungsrecht. Das Ende des Vertrags ist **kein Löschgrund**: Das Kundenkonto und die gespeicherten Inhalte bleiben bestehen, bis der Kunde das Konto schließt oder löscht. Eine erneute Buchung stellt die gespeicherten Inhalte wieder zur Bearbeitung bereit.
 
-13.2 Der Kunde kann sein Konto in der Kontoverwaltung **schließen**: Die Nutzung ruht, die Inhalte bleiben 12 Monate erhalten und das Konto kann in dieser Zeit wieder geöffnet werden. Danach wird es gelöscht.
+13.2 Der Kunde kann sein Konto in der Kontoverwaltung **schließen**: Die Nutzung ruht, die Inhalte bleiben 12 Monate ab der Schließung erhalten und das Konto kann in dieser Zeit wieder geöffnet werden. Etwa 30 Tage vor Ablauf erhält der Kunde eine Erinnerung per E-Mail; danach wird das Konto mit allen Inhalten automatisch gelöscht, frühestens 14 Tage nach der Erinnerung.
 
 13.3 Der Kunde kann sein Konto in der Kontoverwaltung jederzeit **endgültig löschen**. Konto, Simulationen, Vorlagen und Einstellungen werden dabei sofort und unwiderruflich gelöscht; gesetzlich aufzubewahrende Rechnungs- und Vertragsnachweise bleiben bis zum Ende der Aufbewahrungsfrist gespeichert. Ein laufendes, nicht gekündigtes Abonnement ist vorher zu kündigen.

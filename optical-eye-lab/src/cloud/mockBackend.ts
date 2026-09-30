@@ -15,6 +15,7 @@
  * Datenbank; tests/db/stripe.test.ts). Haken: stripeEvent, setWebhookDelay, setCheckoutOutcome.
  */
 import type { AuthEvent, CloudBackend } from './backend';
+import type { AccountLifecycleRow } from './types';
 import { registrationMetadata, validateRegistration } from './validation';
 import {
   CloudError,
@@ -305,6 +306,10 @@ export class MockBackend implements CloudBackend {
     return new Promise((r) => setTimeout(r, 30));
   }
 
+  async currentUserId() {
+    return this.read().sessionUserId;
+  }
+
   async getUser() {
     const db = this.read();
     const u = db.users.find((x) => x.id === db.sessionUserId);
@@ -568,6 +573,7 @@ export class MockBackend implements CloudBackend {
     const { p, inst, lic } = this.sessionAccount(db);
     if (interval !== 'monthly' && interval !== 'yearly') throw new CloudError('Unbekanntes Abrechnungsintervall.', undefined, 'unknown_interval');
     if (!['private', 'business', 'education'].includes(plan)) throw new CloudError('Unbekannter Tarif.', undefined, 'unknown_plan');
+    if (db.profiles.find((x) => x.userId === db.sessionUserId)?.accountStatus === 'closed') throw new CloudError('Ihr Konto ist geschlossen. Bitte öffnen Sie es unter „Konto“ zuerst wieder.', undefined, 'account_closed');
     if (!planAllowedFor(inst.type, plan)) throw new CloudError('Dieser Tarif passt nicht zu Ihrem Kontotyp.', undefined, 'plan_mismatch');
     if (inst.type !== 'private' && (inst.country ?? 'DE').toUpperCase() !== 'DE') throw new CloudError(B2B_COUNTRY_MESSAGE, undefined, 'b2b_country');
     if (lic?.source === 'manual' && lic.status === 'active') throw new CloudError('Für Ihre Institution ist eine Sonderlizenz freigeschaltet. Bitte wenden Sie sich an den Support.', undefined, 'manual_license');
@@ -595,6 +601,7 @@ export class MockBackend implements CloudBackend {
     const db = this.read();
     const p = db.profiles.find((x) => x.userId === db.sessionUserId);
     if (!p || (p.role !== 'institution_admin' && p.role !== 'super_admin')) throw new CloudError('Die Demo kann nur die Administration des Kundenkontos starten.', undefined, 'OLD03');
+    if (p.accountStatus === 'closed') throw new CloudError('Ihr Konto ist geschlossen. Bitte öffnen Sie es unter „Konto“ zuerst wieder.', undefined, 'OLA03');
     if (db.demoGrants.some((g) => g.userId === p.userId || g.institutionId === p.institutionId)) throw new CloudError('Die kostenlose Demo wurde für dieses Kundenkonto bereits genutzt.', undefined, 'OLD01');
     const lic = db.licenses.find((l) => l.institutionId === p.institutionId)!;
     const acc: CloudAccount = { userId: p.userId, email: p.email, profile: p, institution: db.institutions.find((i) => i.id === p.institutionId)!, license: lic };
@@ -965,6 +972,7 @@ export class MockBackend implements CloudBackend {
     p.accountStatus = 'active';
     p.closedAt = null;
     p.deletionDueAt = null;
+    p.deletionReminderSentAt = null;
     this.write(db);
     return this.overview(db);
   }
@@ -1023,12 +1031,62 @@ export class MockBackend implements CloudBackend {
     this.write(db);
   }
 
-  async adminClosedAccounts() {
+  /** wie admin_account_lifecycle(): Löschung beantragt · geschlossen · Lizenz abgelaufen */
+  async adminAccountLifecycle(): Promise<AccountLifecycleRow[]> {
     const db = this.read();
     this.requireSuperAdmin(db);
-    return db.profiles
-      .filter((p) => p.accountStatus === 'closed')
-      .map((p) => ({ userId: p.userId, email: p.email, institutionName: db.institutions.find((i) => i.id === p.institutionId)?.name ?? '', closedAt: p.closedAt ?? null, deletionDueAt: p.deletionDueAt ?? null, simulations: db.sims.filter((x) => x.ownerUserId === p.userId).length }));
+    const now = Date.now();
+    const order = { deletion_requested: 0, closed: 1, license_ended: 2 } as const;
+    const rows: AccountLifecycleRow[] = [];
+    for (const p of db.profiles) {
+      const l = db.licenses.find((x) => x.institutionId === p.institutionId) ?? null;
+      const category: AccountLifecycleRow['category'] | null = p.deletionRequestedAt
+        ? 'deletion_requested'
+        : p.accountStatus === 'closed'
+          ? 'closed'
+          : l && (l.status === 'expired' || l.status === 'cancelled' || (l.source === 'demo' && !!l.validUntil && Date.parse(l.validUntil) < now))
+            ? 'license_ended'
+            : null;
+      if (!category) continue;
+      rows.push({
+        category,
+        userId: p.userId,
+        email: p.email,
+        firstName: p.firstName,
+        lastName: p.lastName,
+        institutionName: db.institutions.find((i) => i.id === p.institutionId)?.name ?? '',
+        licenseStatus: l?.status ?? null,
+        licenseSource: l?.source ?? null,
+        licenseValidUntil: l?.validUntil ?? null,
+        closedAt: p.closedAt ?? null,
+        deletionDueAt: p.deletionDueAt ?? null,
+        deletionReminderSentAt: p.deletionReminderSentAt ?? null,
+        deletionRequestedAt: p.deletionRequestedAt ?? null,
+        deletionRequestNote: p.deletionRequestNote ?? null,
+        simulations: db.sims.filter((x) => x.ownerUserId === p.userId).length,
+        lastSignInAt: null,
+      });
+    }
+    return rows.sort((a, b) => order[a.category] - order[b.category] || (a.deletionDueAt ?? a.licenseValidUntil ?? '').localeCompare(b.deletionDueAt ?? b.licenseValidUntil ?? ''));
+  }
+
+  async adminRequestDeletionByEmail(email: string, note?: string | null) {
+    const db = this.read();
+    this.requireSuperAdmin(db);
+    const p = db.profiles.find((x) => x.email.toLowerCase() === email.trim().toLowerCase());
+    if (!p) throw new CloudError('Zu dieser E-Mail-Adresse gibt es kein Konto.', 'email');
+    await this.adminSetDeletionRequest(p.userId, true, note);
+    return p.userId;
+  }
+
+  async adminSetDeletionRequest(userId: string, requested: boolean, note?: string | null) {
+    const db = this.read();
+    this.requireSuperAdmin(db);
+    const p = db.profiles.find((x) => x.userId === userId);
+    if (!p) throw new CloudError('Konto nicht gefunden.');
+    p.deletionRequestedAt = requested ? (p.deletionRequestedAt ?? new Date().toISOString()) : null;
+    p.deletionRequestNote = requested ? (note?.trim().slice(0, 500) || null) : null;
+    this.write(db);
   }
 
   /** wie Edge Function create-customer-portal: nur der eigene Kunde */
@@ -1101,6 +1159,41 @@ export class MockBackend implements CloudBackend {
         return db.sims.filter((x) => x.ownerUserId === u.id).length;
       },
       pendingEmail: () => this.read().pendingEmail?.email ?? null,
+      /** Zeit vorspulen: Frist eines geschlossenen Kontos (Tage ab jetzt, negativ = abgelaufen) */
+      setDeletionDue: (email: string, days: number, remindedDaysAgo: number | null = null) => {
+        const db = this.read();
+        const { p } = byEmail(db, email);
+        p.deletionDueAt = new Date(Date.now() + days * DAY).toISOString();
+        p.deletionReminderSentAt = remindedDaysAgo == null ? null : new Date(Date.now() - remindedDaysAgo * DAY).toISOString();
+        this.write(db);
+      },
+      /** wie runAccountRetention (mail-jobs): Erinnerung 30 Tage vorher, Löschung ≥ 14 Tage nach Erinnerung */
+      runRetention: () => {
+        const db = this.read();
+        const now = Date.now();
+        let reminded = 0;
+        let deleted = 0;
+        for (const p of [...db.profiles]) {
+          if (p.accountStatus !== 'closed' || !p.deletionDueAt) continue;
+          const due = Date.parse(p.deletionDueAt);
+          if (!p.deletionReminderSentAt && due <= now + 30 * DAY) {
+            p.deletionReminderSentAt = new Date(now).toISOString();
+            db.mails.push({ kind: 'account_deletion_reminder', to: p.email, subject: 'Ihr geschlossenes OLO-LAB3D-Konto wird gelöscht', relatedKey: p.userId, at: new Date(now).toISOString() });
+            reminded++;
+          } else if (p.deletionReminderSentAt && due <= now && Date.parse(p.deletionReminderSentAt) <= now - 14 * DAY) {
+            db.deletedAccounts.push({ formerUserId: p.userId, emailHash: `sha256:${p.email.length}`, deletedAt: new Date(now).toISOString() });
+            db.sims = db.sims.filter((x) => x.ownerUserId !== p.userId);
+            db.templates = db.templates.filter((x) => x.ownerUserId !== p.userId);
+            delete db.prefs[p.userId];
+            db.profiles = db.profiles.filter((x) => x.userId !== p.userId);
+            db.users = db.users.filter((x) => x.id !== p.userId);
+            db.mails.push({ kind: 'account_deleted', to: p.email, subject: 'Ihr OLO-LAB3D-Konto wurde gelöscht', relatedKey: p.userId, at: new Date(now).toISOString() });
+            deleted++;
+          }
+        }
+        this.write(db);
+        return { reminded, deleted };
+      },
       reset: () => this.storage.removeItem(KEY),
       /** Verzögerung des simulierten Webhooks nach dem Checkout */
       setWebhookDelay: (ms: number) => {

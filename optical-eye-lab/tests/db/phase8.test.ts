@@ -348,7 +348,7 @@ describe('Kauf Ende-zu-Ende (Handler + Datenbank): B2C jährlich mit Zustimmunge
     const ids = [docs.terms_b2c, docs.privacy11, docs.withdrawal, docs.license3, docs.c1, docs.c2];
     const ok = await handleCheckout(post({ plan: 'private', interval: 'yearly', consents: ids, price: 'price_billig' }), deps());
     expect(ok.status).toBe(200);
-    const session = stripe.calls.find((c) => c.path === 'checkout/sessions')!;
+    const session = stripe.calls.find((c) => c.path === 'checkout/sessions' && c.method === 'POST')!;
     expect(session.params['line_items[0][price]']).toBe('price_1UKwPqDi0mx4WWPo6wJiRryZ');
     const c = await h.rows<Obj>(`select checkout_session_id, billing_interval from public.legal_consents where user_id = $1 and context = 'checkout'`, [uid]);
     expect(c).toHaveLength(6);

@@ -4,7 +4,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router';
 import { CloudOff, Download, FilePlus2, FolderOpen, LayoutGrid, List, SearchX, Star, Upload } from 'lucide-react';
-import { useSession } from '../session';
+import { useSession, useLibraryRefreshOnMount } from '../session';
 import { platform } from '../platformInstance';
 import { Button, EmptyState, Notice, PageHeader, Pill, SearchInput, Tabs } from '@/ui/ds';
 import { exportLibrary, importFiles, openAppDialog, pickImportFiles, setFavorite } from '../library/actions';
@@ -25,6 +25,7 @@ const SORTS: Array<{ value: LibrarySort; label: string }> = [
 const VIEW_KEY = 'oel:ui:library-view';
 
 export function LibraryPage() {
+  useLibraryRefreshOnMount();
   usePageTitle('Meine Simulationen');
   const user = useSession((s) => s.user)!;
   const sims = useSession((s) => s.sims);

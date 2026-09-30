@@ -1573,3 +1573,8 @@
 .portal-action .ds-field__error {
   text-align: right;
 }
+.admin-actions {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}

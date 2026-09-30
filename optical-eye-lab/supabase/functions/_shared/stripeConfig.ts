@@ -58,11 +58,47 @@ const validPrice = (v: string | undefined) => (v && /^price_[A-Za-z0-9]+$/.test(
 
 export const productKey = (plan: LicensePlan, interval: BillingInterval): ProductKey => `${plan}_${interval}`;
 
-/** Tarif + Intervall → erlaubte Price ID; unbekannte Werte → null */
+/** Stripe-Modus aus dem Secret Key: sk_live_/rk_live_ → live, sk_test_/rk_test_ → test */
+export function stripeMode(env: EnvGetter = noEnv): 'live' | 'test' | 'none' {
+  const k = env('STRIPE_SECRET_KEY')?.trim() ?? '';
+  if (/^(sk|rk)_live_/.test(k)) return 'live';
+  if (/^(sk|rk)_test_/.test(k)) return 'test';
+  return 'none';
+}
+
+/**
+ * Tarif + Intervall → erlaubte Price ID; unbekannte Werte → null.
+ * Im LIVE-Modus nur aus den Function Secrets – die eingebauten Test-Price-IDs werden nie live verwendet.
+ */
 export function priceIdFor(plan: unknown, interval: unknown, env: EnvGetter = noEnv): string | null {
   if (!isPlan(plan) || !isBillingInterval(interval)) return null;
   const key = productKey(plan, interval);
-  return validPrice(env(PRICE_ENV[key])) ?? PRICE_IDS[key];
+  const configured = validPrice(env(PRICE_ENV[key]));
+  if (stripeMode(env) === 'live') return configured ?? null;
+  return configured ?? PRICE_IDS[key];
+}
+
+/**
+ * Konfigurationsprüfung für den Live-Betrieb (fail closed): alle sechs Price IDs, Steuersatz und
+ * https-Adresse der Anwendung müssen gesetzt sein, keine Test-IDs. Leere Liste = in Ordnung.
+ * Im Testmodus werden nur offensichtliche Fehler gemeldet.
+ */
+export function liveConfigProblems(env: EnvGetter = noEnv): string[] {
+  const mode = stripeMode(env);
+  const problems: string[] = [];
+  if (mode === 'none') return ['STRIPE_SECRET_KEY fehlt oder hat ein unbekanntes Format'];
+  if (mode !== 'live') return problems;
+  for (const key of Object.keys(PRICE_ENV) as ProductKey[]) {
+    const v = validPrice(env(PRICE_ENV[key]));
+    if (!v) problems.push(`${PRICE_ENV[key]} fehlt`);
+    else if (v === PRICE_IDS[key]) problems.push(`${PRICE_ENV[key]} enthält die Test-Price-ID`);
+  }
+  const tax = env('STRIPE_TAX_RATE_ID')?.trim();
+  if (!tax || !/^txr_[A-Za-z0-9]+$/.test(tax)) problems.push('STRIPE_TAX_RATE_ID fehlt');
+  const raw = (env('SITE_URL') ?? '').split(',').map((x) => x.trim()).filter(Boolean);
+  if (!raw.length) problems.push('SITE_URL fehlt');
+  else if (!/^https:\/\//.test(raw[0])) problems.push('SITE_URL (erster Eintrag) muss mit https:// beginnen');
+  return problems;
 }
 
 /** Tarif → monatliche Price ID (Phase-7-Schnittstelle) */

@@ -10,6 +10,9 @@ import { ContentConflictError } from '@/platform/content';
 import { CloudError } from '@/cloud/types';
 import { migrateDocument } from '@/state/persistence';
 import { useSession, errorMessage, currentUser } from '../session';
+import { useCloud } from '../cloudSession';
+import type { User } from '@/platform/models';
+import type { LibraryService } from '@/platform/library';
 import { platform } from '../platformInstance';
 
 export type LoadState = { status: 'loading' } | { status: 'missing' } | { status: 'error'; message: string } | { status: 'ready'; meta: SimulationMetadata };
@@ -43,10 +46,9 @@ export function useSimulationSession(id: string, opts: SessionOptions = {}) {
     setRecovery(null);
     skipGuard.current = false;
     void (async () => {
-      const user = currentUser();
       let rec: Awaited<ReturnType<typeof platform.library.get>>;
       try {
-        rec = await platform.library.get(user, id);
+        rec = await platform.library.get(currentUser(), id);
       } catch (e) {
         if (alive) setState({ status: 'error', message: errorMessage(e) });
         return;
@@ -58,7 +60,8 @@ export function useSimulationSession(id: string, opts: SessionOptions = {}) {
       }
       metaRef.current = rec.meta;
       useAppStore.getState().openSimulation(id, rec.doc, Date.parse(rec.meta.updatedAt));
-      void platform.library.markOpened(id).then(() => useSession.getState().refreshLibrary());
+      // „zuletzt geöffnet“ – die Bibliothek lädt beim nächsten Aufruf ohnehin neu
+      void platform.library.markOpened(id);
       // Absturzsicherung: jüngerer, ungespeicherter Stand vorhanden?
       const draft = await platform.repos.getDraft(id);
       if (alive && draft && draft.savedAt > rec.meta.updatedAt && JSON.stringify(draft.doc) !== JSON.stringify(rec.doc)) setRecovery({ savedAt: draft.savedAt });
@@ -72,22 +75,29 @@ export function useSimulationSession(id: string, opts: SessionOptions = {}) {
   /* ----------------------- Speichern (Hooks) ----------------------- */
   const retryTimer = useRef<number | undefined>(undefined);
   const offlineNotified = useRef(false);
+  /** Entscheidung im Konfliktdialog, bis ein Speichern gelingt (auch über Netzwerkfehler hinweg) */
+  const forcedChoice = useRef<'overwrite' | null>(null);
+  /** nach „Abbrechen“ im Konfliktdialog: automatisches Speichern pausieren (kein Dialog alle paar Sekunden) */
+  const autosavePaused = useRef(false);
   useEffect(() => () => window.clearTimeout(retryTimer.current), [id]);
 
   /**
    * Neuerer Stand auf einem anderen Gerät/in einem anderen Fenster (nur Cloud):
    * als Kopie speichern (nichts geht verloren) oder bewusst überschreiben.
+   * Benutzer und Bibliothek stammen vom Beginn des Speicherns (Schutz beim Kontowechsel).
    */
   const resolveConflict = useCallback(
-    async (doc: SceneDocument, conflict: ContentConflictError, thumb: string | null): Promise<boolean> => {
-      const user = currentUser();
+    async (doc: SceneDocument, conflict: ContentConflictError, thumb: string | null, user: User, lib: LibraryService): Promise<boolean> => {
       if (conflict.remoteDeleted) {
         const ok = await confirmDialog({
           title: 'Simulation wurde gelöscht',
           message: `„${doc.name}“ wurde inzwischen auf einem anderen Gerät gelöscht. Möchten Sie Ihren aktuellen Stand als neue Simulation speichern?`,
           confirmLabel: 'Als neue Simulation speichern',
         });
-        if (!ok) return false;
+        if (!ok) {
+          autosavePaused.current = true;
+          return false;
+        }
       } else {
         const choice = await choiceDialog({
           title: 'Neuerer Stand vorhanden',
@@ -95,18 +105,25 @@ export function useSimulationSession(id: string, opts: SessionOptions = {}) {
           confirmLabel: 'Als Kopie speichern',
           altLabel: 'Überschreiben',
         });
-        if (choice === 'cancel') return false;
+        if (choice === 'cancel') {
+          autosavePaused.current = true;
+          useAppStore.getState().notify('Automatisches Speichern ist pausiert. Speichern Sie manuell, wenn Sie sich entschieden haben – Ihre Änderungen sind auf diesem Gerät gesichert.', 'warning');
+          return false;
+        }
         if (choice === 'alt') {
-          metaRef.current = await platform.library.save(user, id, doc, thumb, { force: true });
-          void useSession.getState().refreshLibrary();
+          forcedChoice.current = 'overwrite';
+          const meta = await lib.save(user, id, doc, thumb, { force: true });
+          forcedChoice.current = null;
+          metaRef.current = meta;
+          useSession.getState().upsertSimMeta(meta);
           return true;
         }
       }
       const names = useSession.getState().sims.map((m) => m.name);
       const name = names.includes(`${doc.name} (Kopie)`) ? `${doc.name} (Kopie ${new Date().toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })})` : `${doc.name} (Kopie)`;
-      const rec = await platform.library.saveAs(user, { ...doc, name }, name, metaRef.current ?? undefined, thumb);
+      const rec = await lib.saveAs(user, { ...doc, name }, name, metaRef.current ?? undefined, thumb);
       await platform.repos.clearDraft(id);
-      await useSession.getState().refreshLibrary();
+      useSession.getState().upsertSimMeta(rec.meta);
       useAppStore.getState().notify(`Als „${name}“ gespeichert`, 'success');
       // Kopie öffnen (gleiche Ansicht: Simulator oder Modul)
       skipGuard.current = true;
@@ -119,31 +136,64 @@ export function useSimulationSession(id: string, opts: SessionOptions = {}) {
 
   const save = useCallback(
     async (doc: SceneDocument) => {
+      // Größenlimit der Cloud (5 MB je Simulation) vor dem Senden prüfen
+      if (platform.library.storageKind === 'cloud') {
+        const size = JSON.stringify(doc).length;
+        if (size > 4_900_000) {
+          useAppStore.getState().notify('Die Simulation ist zu groß zum Speichern (höchstens 5 MB). Bitte entfernen Sie nicht benötigte Elemente oder exportieren Sie sie als Datei.', 'warning');
+          return false;
+        }
+      }
       const thumb = captureViewportThumbnail();
+      // Identität zu Beginn festhalten – ein Kontowechsel während des Speicherns darf nie in das andere Konto schreiben
+      const lib = platform.library;
+      let user: User;
       try {
-        const meta = await platform.library.save(currentUser(), id, doc, thumb);
+        user = currentUser();
+      } catch {
+        return false;
+      }
+      try {
+        const meta = await lib.save(user, id, doc, thumb, forcedChoice.current === 'overwrite' ? { force: true } : undefined);
+        forcedChoice.current = null;
+        autosavePaused.current = false;
         metaRef.current = meta;
+        // während des Speicherns weiter bearbeitet? Dann den neueren Stand sofort wieder als Entwurf sichern
+        if (useAppStore.getState().doc !== doc) useAppStore.getState().flushDraft();
+        if (offlineNotified.current) useAppStore.getState().notify('Verbindung wiederhergestellt – Ihre Änderungen sind gespeichert.', 'success');
         offlineNotified.current = false;
-        void useSession.getState().refreshLibrary();
+        window.clearTimeout(retryTimer.current);
+        // Bibliothek lokal aktualisieren statt sie nach jedem Speichern komplett neu zu laden
+        useSession.getState().upsertSimMeta(meta);
         return true;
       } catch (e) {
         try {
-          if (e instanceof ContentConflictError) return await resolveConflict(doc, e, thumb);
+          if (e instanceof ContentConflictError) return await resolveConflict(doc, e, thumb, user, lib);
         } catch (e2) {
           e = e2;
         }
         if (e instanceof CloudError && e.code === 'network') {
-          // Stand ist als Entwurf auf diesem Gerät gesichert; in 20 s erneut versuchen
+          // Stand ist als Entwurf auf diesem Gerät gesichert; erneut versuchen, sobald wieder online (spätestens in 20 s)
           window.clearTimeout(retryTimer.current);
-          retryTimer.current = window.setTimeout(() => {
+          const retry = () => {
+            window.clearTimeout(retryTimer.current);
+            window.removeEventListener('online', retry);
             const st = useAppStore.getState();
             if (st.dirty && st.simId === id) void st.saveCurrent({ silent: true });
-          }, 20_000);
+          };
+          retryTimer.current = window.setTimeout(retry, 20_000);
+          window.addEventListener('online', retry, { once: true });
           if (!offlineNotified.current) {
             offlineNotified.current = true;
             useAppStore.getState().notify('Keine Verbindung zum Server. Ihre Änderungen sind auf diesem Gerät gesichert und werden automatisch gespeichert, sobald die Verbindung wieder besteht.', 'warning');
           }
           return false;
+        }
+        // Lizenz/Konto hat sich serverseitig geändert oder die Sitzung ist abgelaufen → Status neu laden
+        // (der Router leitet dann passend weiter; der Stand bleibt als Entwurf erhalten)
+        if (e instanceof CloudError && (e.code === 'OLL01' || e.code === 'session')) {
+          useAppStore.getState().flushDraft();
+          void useCloud.getState().refresh().catch(() => undefined);
         }
         useAppStore.getState().notify(`Speichern fehlgeschlagen: ${errorMessage(e)}`, 'warning');
         return false;
@@ -170,11 +220,11 @@ export function useSimulationSession(id: string, opts: SessionOptions = {}) {
     const schedule = () => {
       window.clearTimeout(timer);
       const s = useAppStore.getState();
-      if (!s.prefs.autoSave || !s.dirty || s.simId !== id) return;
+      if (!s.prefs.autoSave || !s.dirty || s.simId !== id || autosavePaused.current) return;
       timer = window.setTimeout(() => {
         const st = useAppStore.getState();
         if (st.gestureActive) return schedule();
-        if (st.dirty && st.prefs.autoSave && st.simId === id) void st.saveCurrent({ silent: true });
+        if (st.dirty && st.prefs.autoSave && st.simId === id && !autosavePaused.current) void st.saveCurrent({ silent: true });
       }, s.prefs.autoSaveDelaySec * 1000);
     };
     const unsub = useAppStore.subscribe((s, prev) => {
@@ -222,8 +272,19 @@ export function useSimulationSession(id: string, opts: SessionOptions = {}) {
       if (choice === 'confirm') {
         const ok = await useAppStore.getState().saveCurrent({ silent: true });
         if (!ok) {
-          blocker.reset?.();
-          return;
+          // z. B. offline: Verlassen trotzdem ermöglichen – der Stand bleibt als Entwurf auf diesem Gerät
+          const leave = await confirmDialog({
+            title: 'Speichern gerade nicht möglich',
+            message: 'Ihre Änderungen konnten nicht gespeichert werden. Sie bleiben als Entwurf auf diesem Gerät erhalten und werden beim nächsten Öffnen zur Wiederherstellung angeboten. Trotzdem verlassen?',
+            confirmLabel: 'Verlassen',
+            cancelLabel: 'Hierbleiben',
+          });
+          if (!leave) {
+            blocker.reset?.();
+            return;
+          }
+          useAppStore.getState().flushDraft();
+          useAppStore.setState({ dirty: false });
         }
       } else {
         await platform.repos.clearDraft(id);

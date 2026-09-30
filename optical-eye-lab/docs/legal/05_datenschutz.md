@@ -63,7 +63,7 @@ Wenn Sie über „Verträge hier kündigen“ oder „Vertrag widerrufen“ eine
 
 ## 8. E-Mail-Kommunikation
 
-8.1 Wir versenden ausschließlich E-Mails, die für Konto und Vertrag erforderlich sind, insbesondere zur Bestätigung der E-Mail-Adresse, zum Zurücksetzen des Passworts, Vertrags-, Kündigungs- und Widerrufsbestätigungen sowie Hinweise zum Ablauf eines Abonnements. Wir versenden keine Werbe-E-Mails oder Newsletter.
+8.1 Wir versenden ausschließlich E-Mails, die für Konto und Vertrag erforderlich sind, insbesondere zur Bestätigung der E-Mail-Adresse, zum Zurücksetzen des Passworts, Vertrags-, Kündigungs- und Widerrufsbestätigungen, Hinweise zum Ablauf eines Abonnements, die Erinnerung vor der automatischen Löschung eines geschlossenen Kontos sowie die Bestätigung einer Kontolöschung. Wir versenden keine Werbe-E-Mails oder Newsletter.
 
 8.2 Wenn Sie uns per E-Mail kontaktieren, verarbeiten wir Ihre Angaben zur Bearbeitung der Anfrage (Art. 6 Abs. 1 lit. b bzw. f DSGVO).
 
@@ -84,18 +84,21 @@ Wenn Sie über „Verträge hier kündigen“ oder „Vertrag widerrufen“ eine
 
 9.3 Diese Speicherung im Browser ist unbedingt erforderlich, um die von Ihnen ausdrücklich gewünschte Anwendung bereitzustellen (§ 25 Abs. 2 Nr. 2 TDDDG). Eine Einwilligung ist dafür nicht erforderlich. Wir setzen keine Cookies zu Analyse- oder Werbezwecken ein.
 
-## 10. Speicherdauer
+## 10. Speicherdauer und Löschung
 
-- **Kundenkonto und gespeicherte Inhalte:** bis Sie das Konto löschen, spätestens 12 Monate nach Ende des letzten Vertrags bzw. nach der letzten relevanten Anmeldung. Das Ende einer Lizenz führt nicht zur sofortigen Löschung, damit Sie Ihre Inhalte nach einer erneuten Buchung weiter nutzen können.
-- **Geschlossenes Konto:** 12 Monate ab Schließung; in dieser Zeit können Sie das Konto wieder öffnen. Danach wird es gelöscht.
-- **Nachweis einer Kontolöschung:** Kennung des gelöschten Kontos, Zeitpunkt und ein nicht umkehrbarer Hashwert der E-Mail-Adresse für 3 Jahre (Art. 6 Abs. 1 lit. c und f DSGVO, Nachweis der Erfüllung Ihres Löschverlangens).
-- **Zustimmungs- und Vertragsnachweise, Kündigungs- und Widerrufserklärungen:** 3 Jahre nach Ende des Vertrags (Ende des Kalenderjahres, regelmäßige Verjährungsfrist), soweit keine längeren gesetzlichen Pflichten bestehen.
-- **Rechnungs-, Buchungs- und Steuerunterlagen:** nach den gesetzlichen Aufbewahrungsfristen, insbesondere § 147 AO.
+10.1 **Kundenkonto und gespeicherte Inhalte** (Profil- und Einrichtungsdaten, Simulationen, Vorlagen, Einstellungen): Wir speichern sie, solange Ihr Kundenkonto besteht. Grundlage ist der mit der Registrierung geschlossene Nutzungsvertrag über das Kundenkonto (Art. 6 Abs. 1 lit. b DSGVO), der unabhängig von einer Lizenz besteht. Das **Ende einer Lizenz, eine Kündigung oder das Ende der Demo führt nicht zur Löschung**: Ihr Konto bleibt bestehen, damit Sie Ihre Inhalte bei einer späteren Buchung wieder vorfinden. Wenn Sie das nicht wünschen, können Sie Ihr Konto jederzeit schließen oder löschen (Ziffern 10.2 und 10.3).
+
+[Prüfhinweis: Konten ohne Lizenz werden bewusst nicht automatisch gelöscht (Betreiberentscheidung). Prüfen lassen, ob für dauerhaft inaktive Konten eine zusätzliche Regel erforderlich ist, z. B. eine Nachfrage per E-Mail nach mehrjähriger Inaktivität.]
+
+10.2 **Konto schließen:** Sie können Ihr Konto in der Kontoverwaltung schließen. Ein geschlossenes Konto bewahren wir **12 Monate ab der Schließung** auf; in dieser Zeit können Sie es jederzeit wieder öffnen und Ihre Inhalte exportieren. Etwa 30 Tage vor Ablauf der Frist erinnern wir Sie per E-Mail; die Löschung erfolgt frühestens 14 Tage nach dieser Erinnerung. Danach werden Konto, Profil, Simulationen, Vorlagen und Einstellungen **automatisch gelöscht** und Einrichtungsdaten anonymisiert, soweit sie nicht nach Ziffer 10.4 aufbewahrt werden müssen.
+
+10.3 **Endgültige Löschung auf Ihren Wunsch:** Sie können Ihr Konto in der Kontoverwaltung jederzeit endgültig löschen oder die Löschung per E-Mail an info@olo-vision.de verlangen. Die Löschung erfolgt in der Kontoverwaltung sofort, bei einem Antrag per E-Mail unverzüglich, spätestens innerhalb eines Monats. Läuft noch ein Abonnement, benötigen wir die Vertragsdaten bis zu dessen Ende; die Löschung erfolgt dann mit Vertragsende.
+
+10.4 **Getrennt aufbewahrt** – nach ihren jeweils eigenen Fristen und unabhängig vom Kundenkonto:
+- **Rechnungs-, Buchungs- und Steuerunterlagen:** nach den gesetzlichen Aufbewahrungsfristen, insbesondere § 147 AO. Rechnungen und die dafür nötigen Daten liegen bei Stripe.
+- **Zustimmungs- und Vertragsnachweise, Kündigungs- und Widerrufserklärungen, Versandnachweise vertragsbezogener E-Mails:** 3 Jahre nach Ende des Vertrags (Ende des Kalenderjahres, regelmäßige Verjährungsfrist), soweit keine längeren gesetzlichen Pflichten bestehen (Art. 6 Abs. 1 lit. c und f DSGVO).
+- **Nachweis einer Kontolöschung:** Kennung des gelöschten Kontos, Zeitpunkt, Auslöser und ein nicht umkehrbarer Hashwert der E-Mail-Adresse für 3 Jahre (Art. 6 Abs. 1 lit. c und f DSGVO, Nachweis der Erfüllung Ihres Löschverlangens).
 - **Server-Logdaten:** nach den Vorgaben der Hosting-Dienstleister.
-
-Sie können Ihr Konto jederzeit selbst in der Kontoverwaltung schließen oder endgültig löschen; alternativ genügt eine E-Mail an info@olo-vision.de. Bei der endgültigen Löschung werden Konto, Profil, Simulationen, Vorlagen und Einstellungen sofort gelöscht; Einrichtungsdaten werden anonymisiert, soweit sie nicht für Rechnungen aufbewahrt werden müssen. Rechnungen und die für sie nötigen Daten bleiben bei Stripe bis zum Ablauf der gesetzlichen Fristen gespeichert.
-
-[Prüfhinweis: Die automatische Löschung nach Ablauf der 12 Monate ist derzeit als Admin-Vorgang umgesetzt (Übersicht fälliger Konten). Vor Veröffentlichung festlegen, ob sie automatisch erfolgen soll, und den Text ggf. anpassen.]
 
 ## 11. Übermittlung in Drittländer
 
