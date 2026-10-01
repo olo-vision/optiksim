@@ -259,7 +259,7 @@ where grantee = 'service_role' and table_schema = 'public' order by 1, 2;
 | `STRIPE_SECRET_KEY` | `sk_test_…` (optional ein Restricted Key `rk_test_…`, siehe unten) | Stripe → *Workbench* bzw. *Developers → API keys*, **Testmodus/Sandbox** |
 | `STRIPE_WEBHOOK_SECRET` | `whsec_…` | aus Schritt 7.4 |
 | `SITE_URL` | `http://localhost:5173` (später zusätzlich die Produktionsdomain, kommagetrennt, z. B. `https://app.example.de,http://localhost:5173`) | – |
-| optional `STRIPE_PRICE_PRIVATE`, `STRIPE_PRICE_BUSINESS`, `STRIPE_PRICE_EDUCATION` | nur für **andere** Price IDs (z. B. Live-Modus). Ohne Angabe gelten die hinterlegten IDs. | Stripe → Produktkatalog |
+| `STRIPE_PRICE_PRIVATE`, `STRIPE_PRICE_BUSINESS`, `STRIPE_PRICE_EDUCATION` (+ `_YEARLY`) | **Live: Pflicht** (alle sechs, kein Rückfall). Test/Entwicklung: optional, sonst gelten die hinterlegten Standard-IDs. Modus = Präfix von `STRIPE_SECRET_KEY`. | Stripe → Produktkatalog |
 | optional `STRIPE_PORTAL_CONFIGURATION_ID` | `bpc_…` einer speziellen Portal-Konfiguration | Stripe → Customer portal |
 
 Setzen im Dashboard: *Supabase → Edge Functions → Secrets*. Alternativ per CLI:

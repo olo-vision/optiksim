@@ -5,6 +5,8 @@
  */
 import { beforeAll, describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import { legalHashInput } from '../../supabase/functions/_shared/legalText';
 import { join } from 'node:path';
 import type { PGlite } from '@electric-sql/pglite';
 import { createDb, helpers, supabaseDir } from './pg';
@@ -273,15 +275,12 @@ describe('Ende-zu-Ende: Kauf → Vertragsbestätigung, Kündigung/Widerruf, Mail
   let sessionId = '';
 
   beforeAll(async () => {
-    // alle Entwürfe 1.0 nach „Klärung“ der Prüfhinweise veröffentlichen
-    const drafts = await h.rows<{ id: string; type: string; audience: string; title: string; content: string; checkbox_label: string | null }>(
-      `select id, type::text, audience::text, title, content, checkbox_label from public.legal_documents where status = 'draft'`,
-    );
+    // alle Entwürfe 1.0 so veröffentlichen, wie sie sind – MIT ihren internen Prüfhinweisen (Super-Admin bestätigt
+    // bewusst). Kunden dürfen die Hinweise trotzdem nirgends sehen (Zustimmung, Seiten, Vertragsbestätigung).
+    const drafts = await h.rows<{ id: string; content: string }>(`select id, content from public.legal_documents where status = 'draft'`);
+    expect(drafts.some((d) => d.content.includes('[Prüfhinweis'))).toBe(true);
     await h.asUser(admin, async () => {
-      for (const d of drafts) {
-        await db.query(`select public.admin_legal_save_draft($1, $2, $3, '1.0', $4, $5, $6, null)`, [d.id, d.type, d.audience, d.title, d.content.replace(/\[Prüfhinweis[^\]]*\]\n?/g, ''), d.checkbox_label]);
-        await db.query('select public.admin_legal_activate($1)', [d.id]);
-      }
+      for (const d of drafts) await db.query('select public.admin_legal_activate($1, true)', [d.id]);
     });
   });
 
@@ -339,6 +338,18 @@ describe('Ende-zu-Ende: Kauf → Vertragsbestätigung, Kündigung/Widerruf, Mail
     for (const part of ['AGB', 'Lizenz', 'Datenschutz', 'Widerrufsbelehrung', 'Muster-Widerrufsformular']) expect(names.some((n) => n.includes(part))).toBe(true);
     expect(m.attachments!.find((a) => a.filename.includes('AGB'))!.content).toContain('Prüfsumme (SHA-256):');
     expect(m.attachments!.every((a) => !a.content.includes('[Prüfhinweis'))).toBe(true);
+    expect(m.text).not.toContain('Prüfhinweis');
+    // Prüfsummen: über die angezeigte (zugestimmte) Fassung; Zustimmung, Datenbank und Anhang stimmen überein
+    const consented = await h.rows<{ title: string; checkbox_label: string | null; content: string; content_hash: string; document_hash: string }>(
+      `select d.title, d.checkbox_label, d.content, d.content_hash, c.document_hash from public.legal_consents c join public.legal_documents d on d.id = c.document_id where c.checkout_session_id = $1`,
+      [sessionId],
+    );
+    expect(consented.some((d) => d.content.includes('[Prüfhinweis'))).toBe(true); // intern gespeichert
+    for (const d of consented) {
+      expect(d.document_hash).toBe(d.content_hash);
+      expect(d.content_hash).toBe(createHash('sha256').update(legalHashInput(d.title, d.checkbox_label, d.content), 'utf8').digest('hex'));
+      if (d.content.trim()) expect(m.attachments!.some((a) => a.content.includes(`Prüfsumme (SHA-256): ${d.content_hash}`))).toBe(true);
+    }
     // private Jahreslizenz endet automatisch
     expect(stripe.calls.filter((c) => c.method === 'POST' && c.path === 'subscriptions/sub_karla')).toHaveLength(1);
   });

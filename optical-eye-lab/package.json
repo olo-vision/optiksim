@@ -15,7 +15,7 @@
     "dev:e2e": "vite --mode e2e --port 5173 --host 127.0.0.1 --open false",
     "dev:e2e-cloud": "vite --mode e2e-cloud --port 5174 --host 127.0.0.1 --open false",
     "test:db": "vitest run tests/db",
-    "test:e2e:saas": "node tests/e2e/saas.e2e.mjs && node tests/e2e/stripe.e2e.mjs && node tests/e2e/phase8.e2e.mjs && node tests/e2e/legal.e2e.mjs && node tests/e2e/cloud.e2e.mjs && node tests/e2e/uifixes.e2e.mjs",
+    "test:e2e:saas": "node tests/e2e/saas.e2e.mjs && node tests/e2e/stripe.e2e.mjs && node tests/e2e/phase8.e2e.mjs && node tests/e2e/legal.e2e.mjs && node tests/e2e/cloud.e2e.mjs && node tests/e2e/uifixes.e2e.mjs && node tests/e2e/responsive-auth.e2e.mjs",
     "test:e2e:cloud": "node tests/e2e/cloud.e2e.mjs",
     "test:stripe": "vitest run tests/stripe.handlers.test.ts tests/billing.unit.test.ts tests/phase8.unit.test.ts tests/db/stripe.test.ts tests/db/phase8.test.ts tests/db/legalops.test.ts tests/legalops.unit.test.ts tests/db/grants.test.ts",
     "legal:seed": "node scripts/legal-seed.mjs",

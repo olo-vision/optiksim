@@ -10,6 +10,7 @@ Die Migrationen 1–5 sind bekannt aus 0.9.
 | 7 | `20261002090000_account_retention.sql` | Aufbewahrung geschlossener Konten, Erinnerung, Admin-Lebenszyklus |
 | 8 | `20261003090000_production_hardening.sql` | siehe unten |
 | 9 | `20261004090000_legal_publish_review_override.sql` | Vertragscenter: Prüfhinweise warnen statt hart zu blockieren (nur Super-Admin, mit Bestätigung, protokolliert) |
+| 10 | `20261005090000_legal_review_notes_internal.sql` | Prüfhinweise rein intern: alle Kundenausgaben bereinigt, Prüfsumme über die angezeigte Fassung (`docs/LEGAL_OPERATIONS.md` 3.8) |
 
 Inhalt von Migration 8:
 - Geschlossene Konten sind serverseitig gesperrt (Lizenz und Demo).
@@ -38,8 +39,8 @@ Das deployt `create-checkout-session`, `create-customer-portal`, `stripe-webhook
 |---|---|---|
 | `STRIPE_SECRET_KEY` | ja | `sk_live_…` im Live-Betrieb; der Modus wird daraus erkannt |
 | `STRIPE_WEBHOOK_SECRET` | ja | Secret des **Live**-Endpoints |
-| `STRIPE_PRICE_PRIVATE`, `_BUSINESS`, `_EDUCATION` | live: ja | monatliche Live-Price-IDs |
-| `STRIPE_PRICE_PRIVATE_YEARLY`, `_BUSINESS_YEARLY`, `_EDUCATION_YEARLY` | live: ja | jährliche Live-Price-IDs |
+| `STRIPE_PRICE_PRIVATE`, `_BUSINESS`, `_EDUCATION` | live: ja | monatliche Live-Price-IDs (19,90 / 39,90 / 99,90 €) |
+| `STRIPE_PRICE_PRIVATE_YEARLY`, `_BUSINESS_YEARLY`, `_EDUCATION_YEARLY` | live: ja | jährliche Live-Price-IDs (199 / 399 / 999 €) |
 | `STRIPE_TAX_RATE_ID` | live: ja | `txr_…` – 19 % inklusive, im **Live**-Modus angelegt |
 | `SITE_URL` | live: ja | `https://olo-lab.de`; der erste Eintrag muss `https://` sein |
 | `STRIPE_PORTAL_CONFIGURATION_ID` | nein | sonst wird bei Bedarf automatisch eine Konfiguration angelegt |
@@ -48,8 +49,14 @@ Das deployt `create-checkout-session`, `create-customer-portal`, `stripe-webhook
 | `ACCOUNT_AUTO_DELETE` | nein | `off` schaltet Erinnerung und automatische Löschung geschlossener Konten ab |
 
 **Fail closed im Live-Modus:**
-- Fehlt eine Price ID, der Steuersatz oder die https-Adresse, antwortet der Checkout mit 503. Das Log nennt, was fehlt.
-- Die eingebauten Test-Price-IDs werden live nie verwendet.
+- Der Modus kommt **nur** aus `STRIPE_SECRET_KEY` (`sk_live_` = live, `sk_test_` = test). Eine Price ID verrät
+  ihren Modus nicht; es wird nicht geraten.
+- Live gelten **ausschließlich** die sechs `STRIPE_PRICE_*`-Secrets – kein Rückfall auf die eingebauten
+  Standard-IDs (auch wenn ein Secret denselben Wert hat, ist das in Ordnung).
+- Fehlt eines der sechs Secrets, ist eines keine gültige `price_…`-ID oder ist eine ID doppelt vergeben, fehlt der
+  Steuersatz oder die https-Adresse, antwortet der Checkout mit 503. Das Log nennt nur Secret-Namen, keine Werte.
+- Checkout und Webhook nutzen dieselbe Zuordnung. Ein Abo mit fremdem Preis schaltet nichts frei (Webhook
+  quittiert mit 200, Hinweis-Mail an den Betreiber); Kündigung/Ende wird immer übernommen.
 - Sind die Pflicht-Rechtstexte nicht **veröffentlicht**, antwortet der Checkout mit 503 (`legal_not_published`).
 - Webhook-Ereignisse aus dem anderen Stripe-Modus werden ignoriert.
 
@@ -116,7 +123,7 @@ select public.sync_license_for_institution('<institution-uuid>', 'go-live');
 Die Details stehen im Abschlussbericht.
 
 - Geschlossene Konten konnten Demo starten und kaufen. Jetzt ist beides serverseitig gesperrt, und die Oberfläche zeigt einen Hinweis.
-- Test-Price-IDs konnten im Live-Betrieb verwendet werden. Jetzt ist das ausgeschlossen (fail closed).
+- Im Live-Betrieb gelten nur die Price-Secrets; ohne sie kein Verkauf (fail closed).
 - Kontowechsel im selben Browser: Beim Anmelden eines zweiten Kontos konnten Inhalte ins falsche Konto geschrieben werden. Jeder Schreibzugriff prüft jetzt die Sitzung.
 - Abmelden wirkte auf allen Geräten. Jetzt gilt es nur für dieses Gerät.
 - Kündigungsbutton:

@@ -7,8 +7,9 @@ ausweis über Stripe und die automatische Beendigung privater Jahreslizenzen.
 > Die Texte sind eine sorgfältig vorbereitete erste Fassung, aber **keine anwaltlich geprüften oder garantiert
 > rechtssicheren Texte**. Punkte mit Prüfbedarf sind im Text mit **[Prüfhinweis: …]** markiert. Das Vertragscenter
 > zeigt diese Markierungen deutlich an. Ein Entwurf mit Markierungen lässt sich nur nach einem ausdrücklichen
-> Warn-Dialog („Trotzdem veröffentlichen“) und nur durch einen Super-Admin veröffentlichen; die Hinweise sind dann
-> Teil der veröffentlichten Fassung (Migration `20261004090000_legal_publish_review_override.sql`).
+> Warn-Dialog („Trotzdem veröffentlichen“) und nur durch einen Super-Admin veröffentlichen (Migration `20261004090000`).
+> **Prüfhinweise sind rein intern:** Sie bleiben im gespeicherten Original und im Vertragscenter sichtbar, werden aber
+> in jeder Kundenausgabe automatisch entfernt (Migration `20261005090000`, siehe 3.8).
 
 ## 1. Dokumente (Entwürfe 1.0)
 
@@ -114,9 +115,36 @@ $$);
 *Admin → Rechtliches*: Entwürfe öffnen, **Vorschau** prüfen, `[Prüfhinweis: …]` klären (ggf. mit Kanzlei), den
 Hinweis aus dem Text entfernen, speichern, **Veröffentlichen**. Enthält ein Entwurf noch Prüfhinweise, erscheint beim
 Veröffentlichen ein Warn-Dialog („Dieses Dokument enthält noch Prüfhinweise. Möchten Sie es trotzdem veröffentlichen?“
-mit „Abbrechen“ / „Trotzdem veröffentlichen“). Bestätigt ein Super-Admin, wird die Fassung **mit** den Hinweisen
-veröffentlicht – sie sind dann für Kunden sichtbar und im Audit-Protokoll (`review_override`) vermerkt. Korrekturen
-danach nur über eine neue Version; veröffentlichte Versionen bleiben unveränderlich. Reihenfolge egal; solange ein Dokument fehlt, wird es
+mit „Abbrechen“ / „Trotzdem veröffentlichen“). Bestätigt ein Super-Admin, wird die Fassung veröffentlicht und im
+Audit-Protokoll (`review_override`) vermerkt. Die Hinweise bleiben intern (siehe 3.8); im Editor zeigt der Reiter
+„Kundenansicht“, was Kunden sehen. Korrekturen danach nur über eine neue Version; veröffentlichte Versionen bleiben
+unveränderlich.
+
+### 3.8 Prüfhinweise: intern / extern
+
+| | Prüfhinweise |
+|---|---|
+| Datenbank (`legal_documents`, Original) | enthalten; Tabelle für Kunden nicht lesbar (RLS, keine Rechte) |
+| Vertragscenter (`admin_legal_documents()`, nur Super-Admin) | vollständig sichtbar und hervorgehoben |
+| Öffentliche Seiten, Übersicht (`legal_document()`, `legal_published_documents()`) | entfernt |
+| Zustimmungs-Checkboxen bei Registrierung, Demo, Kauf (`legal_required_documents()`) | entfernt |
+| Vertragsbestätigung: Text, Erklärungen, alle Anhänge (`contract_confirmation_data()` + Edge Function) | entfernt |
+
+- Eine Regel, zwei Laufzeiten: `public.legal_public_text()` (SQL) und `supabase/functions/_shared/legalText.ts`
+  (Edge Functions und Browser, `src/cloud/legal.ts` exportiert sie nur weiter). Beide werden gegen dieselben
+  Beispiele getestet (`tests/fixtures/legalReviewCases.ts`). Browser und E-Mail-Versand bereinigen zusätzlich selbst.
+- Texte **ohne** Prüfhinweis bleiben Zeichen für Zeichen unverändert.
+- **Prüfsumme (`content_hash`)** wird über die kundenseitige Fassung gebildet (`public.legal_customer_hash`) – also
+  über genau den Text, dem Kunden zustimmen und der in der Vertragsbestätigung steht. Für Texte ohne Prüfhinweis ist
+  das dieselbe Eingabe wie bisher; bestehende Prüfsummen und Zustimmungen bleiben gültig.
+- Prüfung nach dem Einspielen (sollte 0 Zeilen liefern – sonst wurde eine Fassung schon vor Migration
+  `20261005090000` mit Prüfhinweisen veröffentlicht; ihre Prüfsumme bezieht sich dann auf den internen Text →
+  bitte eine neue Version veröffentlichen):
+
+```sql
+select id, type, audience, version from public.legal_documents
+ where status <> 'draft' and content_hash is distinct from public.legal_customer_hash(title, checkbox_label, content);
+``` Reihenfolge egal; solange ein Dokument fehlt, wird es
 im jeweiligen Ablauf nicht abgefragt (Warnhinweis im Vertragscenter). Vor dem Verkauf an echte Kunden müssen alle 9
 aktiv sein.
 
@@ -156,7 +184,7 @@ Die folgenden Punkte sind im Text als `[Prüfhinweis]` markiert bzw. offen:
 
 ## 6. Tests
 
-- `tests/db/legalops.test.ts` (PostgreSQL): Import der Entwürfe ohne Überschreiben, Prüfhinweis-Warnung (ohne Bestätigung `OLR01`, mit Bestätigung nur Super-Admin, neue Version, Vorversion archiviert, Audit), Impressum,
+- `tests/db/legalops.test.ts` (PostgreSQL): Import der Entwürfe ohne Überschreiben, Prüfhinweis-Warnung (ohne Bestätigung `OLR01`, mit Bestätigung nur Super-Admin, neue Version, Vorversion archiviert, Audit), Kauf mit veröffentlichten Prüfhinweisen ohne Hinweis in Mail/Anhängen, Prüfsummen = angezeigte Fassung, Impressum,
   Erklärungen (Zuordnung, Unveränderlichkeit, Rechte), Vertragsbestätigung (einmalig, mit Dokumenten), Erinnerung,
   End-to-End Handler + Webhook + Kündigung/Widerruf + Mail-Jobs + SMTP-Ausfall.
 - `tests/legalops.unit.test.ts`: Preise Server = Browser, Hinweis am Stripe-Button, E-Mail-Texte und -Konfiguration,

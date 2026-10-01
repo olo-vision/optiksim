@@ -5,6 +5,7 @@
 import { endsAutomatically, isBillingInterval, PLAN_NAMES, priceLine, PRODUCT_NAME, PROVIDER_NAME, termNote, type BillingInterval } from './stripeConfig.ts';
 import { isPlan, type LicensePlan } from './licenseStatus.ts';
 import { plainText, type MailAttachment, type MailMessage } from './mailer.ts';
+import { publicLegalText } from './legalText.ts';
 
 export const PROVIDER_BLOCK = `${PROVIDER_NAME}
 Inhaber: Jonas Karol Lingener
@@ -67,8 +68,13 @@ const safeName = (s: string) => s.normalize('NFKD').replace(/[^\w.-]+/g, '_').re
 /** Checkbox-Text so, wie er beim Kauf angezeigt wurde ({link} → Dokumenttitel) */
 export const statementOf = (d: ContractDoc) => (d.checkbox_label ? d.checkbox_label.replace('{link}', d.title) : null);
 
+/** Kundenseitige Fassung eines Vertragsdokuments: interne Prüfhinweise entfernt (Datenbank liefert sie bereits ohne) */
+const publicDoc = (x: ContractDoc): ContractDoc => ({ ...x, title: publicLegalText(x.title), checkbox_label: publicLegalText(x.checkbox_label), content: publicLegalText(x.content) });
+
 /** Vertragsbestätigung auf dauerhaftem Datenträger (§ 312f Abs. 2 BGB): Text + akzeptierte Dokumente als Anhang */
-export function contractConfirmationMail(d: ContractData): MailMessage {
+export function contractConfirmationMail(input: ContractData): MailMessage {
+  // nie interne Prüfhinweise an Kunden – zentral für Text, Erklärungen und alle Anhänge
+  const d: ContractData = { ...input, documents: (input.documents ?? []).map(publicDoc) };
   const plan: LicensePlan | null = isPlan(d.plan) ? d.plan : null;
   const interval: BillingInterval | null = isBillingInterval(d.billing_interval) ? d.billing_interval : null;
   const b2c = d.customer_type === 'private';

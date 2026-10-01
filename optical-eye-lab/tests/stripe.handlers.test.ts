@@ -73,11 +73,13 @@ describe('Stripe-Objekte (API-Version Basil/Dahlia)', () => {
     // der abgerechnete Preis zählt, nicht die Metadaten
     expect(s.plan).toBe('business');
   });
-  it('Rückfall auf alte Felder am Abo', () => {
+  it('Rückfall auf alte Felder am Abo; fremder Preis → kein Tarif (Metadaten zählen nicht)', () => {
     const s = snapshotFromSubscription({ ...base, customer: { id: 'cus_2' }, current_period_end: 1_702_592_000, items: { data: [{ price: { id: 'price_unbekannt' } }] } });
     expect(s.customer_id).toBe('cus_2');
     expect(s.current_period_end).toBe(new Date(1_702_592_000_000).toISOString());
-    expect(s.plan).toBe('private');
+    expect(s.plan).toBeNull(); // metadata.plan = 'private' wird nicht übernommen
+    const known = snapshotFromSubscription({ ...base, customer: { id: 'cus_2' }, current_period_end: 1_702_592_000, items: { data: [{ price: { id: DEFAULT_PRICE_IDS.private } }] } });
+    expect(known.plan).toBe('private');
   });
   it('Abo-ID einer Rechnung: parent.subscription_details (neu) und subscription (alt)', () => {
     expect(subscriptionIdFromInvoice({ parent: { subscription_details: { subscription: 'sub_new' } } })).toBe('sub_new');
@@ -96,7 +98,7 @@ const ACCOUNTS: Record<string, BillingAccount> = {
   u_manual: { userId: 'u_manual', email: 'x@x.de', role: 'institution_admin', institutionId: 'inst_m', institutionType: 'business', institutionName: 'Sonder', license: { status: 'active', source: 'manual' } },
 };
 
-function setup(opts: { user?: string | null; customers?: Record<string, string>; live?: string[]; stripeLive?: string[]; env?: Record<string, string>; consentOk?: boolean; recordFails?: boolean } = {}) {
+function setup(opts: { user?: string | null; customers?: Record<string, string>; live?: string[]; stripeLive?: string[]; env?: Record<string, string>; consentOk?: boolean; recordFails?: boolean; subscriptionPrice?: string } = {}) {
   const calls: { method: string; path: string; params: Record<string, string>; key?: string }[] = [];
   const customers: Record<string, string> = { ...(opts.customers ?? {}) };
   const applied: Obj[] = [];
@@ -126,7 +128,7 @@ function setup(opts: { user?: string | null; customers?: Record<string, string>;
       if (path.endsWith('/expire')) return { id: 'cs_1', status: 'expired' };
       if (path === 'billing_portal/sessions') return { url: `https://portal.test/${params.customer}` };
       if (method === 'GET' && path.startsWith('customers/')) return { id: decodeURIComponent(path.slice(10)) };
-      if (path.startsWith('subscriptions/')) return { id: path.split('/')[1], customer: 'cus_1', status: 'active', items: { data: [] } };
+      if (path.startsWith('subscriptions/')) return { id: path.split('/')[1], customer: 'cus_1', status: 'active', items: { data: [{ price: { id: opts.subscriptionPrice ?? DEFAULT_PRICE_IDS.private } }] } };
       if (path === 'subscriptions') return { data: (opts.stripeLive ?? []).includes(params.customer) ? [{ id: 'sub_live', status: 'active' }] : [{ id: 'sub_old', status: 'canceled' }] };
       throw new Error(path);
     },

@@ -4,9 +4,13 @@
  *
  * - Das Frontend übergibt NUR den internen Tarif ('private' | 'business' | 'education').
  *   Die Stripe Price ID wird ausschließlich hier bestimmt – ein Client kann Preis/Produkt nicht wählen.
- * - Die Price IDs sind keine Geheimnisse. Für einen anderen Stripe-Modus (z. B. Live statt Test) können sie
- *   über Function Secrets überschrieben werden: STRIPE_PRICE_PRIVATE / _BUSINESS / _EDUCATION (monatlich)
- *   und STRIPE_PRICE_PRIVATE_YEARLY / _BUSINESS_YEARLY / _EDUCATION_YEARLY (jährlich).
+ * - Der Stripe-Modus ergibt sich AUSSCHLIESSLICH aus dem Secret Key (sk_live_/rk_live_ = live,
+ *   sk_test_/rk_test_ = test). Eine Price ID („price_…“) verrät nicht, aus welchem Modus sie stammt.
+ * - LIVE: Price IDs ausschließlich aus den sechs Function Secrets STRIPE_PRICE_PRIVATE / _BUSINESS /
+ *   _EDUCATION (monatlich) und STRIPE_PRICE_PRIVATE_YEARLY / _BUSINESS_YEARLY / _EDUCATION_YEARLY (jährlich).
+ *   Kein Rückfall auf die eingebauten Standard-IDs; fehlt eines oder ist es ungültig → Checkout 503.
+ * - TEST/Entwicklung: Secret, sonst die eingebauten Standard-IDs (PRICE_IDS).
+ * - Checkout (priceIdFor) und Webhook (priceInfo) verwenden dieselbe Zuordnung.
  */
 import { isPlan, type InstitutionType, type LicensePlan } from './licenseStatus.ts';
 
@@ -24,9 +28,8 @@ export const isBillingInterval = (v: unknown): v is BillingInterval => v === 'mo
 export type ProductKey = `${LicensePlan}_${BillingInterval}`;
 
 /**
- * Serverseitige Whitelist: interner Produktschlüssel → Stripe Price ID.
- * Monatliche Preise unverändert aus Phase 7; Jahrespreise ab Phase 8.
- * Überschreibbar per Function Secret (z. B. für den Live-Modus), siehe PRICE_ENV.
+ * Eingebaute Standard-Price-IDs – NUR für Test/Entwicklung (Rückfall ohne Secret). Im Live-Modus werden sie
+ * nie verwendet; dort gelten ausschließlich die Secrets aus PRICE_ENV (auch wenn diese dieselben Werte haben).
  */
 export const PRICE_IDS: Readonly<Record<ProductKey, string>> = Object.freeze({
   private_monthly: 'price_1UKgZZDi0mx4WWPoSxzWozbG',
@@ -44,7 +47,7 @@ export const DEFAULT_PRICE_IDS: Readonly<Record<LicensePlan, string>> = Object.f
   education: PRICE_IDS.education_monthly,
 });
 
-/** Namen der optionalen Override-Secrets (monatliche Namen unverändert aus Phase 7) */
+/** Namen der Price-Secrets (im Live-Modus Pflicht, im Test optional; monatliche Namen unverändert aus Phase 7) */
 export const PRICE_ENV: Readonly<Record<ProductKey, string>> = Object.freeze({
   private_monthly: 'STRIPE_PRICE_PRIVATE',
   business_monthly: 'STRIPE_PRICE_BUSINESS',
@@ -54,7 +57,9 @@ export const PRICE_ENV: Readonly<Record<ProductKey, string>> = Object.freeze({
   education_yearly: 'STRIPE_PRICE_EDUCATION_YEARLY',
 });
 
-const validPrice = (v: string | undefined) => (v && /^price_[A-Za-z0-9]+$/.test(v.trim()) ? v.trim() : undefined);
+/** syntaktisch gültige Stripe Price ID */
+export const PRICE_ID_RE = /^price_[A-Za-z0-9]+$/;
+const validPrice = (v: string | undefined) => (v && PRICE_ID_RE.test(v.trim()) ? v.trim() : undefined);
 
 export const productKey = (plan: LicensePlan, interval: BillingInterval): ProductKey => `${plan}_${interval}`;
 
@@ -67,31 +72,47 @@ export function stripeMode(env: EnvGetter = noEnv): 'live' | 'test' | 'none' {
 }
 
 /**
- * Tarif + Intervall → erlaubte Price ID; unbekannte Werte → null.
- * Im LIVE-Modus nur aus den Function Secrets – die eingebauten Test-Price-IDs werden nie live verwendet.
+ * Gültige Zuordnung Produktschlüssel → Price ID für den aktuellen Modus (einzige Quelle für Checkout UND Webhook).
+ * LIVE: nur gültige Secrets (fehlende/ungültige fehlen in der Zuordnung). TEST/ohne Schlüssel: Secret, sonst Standard-ID.
  */
+export function priceTable(env: EnvGetter = noEnv): Partial<Record<ProductKey, string>> {
+  const live = stripeMode(env) === 'live';
+  const table: Partial<Record<ProductKey, string>> = {};
+  for (const key of Object.keys(PRICE_ENV) as ProductKey[]) {
+    const configured = validPrice(env(PRICE_ENV[key]));
+    const id = live ? configured : (configured ?? PRICE_IDS[key]);
+    if (id) table[key] = id;
+  }
+  return table;
+}
+
+/** Tarif + Intervall → erlaubte Price ID; unbekannte Werte oder (live) fehlendes Secret → null. */
 export function priceIdFor(plan: unknown, interval: unknown, env: EnvGetter = noEnv): string | null {
   if (!isPlan(plan) || !isBillingInterval(interval)) return null;
-  const key = productKey(plan, interval);
-  const configured = validPrice(env(PRICE_ENV[key]));
-  if (stripeMode(env) === 'live') return configured ?? null;
-  return configured ?? PRICE_IDS[key];
+  return priceTable(env)[productKey(plan, interval)] ?? null;
 }
 
 /**
- * Konfigurationsprüfung für den Live-Betrieb (fail closed): alle sechs Price IDs, Steuersatz und
- * https-Adresse der Anwendung müssen gesetzt sein, keine Test-IDs. Leere Liste = in Ordnung.
- * Im Testmodus werden nur offensichtliche Fehler gemeldet.
+ * Konfigurationsprüfung für den Live-Betrieb (fail closed): alle sechs Price-Secrets gesetzt und syntaktisch
+ * gültig (price_…), keine Price ID doppelt vergeben, Steuersatz und https-Adresse vorhanden. Leere Liste = in Ordnung.
+ * Ob eine Price ID aus Test oder Live stammt, ist an der ID nicht erkennbar und wird deshalb NICHT geraten –
+ * maßgeblich ist der Schlüssel. Meldungen nennen nur Secret-Namen, nie Werte.
+ * Im Testmodus werden keine Price-Probleme gemeldet (Rückfall auf die Standard-IDs).
  */
 export function liveConfigProblems(env: EnvGetter = noEnv): string[] {
   const mode = stripeMode(env);
   const problems: string[] = [];
   if (mode === 'none') return ['STRIPE_SECRET_KEY fehlt oder hat ein unbekanntes Format'];
   if (mode !== 'live') return problems;
+  const seen = new Map<string, string>();
   for (const key of Object.keys(PRICE_ENV) as ProductKey[]) {
-    const v = validPrice(env(PRICE_ENV[key]));
-    if (!v) problems.push(`${PRICE_ENV[key]} fehlt`);
-    else if (v === PRICE_IDS[key]) problems.push(`${PRICE_ENV[key]} enthält die Test-Price-ID`);
+    const name = PRICE_ENV[key];
+    const raw = env(name)?.trim() ?? '';
+    const v = validPrice(raw);
+    if (!raw) problems.push(`${name} fehlt`);
+    else if (!v) problems.push(`${name} ist keine gültige Price ID (erwartet price_…)`);
+    else if (seen.has(v)) problems.push(`${name} und ${seen.get(v)} verwenden dieselbe Price ID`);
+    else seen.set(v, name);
   }
   const tax = env('STRIPE_TAX_RATE_ID')?.trim();
   if (!tax || !/^txr_[A-Za-z0-9]+$/.test(tax)) problems.push('STRIPE_TAX_RATE_ID fehlt');
@@ -106,12 +127,17 @@ export function priceIdForPlan(plan: unknown, env: EnvGetter = noEnv): string | 
   return priceIdFor(plan, 'monthly', env);
 }
 
-/** Price ID → { plan, interval } (Rückrichtung für den Webhook); fremde Preise → null */
+/**
+ * Price ID → { plan, interval } (Rückrichtung für den Webhook) über DIESELBE Zuordnung wie der Checkout
+ * (priceTable). Fremde Preise – und im Live-Modus auch die Standard-IDs ohne passendes Secret – → null.
+ */
 export function priceInfo(priceId: string | null | undefined, env: EnvGetter = noEnv): { plan: LicensePlan; interval: BillingInterval } | null {
   if (!priceId) return null;
-  for (const key of Object.keys(PRICE_IDS) as ProductKey[]) {
+  const table = priceTable(env);
+  for (const key of Object.keys(table) as ProductKey[]) {
+    if (table[key] !== priceId) continue;
     const [plan, interval] = key.split('_') as [LicensePlan, BillingInterval];
-    if (priceIdFor(plan, interval, env) === priceId) return { plan, interval };
+    return { plan, interval };
   }
   return null;
 }

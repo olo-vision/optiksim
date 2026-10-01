@@ -8,6 +8,7 @@ import type { CloudBackend } from './backend';
 import { translateError } from './errors';
 import { SECURE_EMAIL_CHANGE } from './config';
 import { emailChangeResultFrom } from './emailChange';
+import { publicLegalText } from './legal';
 import { registrationMetadata, validateRegistration } from './validation';
 import type { AccountLifecycleRow, AccountOverview, CloudSimulationFull, CloudSimulationPatch, CloudSimulationRow, CloudTemplateRow, NewCloudSimulation, AdminAccountRow, AdminConsentRow, AdminDeclarationRow, ConsumerDeclarationInput, ConsumerDeclarationReceipt, AdminLegalDocument, BillingInterval, BillingStatus, CloudAccount, CloudInstitution, CloudLicense, CloudProfile, CloudUser, EmailChangeResult, InstitutionType, LegalConsentContext, LegalDocRef, LegalDocSummary, LegalDocument, LegalDraftInput, LicensePlan, LicenseSource, LicenseStatus, SubscriptionStatus } from './types';
 import { CloudError } from './types';
@@ -70,13 +71,14 @@ export const mapBilling = (r: Row): BillingStatus => ({
   serverNow: s(r.server_now),
 });
 
+/** Kundenseitige Zustimmungstexte – Prüfhinweise entfernt (der Server liefert sie bereits ohne; zweite Sicherung) */
 export const mapLegalRef = (r: Row): LegalDocRef => ({
   id: String(r.id),
   type: r.type as LegalDocRef['type'],
   audience: r.audience as LegalDocRef['audience'],
   version: String(r.version),
-  title: String(r.title ?? ''),
-  checkboxLabel: s(r.checkbox_label),
+  title: publicLegalText(String(r.title ?? '')),
+  checkboxLabel: publicLegalText(s(r.checkbox_label)),
   consentType: (r.consent_type as LegalDocRef['consentType']) ?? null,
   required: r.required === true,
 });
@@ -94,6 +96,8 @@ export const mapLegalDoc = (r: Row): LegalDocument => ({
   archivedAt: s(r.archived_at),
   contentHash: s(r.content_hash),
 });
+
+export const toPublicLegalDoc = (d: LegalDocument): LegalDocument => ({ ...d, title: publicLegalText(d.title), content: publicLegalText(d.content) });
 
 /** Fehlermeldung einer Edge Function (JSON { error }) lesen – ohne technische Details */
 async function functionError(error: unknown, fallback: string): Promise<CloudError> {
@@ -384,7 +388,8 @@ export class SupabaseBackend implements CloudBackend {
     const { data, error } = await this.client.rpc('legal_document', { p_id: id });
     if (error) throw translateError(error);
     const row = Array.isArray(data) ? (data[0] as Row | undefined) : (data as Row | null);
-    return row ? mapLegalDoc(row) : null;
+    // öffentliche Fassung: Prüfhinweise entfernt (Server liefert sie bereits ohne; zweite Sicherung)
+    return row ? toPublicLegalDoc(mapLegalDoc(row)) : null;
   }
 
   async myConsentedDocumentIds() {

@@ -231,6 +231,8 @@ await safe('Prüfhinweise', async () => {
   await ed.getByLabel('Inhalt').fill('## 1. Geltung\n\nText.\n\n[Prüfhinweis: Bestellbutton prüfen lassen.]');
   await page.click('.legal-editor__tabs button:has-text("Vorschau")');
   check('Vorschau hebt Prüfhinweis hervor', await vis('[data-testid="legal-editor"] [data-testid="review-marker"]'));
+  await page.click('[data-testid="legal-preview-customer"]');
+  check('Kundenansicht im Editor ohne Prüfhinweis', (await vis('[data-testid="legal-customer-view"]')) && !(await text('[data-testid="legal-customer-view"] .legal-md')).includes('Prüfhinweis') && (await text('[data-testid="legal-customer-view"] .legal-md')).includes('Text.'));
   await page.click('[data-testid="legal-save"]');
   await page.waitForSelector('[data-testid="legal-group-terms"] [data-testid="legal-row"][data-status="draft"]');
   check('Entwurf zeigt „1 Prüfhinweis“', (await text('[data-testid="legal-group-terms"] [data-testid="legal-review-count"]')) === '1 Prüfhinweis');
@@ -257,7 +259,20 @@ await safe('Prüfhinweise', async () => {
   await page.click('.dialog__footer button:has-text("Trotzdem veröffentlichen")');
   await page.waitForSelector('[data-testid="legal-group-terms"] [data-testid="legal-row"][data-status="active"]');
   check('Trotz Prüfhinweis veröffentlicht', true);
-  check('Veröffentlichte Fassung zeigt Prüfhinweis weiter an', await vis('[data-testid="legal-group-terms"] [data-testid="legal-review-count-published"]'));
+  check('Vertragscenter zeigt Prüfhinweis der veröffentlichten Fassung weiter an', await vis('[data-testid="legal-group-terms"] [data-testid="legal-review-count-published"]'));
+  // öffentliche Seite: kein Prüfhinweis (Original bleibt intern gespeichert)
+  const pub = (await db()).legalDocs.find((d) => d.type === 'terms' && d.status === 'active');
+  check('Intern gespeichert: Original mit Prüfhinweis', pub.content.includes('[Prüfhinweis'));
+  await logout();
+  await open(`legal/doc/${encodeURIComponent(pub.id)}`);
+  await page.waitForSelector('[data-testid="legal-doc"]');
+  const pubText = await text('[data-testid="legal-doc"]');
+  check('Öffentliche AGB-Seite ohne Prüfhinweis', !pubText.includes('Prüfhinweis') && !pubText.includes('Bestellbutton prüfen') && pubText.includes('Text.'), pubText.slice(0, 120));
+  check('Öffentliche Seite: keine Markierungs-Hervorhebung', !(await vis('[data-testid="review-marker"]', 500)));
+  await shot('10c_public_without_review');
+  await login('karla@web.de');
+  await page.waitForURL((u) => !u.pathname.startsWith('/login'));
+  await open('admin/legal');
   // ohne Prüfhinweis: unverändert normaler Bestätigungsdialog
   await page.click('[data-testid="legal-new-terms"]');
   const ed2 = page.locator('[data-testid="legal-editor"]');

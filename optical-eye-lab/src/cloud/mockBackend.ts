@@ -56,7 +56,7 @@ import {
 } from './types';
 import { hasActiveLicense } from './access';
 import { B2B_COUNTRY_MESSAGE, planAllowedFor } from './plans';
-import { countReviewMarkers } from './legal';
+import { countReviewMarkers, publicLegalText } from './legal';
 import { emailChangeResultFrom, resendWaitSeconds } from './emailChange';
 import { translateError } from './errors';
 
@@ -177,7 +177,7 @@ function requiredDocsOf(db: MockDb, context: LegalConsentContext, type: Institut
       const d = cands.find((x) => x.audience === aud) ?? cands[0];
       if (!d) return null;
       const consentType = CONSENT_TYPE[d.type] ?? null;
-      return { id: d.id, type: d.type, audience: d.audience, version: d.version, title: d.title, checkboxLabel: d.checkboxLabel, consentType, required: !!consentType };
+      return { id: d.id, type: d.type, audience: d.audience, version: d.version, title: publicLegalText(d.title), checkboxLabel: publicLegalText(d.checkboxLabel), consentType, required: !!consentType };
     })
     .filter((x): x is LegalDocRef => !!x);
 }
@@ -632,7 +632,8 @@ export class MockBackend implements CloudBackend {
 
   async getLegalDocument(id: string): Promise<LegalDocument | null> {
     const d = this.read().legalDocs.find((x) => x.id === id && x.status !== 'draft');
-    return d ? { id: d.id, type: d.type, audience: d.audience, version: d.version, title: d.title, content: d.content, status: d.status, effectiveFrom: d.effectiveFrom, publishedAt: d.publishedAt, archivedAt: d.archivedAt, contentHash: d.contentHash } : null;
+    // wie public.legal_document(): kundenseitige Fassung ohne Prüfhinweise
+    return d ? { id: d.id, type: d.type, audience: d.audience, version: d.version, title: publicLegalText(d.title), content: publicLegalText(d.content), status: d.status, effectiveFrom: d.effectiveFrom, publishedAt: d.publishedAt, archivedAt: d.archivedAt, contentHash: d.contentHash } : null;
   }
 
   async myConsentedDocumentIds() {
@@ -643,7 +644,7 @@ export class MockBackend implements CloudBackend {
   async publishedLegalDocuments(): Promise<LegalDocSummary[]> {
     return this.read()
       .legalDocs.filter((d) => d.status === 'active')
-      .map((d) => ({ id: d.id, type: d.type, audience: d.audience, version: d.version, title: d.title, effectiveFrom: d.effectiveFrom }));
+      .map((d) => ({ id: d.id, type: d.type, audience: d.audience, version: d.version, title: publicLegalText(d.title), effectiveFrom: d.effectiveFrom }));
   }
 
   async adminLegalList() {
@@ -679,6 +680,7 @@ export class MockBackend implements CloudBackend {
     if (!doc || doc.status !== 'draft') throw new CloudError('Nur Entwürfe können veröffentlicht werden.', undefined, '42501');
     if (doc.effectiveFrom && Date.parse(doc.effectiveFrom) > Date.now()) throw new CloudError('Das Datum „gültig ab“ liegt in der Zukunft. Bitte am Stichtag veröffentlichen.');
     if (!doc.content.trim() && !doc.type.startsWith('consent_')) throw new CloudError('Der Inhalt ist leer.');
+    if (doc.content.trim() && !publicLegalText(doc.content).trim() && !doc.type.startsWith('consent_')) throw new CloudError('Der Inhalt besteht nur aus Prüfhinweisen – Kunden würden ein leeres Dokument sehen.');
     const markers = countReviewMarkers(doc.content) + countReviewMarkers(doc.checkboxLabel);
     if (markers > 0 && opts?.acknowledgeReview !== true) throw new CloudError(`Dieses Dokument enthält noch ${markers} Prüfhinweis(e). Bitte bestätigen Sie die Veröffentlichung ausdrücklich.`, undefined, 'OLR01');
     const now = new Date().toISOString();

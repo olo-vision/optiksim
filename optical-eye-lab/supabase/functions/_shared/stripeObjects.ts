@@ -9,7 +9,7 @@
  * Ereignis-Payload dient nur zur Identifikation.
  */
 import { priceInfo, type BillingInterval, type EnvGetter } from './stripeConfig.ts';
-import { isPlan, type LicensePlan } from './licenseStatus.ts';
+import type { LicensePlan } from './licenseStatus.ts';
 
 // deno-lint-ignore no-explicit-any
 type Obj = Record<string, any>;
@@ -53,7 +53,6 @@ export function snapshotFromSubscription(sub: Obj, ctx: { eventId?: string | nul
   if (!customer || typeof sub.id !== 'string') throw new Error('Unvollständiges Stripe-Abo');
   const item: Obj | undefined = sub.items?.data?.[0];
   const priceId = idOf(item?.price) ?? idOf(sub.plan) ?? null;
-  const metaPlan = sub.metadata?.plan;
   const info = priceInfo(priceId, ctx.env);
   return {
     event_id: ctx.eventId ?? null,
@@ -61,8 +60,9 @@ export function snapshotFromSubscription(sub: Obj, ctx: { eventId?: string | nul
     customer_id: customer,
     subscription_id: sub.id,
     price_id: priceId,
-    // maßgeblich ist der tatsächlich abgerechnete Preis; Metadaten nur als Rückfall
-    plan: info?.plan ?? (isPlan(metaPlan) ? metaPlan : null),
+    // maßgeblich ist ausschließlich der tatsächlich abgerechnete Preis laut Whitelist (dieselbe wie im Checkout);
+    // Metadaten oder fremde Preise schalten keinen Tarif frei
+    plan: info?.plan ?? null,
     // Intervall aus der Whitelist bzw. aus dem von Stripe gelieferten Preis (nie aus Browserdaten)
     billing_interval: info?.interval ?? intervalOf(typeof item?.price === 'object' ? item?.price : undefined),
     status: String(sub.status),

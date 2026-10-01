@@ -115,7 +115,7 @@ export function AdminLegalPage() {
             </strong>
           </p>
           <p>
-            {d.title} (Version {d.version}) wird sofort für neue Registrierungen, Demos und Käufe verwendet. Die Prüfhinweise werden unverändert Teil der veröffentlichten Fassung und sind für Kundinnen und Kunden sichtbar. Veröffentlichte Versionen können nicht mehr geändert werden – Korrekturen erfolgen über eine neue Version.
+            {d.title} (Version {d.version}) wird sofort für neue Registrierungen, Demos und Käufe verwendet. Die Prüfhinweise bleiben nur hier im Vertragscenter sichtbar – Kundinnen und Kunden sehen sie nirgends (Rechtstext-Seiten, Zustimmungen, Vertragsbestätigung). Bitte prüfen Sie in der „Kundenansicht“, ob der Text ohne sie vollständig ist. Veröffentlichte Versionen können nicht mehr geändert werden – Korrekturen erfolgen über eine neue Version.
           </p>
         </div>
       ),
@@ -228,7 +228,7 @@ export function AdminLegalPage() {
                               <span
                                 className="legal-review-count"
                                 data-testid={d.status === 'draft' ? 'legal-review-count' : 'legal-review-count-published'}
-                                title={d.status === 'draft' ? 'Offene [Prüfhinweis]-Markierungen – möglichst vor dem Veröffentlichen klären; Veröffentlichen ist nur nach ausdrücklicher Bestätigung möglich' : 'Diese Fassung wurde bewusst mit Prüfhinweisen veröffentlicht – Korrektur nur über eine neue Version'}
+                                title={d.status === 'draft' ? 'Offene [Prüfhinweis]-Markierungen – möglichst vor dem Veröffentlichen klären; Veröffentlichen ist nur nach ausdrücklicher Bestätigung möglich' : 'Diese Fassung wurde bewusst mit internen Prüfhinweisen veröffentlicht. Kunden sehen die Hinweise nicht. Klärung/Korrektur nur über eine neue Version'}
                               >
                                 {countReviewMarkers(d.content) + countReviewMarkers(d.checkboxLabel)} Prüfhinweis{countReviewMarkers(d.content) + countReviewMarkers(d.checkboxLabel) === 1 ? '' : 'e'}
                               </span>
@@ -286,8 +286,8 @@ export function AdminLegalPage() {
         />
       )}
       {preview && (
-        <Dialog title={`${preview.title} – Version ${preview.version}`} subtitle="Vorschau (Entwurf)" onClose={() => setPreview(null)} width={760}>
-          <LegalMarkdown content={preview.content} />
+        <Dialog title={`${preview.title} – Version ${preview.version}`} subtitle="Vorschau (intern, mit Prüfhinweisen)" onClose={() => setPreview(null)} width={760}>
+          <LegalMarkdown content={preview.content} internal />
         </Dialog>
       )}
     </div>
@@ -297,7 +297,7 @@ export function AdminLegalPage() {
 function LegalEditor({ initial, existingVersions, onClose, onSaved }: { initial: LegalDraftInput; existingVersions: string[]; onClose: () => void; onSaved: () => Promise<void> }) {
   const [d, setD] = useState<LegalDraftInput>(initial);
   const [busy, setBusy] = useState(false);
-  const [tab, setTab] = useState<'edit' | 'preview'>('edit');
+  const [tab, setTab] = useState<'edit' | 'preview' | 'customer'>('edit');
   const [err, setErr] = useState<string | null>(null);
   const set = <K extends keyof LegalDraftInput>(k: K, v: LegalDraftInput[K]) => setD((x) => ({ ...x, [k]: v }));
   const duplicate = existingVersions.includes(`${d.type}|${d.audience}|${d.version.trim()}`);
@@ -356,11 +356,19 @@ function LegalEditor({ initial, existingVersions, onClose, onSaved }: { initial:
           <button type="button" className={tab === 'preview' ? 'is-on' : ''} onClick={() => setTab('preview')}>
             Vorschau
           </button>
+          <button type="button" className={tab === 'customer' ? 'is-on' : ''} onClick={() => setTab('customer')} data-testid="legal-preview-customer">
+            Kundenansicht
+          </button>
         </div>
         {tab === 'edit' ? (
           <TextArea label="Inhalt" value={d.content} onChange={(e) => set('content', e.target.value)} rows={14} hint="Formatierung: # Überschrift, ## Unterüberschrift, - Aufzählung, 1. Nummerierung, **fett**. Leerzeile = neuer Absatz." />
-        ) : (
+        ) : tab === 'preview' ? (
           <div className="legal-editor__preview">
+            <LegalMarkdown content={d.content || '_(leer)_'} internal />
+          </div>
+        ) : (
+          <div className="legal-editor__preview" data-testid="legal-customer-view">
+            <p className="auth-note">So sehen Kundinnen und Kunden den Text: interne Prüfhinweise sind ausgeblendet.</p>
             <LegalMarkdown content={d.content || '_(leer)_'} />
           </div>
         )}

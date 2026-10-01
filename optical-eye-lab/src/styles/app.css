@@ -17,6 +17,29 @@ body,
   background: var(--bg);
 }
 
+/*
+ * Dokument-Seiten (Anmeldung, Registrierung, öffentliche Seiten): das Dokument selbst scrollt (useDocumentScroll).
+ * So klappen die iOS-Browserleisten ein, die Tastatur schiebt das aktive Feld in den sichtbaren Bereich und
+ * Safe Areas werden vom Browser berücksichtigt. Die App-Oberfläche behält overflow:hidden.
+ */
+html.doc-scroll {
+  height: auto;
+  min-height: 100%;
+  overflow-x: hidden;
+  overflow-y: auto;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+html.doc-scroll body,
+html.doc-scroll #root {
+  height: auto;
+  min-height: 100%;
+  overflow: visible;
+}
+html.doc-scroll body {
+  background: var(--page-bg);
+}
+
 body {
   font-family: var(--font);
   font-size: var(--fs);

@@ -15,10 +15,12 @@ import { AuthError } from '@/platform/auth';
 import { ORG_TYPE_LABELS, type OrganizationType, type User } from '@/platform/models';
 import { DEMO_EMAIL, DEMO_PASSWORD } from '@/platform/seed';
 import { roleLabel } from '@/platform/permissions';
+import { useDocumentScroll } from '../useDocumentScroll';
 
 type Mode = 'signin' | 'signup';
 
 export function LoginPage() {
+  useDocumentScroll();
   const user = useSession((s) => s.user);
   const [params] = useSearchParams();
   const navigate = useNavigate();
@@ -99,6 +101,10 @@ export function LoginPage() {
 
       <section className="login__panel">
         <div className="login__card">
+          <div className="login__brand">
+            <BrandMark size={26} />
+            <span>{productName}</span>
+          </div>
           {known.length > 0 && mode === 'signin' && (
             <div className="login__known">
               <div className="login__known-title">Auf diesem Gerät</div>

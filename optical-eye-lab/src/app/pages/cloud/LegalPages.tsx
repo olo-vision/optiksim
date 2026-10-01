@@ -14,10 +14,11 @@ import { EmptyState, Pill } from '@/ui/ds';
 import { usePageTitle } from '../../usePageTitle';
 import { cloudBackend, useCloud } from '../../cloudSession';
 import { formatDate, LEGAL_AUDIENCE_LABEL, LEGAL_DOC_TYPE_LABEL, PRODUCT_NAME } from '@/cloud/plans';
-import { parseMarkdown, REVIEW_MARKER, type Inline } from '@/cloud/legal';
+import { parseMarkdown, publicLegalText, REVIEW_MARKER, type Inline } from '@/cloud/legal';
 import type { LegalDocSummary, LegalDocType, LegalDocument } from '@/cloud/types';
 import { LEGAL_DOC_TYPES } from '@/cloud/types';
 import { cloudLandingPath } from './cloudLanding';
+import { useDocumentScroll } from '../../useDocumentScroll';
 
 /* ------------------------------ öffentlicher Rahmen ------------------------------ */
 
@@ -62,6 +63,7 @@ export function LegalFooterLinks({ compact = false }: { compact?: boolean }) {
 
 export function PublicShell({ children }: { children: ReactNode }) {
   const user = useCloud((s) => s.user);
+  useDocumentScroll();
   return (
     <div className="public">
       <header className="public__bar">
@@ -99,8 +101,12 @@ export function PublicShell({ children }: { children: ReactNode }) {
 
 const renderInline = (parts: Inline[]) => parts.map((p, i) => (p.br ? <br key={i} /> : p.bold ? <strong key={i}>{p.text}</strong> : <Fragment key={i}>{p.text}</Fragment>));
 
-export function LegalMarkdown({ content }: { content: string }) {
-  const blocks = useMemo(() => parseMarkdown(content), [content]);
+/**
+ * Rechtstext anzeigen. Standard ist die kundenseitige Fassung: interne Prüfhinweise werden über die zentrale
+ * Funktion publicLegalText() entfernt. Nur das Vertragscenter (Super-Admin) setzt `internal` und sieht sie markiert.
+ */
+export function LegalMarkdown({ content, internal = false }: { content: string; internal?: boolean }) {
+  const blocks = useMemo(() => parseMarkdown(internal ? content : publicLegalText(content)), [content, internal]);
   return (
     <div className="legal-md">
       {blocks.map((b, i) => {
@@ -112,8 +118,8 @@ export function LegalMarkdown({ content }: { content: string }) {
         if (b.kind === 'h1') return <h2 key={i}>{inline}</h2>;
         if (b.kind === 'h2') return <h3 key={i}>{inline}</h3>;
         if (b.kind === 'h3') return <h4 key={i}>{inline}</h4>;
-        // Prüfhinweise sichtbar hervorheben (Entwürfe; veröffentlichte Fassungen nur, wenn ein Super-Admin sie bewusst mit Hinweisen freigegeben hat)
-        if (b.inline[0]?.text.startsWith(REVIEW_MARKER)) return <p key={i} className="legal-md__review" data-testid="review-marker">{inline}</p>;
+        // nur intern (Vertragscenter): Prüfhinweise hervorheben – in der Kundenfassung sind sie bereits entfernt
+        if (internal && b.inline[0]?.text.startsWith(REVIEW_MARKER)) return <p key={i} className="legal-md__review" data-testid="review-marker">{inline}</p>;
         return <p key={i}>{inline}</p>;
       })}
     </div>

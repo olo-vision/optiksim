@@ -138,9 +138,10 @@
 
 /* ------------------------------ öffentlich ------------------------------ */
 .public {
-  position: fixed;
-  inset: 0;
-  overflow: auto;
+  /* scrollt über das Dokument (html.doc-scroll) – kein fester Vollbild-Container */
+  position: relative;
+  min-height: 100vh;
+  min-height: 100svh;
   background: var(--page-bg);
   color: var(--text);
   user-select: text;
@@ -153,7 +154,7 @@
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding: 12px 24px;
+  padding: max(12px, env(safe-area-inset-top)) max(24px, env(safe-area-inset-right)) 12px max(24px, env(safe-area-inset-left));
   background: var(--toolbar-bg);
   border-bottom: 1px solid var(--border);
 }
@@ -529,11 +530,8 @@
   }
 }
 @media (max-width: 560px) {
-  .type-choice {
-    grid-template-columns: 1fr;
-  }
   .public__bar {
-    padding: 10px 14px;
+    padding: max(10px, env(safe-area-inset-top)) max(14px, env(safe-area-inset-right)) 10px max(14px, env(safe-area-inset-left));
   }
   .public__nav {
     gap: 10px;
@@ -1319,9 +1317,6 @@
   .demo-ended {
     padding: 18px;
   }
-  .type-choice__kind {
-    position: static;
-  }
 }
 .legal-missing strong,
 .legal-missing span {
@@ -1608,4 +1603,60 @@
 .email-change-pending__ok {
   color: var(--ok, var(--text-2));
   font-size: var(--fs-sm);
+}
+
+/* ------------------------------ Registrierung/Anmeldung: Mobile & Tablet ------------------------------ */
+/* Kontotyp-Karten richten sich nach der Breite des Formulars (nicht des Bildschirms):
+   drei Spalten erst ab 440 px Formularbreite, sonst untereinander als Zeilen mit Symbol links. */
+.type-choice__item strong,
+.type-choice__item small {
+  overflow-wrap: anywhere;
+  hyphens: auto;
+}
+@container auth-card (max-width: 439px) {
+  .type-choice {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .type-choice__item {
+    flex-direction: row;
+    align-items: center;
+    gap: 12px;
+    padding: 11px 64px 11px 12px;
+  }
+  .type-choice__item svg {
+    flex: none;
+  }
+  .type-choice__kind {
+    top: 50%;
+    transform: translateY(-50%);
+  }
+}
+/* Formularzeilen: zwei Felder nebeneinander nur bei genug Formularbreite (Vorname/Nachname, Passwörter …) */
+@container auth-card (max-width: 379px) {
+  .login__card .form-row:not(.form-row--zip) {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+/* Touch-Geräte: Schrift in Eingabefeldern mindestens 16 px – sonst zoomt iOS Safari beim Antippen
+   in die Seite (Seite wirkt danach seitlich verschoben/abgeschnitten); Zielgröße 44 px. */
+@media (pointer: coarse) {
+  .login .ds-input,
+  .public .ds-input,
+  .shell .ds-input,
+  .dialog .ds-input {
+    font-size: max(16px, var(--fs-md));
+  }
+  .login .ds-input:not(textarea),
+  .public .ds-input:not(textarea) {
+    height: 44px;
+  }
+}
+/* fokussiertes Feld beim Einblenden (Tastatur, Fehlermeldung) mit Abstand zu den Rändern */
+.login :is(input, select, textarea),
+.public :is(input, select, textarea) {
+  scroll-margin-block: 24px 96px;
+}
+.login .page-toasts .toasts,
+.public .page-toasts .toasts {
+  bottom: calc(24px + env(safe-area-inset-bottom));
 }

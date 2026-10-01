@@ -866,19 +866,24 @@
 
 /* ------------------------------- Login -------------------------------- */
 
+/*
+ * Anmelde-/Registrierungs-Layout (mobile-first). Die Seite scrollt über das Dokument (html.doc-scroll, siehe
+ * useDocumentScroll) – keine feste Höhe, kein eigener Scroll-Container. Mindesthöhe über svh (sichtbare Höhe
+ * bei ausgeklappten Browserleisten), damit nichts unter den iOS-Leisten verschwindet.
+ * Die Marketingseite erscheint nur, wenn neben einem bequem breiten Formular genug Platz ist (≥ 1100 px).
+ */
 .login {
-  position: fixed;
-  inset: 0;
+  position: relative;
   display: grid;
-  grid-template-columns: minmax(0, 1.05fr) minmax(420px, 1fr);
-  grid-template-rows: minmax(100%, auto);
+  grid-template-columns: minmax(0, 1fr);
+  min-height: 100vh;
+  min-height: 100svh;
   background: var(--page-bg);
-  overflow: auto;
   user-select: text;
 }
 .login__hero {
   position: relative;
-  display: flex;
+  display: none;
   align-items: center;
   padding: 56px;
   overflow: hidden;
@@ -946,17 +951,58 @@
 }
 .login__panel {
   display: flex;
+  flex-direction: column;
   align-items: center;
-  justify-content: center;
-  padding: 40px 24px;
+  min-width: 0;
+  /* Safe Areas (Notch, Home-Indikator) plus Mindestabstand */
+  padding: max(28px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) max(40px, calc(env(safe-area-inset-bottom) + 24px)) max(16px, env(safe-area-inset-left));
 }
 .login__card {
   width: 100%;
-  max-width: 420px;
+  max-width: 460px;
+  /* vertikal zentriert nur, solange Platz ist: Auto-Ränder werden nie negativ – ein hohes Formular beginnt
+     oben und bleibt vollständig erreichbar (align-items:center schob den Anfang aus dem Bild) */
+  margin-block: auto;
   display: flex;
   flex-direction: column;
   gap: 16px;
+  container: auth-card / inline-size;
   animation: fade-up 260ms var(--ease);
+}
+/* kompakte Marke anstelle der Marketingseite */
+.login__brand {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin-bottom: 4px;
+  color: var(--text);
+  font-size: var(--fs-lg);
+  font-weight: 700;
+  text-decoration: none;
+}
+.login__brand svg {
+  color: var(--accent);
+}
+@media (min-width: 1100px) {
+  .login {
+    grid-template-columns: minmax(360px, 0.95fr) minmax(500px, 1fr);
+  }
+  /* Marketingseite bleibt beim Scrollen des Formulars sichtbar und füllt die sichtbare Höhe */
+  .login__hero {
+    display: flex;
+    position: sticky;
+    top: 0;
+    align-self: start;
+    height: 100vh;
+    height: 100dvh;
+  }
+  .login__brand {
+    display: none;
+  }
+  .login__panel {
+    padding-top: max(40px, env(safe-area-inset-top));
+    padding-bottom: max(48px, calc(env(safe-area-inset-bottom) + 24px));
+  }
 }
 .login__form {
   display: flex;
@@ -2055,12 +2101,6 @@
   }
   .banner {
     margin: 12px 22px 0;
-  }
-  .login {
-    grid-template-columns: 1fr;
-  }
-  .login__hero {
-    display: none;
   }
   .profile-grid {
     grid-template-columns: 1fr;

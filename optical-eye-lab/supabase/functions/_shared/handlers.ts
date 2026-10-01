@@ -124,7 +124,7 @@ async function authorize(req: Request, deps: Deps, cors: Record<string, string>)
   if (!account) return { response: json({ error: 'Zu Ihrem Konto gibt es kein Profil.', code: 'no_profile' }, 403, cors) };
   if (!ADMIN_ROLES.has(account.role)) return { response: json({ error: 'Nur die Administration Ihres Kundenkontos kann das Abonnement verwalten.', code: 'forbidden' }, 403, cors) };
   if (!deps.env('STRIPE_SECRET_KEY')) return { response: json({ error: 'Die Online-Zahlung ist noch nicht eingerichtet.', code: 'stripe_not_configured' }, 503, cors) };
-  // Live-Betrieb nur mit vollständiger Konfiguration (keine Test-Price-IDs, Steuersatz, https-Adresse)
+  // Live-Betrieb nur mit vollständiger Konfiguration (alle sechs Price-Secrets gültig, Steuersatz, https-Adresse)
   const problems = liveConfigProblems(deps.env);
   if (problems.length) {
     deps.log?.(`Stripe-Konfiguration unvollständig (${stripeMode(deps.env)}): ${problems.join('; ')}`);
@@ -484,6 +484,20 @@ async function webhook(req: Request, deps: Deps): Promise<Response> {
       deps.log?.(`stripe-webhook ${type}: ignoriert – Stripe-Objekt nicht gefunden`);
       return json({ received: true, ignored: 'nicht gefunden' }, 200);
     }
+    if (code === 'unknown_price') {
+      // Abo mit fremdem Preis (z. B. manuell im Dashboard angelegt oder STRIPE_PRICE_* fehlt) → nicht freischalten
+      await deps.db.eventFinish(id, 'ignored', errMsg(e));
+      deps.log?.(`stripe-webhook ${type}: ignoriert – ${errMsg(e)}`);
+      const notifyTo = deps.mailer?.notifyTo;
+      const subId = (e as { subscriptionId?: string }).subscriptionId ?? '';
+      if (notifyTo) {
+        await sendLogged(deps, 'admin_notice', adminNoticeMail(notifyTo, 'Abonnement mit unbekanntem Preis – nicht freigeschaltet', [
+          `Das Stripe-Abonnement ${subId} verwendet den Preis ${(e as { priceId?: string }).priceId ?? '–'}, der keinem Tarif zugeordnet ist (Modus: ${stripeMode(deps.env)}).`,
+          'Es wurde keine Lizenz freigeschaltet. Bitte die Secrets STRIPE_PRICE_* bzw. das Abonnement im Stripe-Dashboard prüfen.',
+        ]), `unknown-price-${subId}`).catch(() => undefined);
+      }
+      return json({ received: true, ignored: 'unbekannter Preis' }, 200);
+    }
     if (code === 'P0002') {
       // Abo ohne Bezug zu einer Institution (z. B. im Stripe-Dashboard angelegt) – nicht endlos wiederholen
       await deps.db.eventFinish(id, 'ignored', errMsg(e));
@@ -497,18 +511,36 @@ async function webhook(req: Request, deps: Deps): Promise<Response> {
   }
 }
 
+/** Stripe-Status, die Zugriff gewähren (aktiv, Testphase, Zahlungsfrist) */
+const GRANTING_STATUSES = new Set(['active', 'trialing', 'past_due']);
+
+/**
+ * Fremde Preise werden nicht akzeptiert: Ein Abo, dessen Preis nicht zur Zuordnung des aktuellen Modus gehört
+ * (live: nur die STRIPE_PRICE_*-Secrets), schaltet nichts frei. Beenden/Sperren wird dagegen immer übernommen –
+ * so bleibt keine Lizenz durch ein unbekanntes Abo aktiv.
+ */
+function refuseUnknownPrice(s: SubscriptionSnapshot) {
+  if (!s.plan && GRANTING_STATUSES.has(s.status)) {
+    throw Object.assign(new Error(`Abo ${s.subscription_id}: Preis ${s.price_id ?? '–'} gehört zu keinem Tarif`), { code: 'unknown_price', subscriptionId: s.subscription_id, priceId: s.price_id });
+  }
+}
+
 async function processEvent(type: string, eventId: string, obj: Obj, deps: Deps): Promise<Obj | null> {
   const sync = async (subscriptionId: string, paymentFailed = false, checkoutSessionId: string | null = null) => {
     // immer den AKTUELLEN Stand von Stripe laden – Reihenfolge und Alter der Ereignisse spielen so keine Rolle
     const sub = await deps.stripe.request('GET', `subscriptions/${encodeURIComponent(subscriptionId)}`);
     const snapshot = snapshotFromSubscription(sub, { eventId, eventType: type, paymentFailed, env: deps.env, checkoutSessionId });
+    refuseUnknownPrice(snapshot);
     let result = await deps.db.applySubscription(snapshot);
     // Parallele Zustellungen: hat sich der Stand bei Stripe inzwischen geändert, den neueren nachziehen
     const again = await deps.stripe.request('GET', `subscriptions/${encodeURIComponent(subscriptionId)}`).catch(() => null);
     if (again) {
       const fresh = snapshotFromSubscription(again, { eventId, eventType: type, paymentFailed, env: deps.env, checkoutSessionId });
       const key = (x: SubscriptionSnapshot) => JSON.stringify([x.status, x.cancel_at_period_end, x.cancel_at, x.current_period_end, x.price_id]);
-      if (key(fresh) !== key(snapshot)) result = await deps.db.applySubscription(fresh);
+      if (key(fresh) !== key(snapshot)) {
+        refuseUnknownPrice(fresh);
+        result = await deps.db.applySubscription(fresh);
+      }
     }
     // private Jahreslizenz: keine automatische Verlängerung (Stripe meldet die Änderung anschließend erneut)
     await enforceNoAutoRenewal(snapshot, eventId, deps);

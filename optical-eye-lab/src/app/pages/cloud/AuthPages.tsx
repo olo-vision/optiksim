@@ -19,12 +19,14 @@ import { LegalFooterLinks } from './LegalPages';
 import { MIN_PASSWORD } from '@/cloud/validation';
 import { usePageTitle } from '../../usePageTitle';
 import { cloudLandingPath } from './cloudLanding';
+import { useDocumentScroll } from '../../useDocumentScroll';
 
 type FieldError = { msg: string; field?: string } | null;
 const toFieldError = (e: unknown): FieldError => (e instanceof CloudError ? { msg: e.message, field: e.field } : { msg: e instanceof Error ? e.message : 'Unbekannter Fehler.' });
 
 /** Gemeinsamer Rahmen: Produktbild links, Formular rechts */
 export function AuthFrame({ title, subtitle, children, footer }: { title: string; subtitle?: ReactNode; children: ReactNode; footer?: ReactNode }) {
+  useDocumentScroll();
   return (
     <div className="login">
       <section className="login__hero" aria-hidden>
@@ -53,6 +55,11 @@ export function AuthFrame({ title, subtitle, children, footer }: { title: string
       </section>
       <section className="login__panel">
         <div className="login__card auth-card">
+          {/* kompakte Marke, wenn die Marketingseite aus Platzgründen ausgeblendet ist (Smartphone/Tablet) */}
+          <Link to="/" className="login__brand" aria-label={`${PRODUCT_NAME} – Startseite`}>
+            <BrandMark size={26} />
+            <span>{PRODUCT_NAME}</span>
+          </Link>
           <header className="auth-card__head">
             <h2>{title}</h2>
             {subtitle && <p>{subtitle}</p>}
