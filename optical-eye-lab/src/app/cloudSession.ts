@@ -281,6 +281,8 @@ export const useCloud = create<CloudState>()((set, get) => {
             else if ((event === 'SIGNED_IN' || event === 'USER_UPDATED' || event === 'PASSWORD_RECOVERY') && user && user.id !== get().user?.id && user.id !== pendingLoadId) void load(user).catch((e) => set({ error: translateError(e).message }));
             // E-Mail-Änderung bestätigt: Konto neu laden (neue Adresse anzeigen)
             else if (event === 'USER_UPDATED' && user && user.email !== get().user?.email) void load(user).catch(() => undefined);
+            // offene E-Mail-Änderung (new_email / Versandzeit) ohne Neuladen des Kontos übernehmen
+            else if (event === 'USER_UPDATED' && user && user.id === get().user?.id) set({ user });
           });
           const u = await b.getUser();
           try {
@@ -306,7 +308,11 @@ export const useCloud = create<CloudState>()((set, get) => {
     refresh: async () => {
       const u = get().user;
       if (!u) return;
-      await load(u);
+      // aktuellen Benutzer der Sitzung verwenden (z. B. nach bestätigter E-Mail-Änderung: neue Adresse / offene Änderung)
+      const fresh = await cloudBackend()
+        .getUser()
+        .catch(() => null);
+      await load(fresh && fresh.id === u.id ? fresh : u);
     },
 
     signIn: async (email, password) => {

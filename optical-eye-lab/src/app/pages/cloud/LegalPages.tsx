@@ -112,7 +112,7 @@ export function LegalMarkdown({ content }: { content: string }) {
         if (b.kind === 'h1') return <h2 key={i}>{inline}</h2>;
         if (b.kind === 'h2') return <h3 key={i}>{inline}</h3>;
         if (b.kind === 'h3') return <h4 key={i}>{inline}</h4>;
-        // offene Prüfhinweise in Entwürfen sichtbar hervorheben (veröffentlichte Texte enthalten keine)
+        // Prüfhinweise sichtbar hervorheben (Entwürfe; veröffentlichte Fassungen nur, wenn ein Super-Admin sie bewusst mit Hinweisen freigegeben hat)
         if (b.inline[0]?.text.startsWith(REVIEW_MARKER)) return <p key={i} className="legal-md__review" data-testid="review-marker">{inline}</p>;
         return <p key={i}>{inline}</p>;
       })}

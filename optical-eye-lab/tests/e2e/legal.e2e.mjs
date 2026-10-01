@@ -7,7 +7,7 @@
  *  5. Kauf Private jährlich → Vertragsbestätigung, Konto zeigt „keine automatische Verlängerung“
  *  6. Kündigungsbutton (zweistufig, ohne Login) → automatisch zum Periodenende, Eingangsbestätigung
  *  7. Widerrufsbutton → Eingangsbestätigung; Admin: Kündigungen & Widerrufe, „erledigt“
- *  8. Vertragscenter: Entwurf mit [Prüfhinweis] ist markiert und lässt sich nicht veröffentlichen
+ *  8. Vertragscenter: Entwurf mit [Prüfhinweis] ist markiert; Veröffentlichen nur nach Warn-Dialog (Super-Admin)
  *
  * Aufruf: `npm run dev:e2e-cloud` (Port 5174), dann `node tests/e2e/legal.e2e.mjs`.
  */
@@ -235,9 +235,41 @@ await safe('Prüfhinweise', async () => {
   await page.waitForSelector('[data-testid="legal-group-terms"] [data-testid="legal-row"][data-status="draft"]');
   check('Entwurf zeigt „1 Prüfhinweis“', (await text('[data-testid="legal-group-terms"] [data-testid="legal-review-count"]')) === '1 Prüfhinweis');
   await shot('10_legal_review_marker');
+  // Prüfhinweis blockiert nicht mehr hart: deutlicher Warn-Dialog, „Abbrechen“ lässt den Entwurf unverändert
   await page.click('[data-testid="legal-group-terms"] [data-testid="legal-activate"]');
-  await page.waitForTimeout(500);
-  check('Veröffentlichen verweigert', !(await vis('.dialog__footer button:has-text("Veröffentlichen")', 800)) && (await vis('[data-testid="legal-group-terms"] [data-testid="legal-row"][data-status="draft"]')));
+  check('Warn-Dialog bei Prüfhinweisen', await vis('[data-testid="legal-override-dialog"]:has-text("Dieses Dokument enthält noch einen Prüfhinweis. Möchten Sie es trotzdem veröffentlichen?")'));
+  check('Dialog: „Abbrechen“ und „Trotzdem veröffentlichen“', (await vis('.dialog__footer button:has-text("Abbrechen")')) && (await vis('.dialog__footer button:has-text("Trotzdem veröffentlichen")')));
+  await shot('10b_legal_review_override');
+  await page.click('.dialog__footer button:has-text("Abbrechen")');
+  await page.waitForTimeout(300);
+  check('Abbrechen: bleibt Entwurf', (await vis('[data-testid="legal-group-terms"] [data-testid="legal-row"][data-status="draft"]')) && !(await vis('[data-testid="legal-group-terms"] [data-testid="legal-row"][data-status="active"]', 500)));
+  // Server lehnt ohne ausdrückliche Bestätigung ab (nicht nur die Oberfläche)
+  const serverCode = await mock('tryLegalActivate', 'terms');
+  check('Server: ohne Bestätigung OLR01', serverCode === 'OLR01', serverCode);
+  // andere Rollen dürfen die Warnung nicht übergehen – auch nicht mit Bestätigung
+  for (const role of ['institution_admin', 'user']) {
+    await mock('setRole', 'karla@web.de', role);
+    const c = await mock('tryLegalActivate', 'terms', true);
+    check(`Rolle ${role}: Übergehen verweigert`, c === '42501', c);
+  }
+  await mock('setRole', 'karla@web.de', 'super_admin');
+  await page.click('[data-testid="legal-group-terms"] [data-testid="legal-activate"]');
+  await page.click('.dialog__footer button:has-text("Trotzdem veröffentlichen")');
+  await page.waitForSelector('[data-testid="legal-group-terms"] [data-testid="legal-row"][data-status="active"]');
+  check('Trotz Prüfhinweis veröffentlicht', true);
+  check('Veröffentlichte Fassung zeigt Prüfhinweis weiter an', await vis('[data-testid="legal-group-terms"] [data-testid="legal-review-count-published"]'));
+  // ohne Prüfhinweis: unverändert normaler Bestätigungsdialog
+  await page.click('[data-testid="legal-new-terms"]');
+  const ed2 = page.locator('[data-testid="legal-editor"]');
+  await ed2.getByLabel('Titel').fill('Allgemeine Geschäftsbedingungen');
+  await ed2.getByLabel('Inhalt').fill('## 1. Geltung\n\nGeklärter Text.');
+  await page.click('[data-testid="legal-save"]');
+  await page.waitForSelector('[data-testid="legal-group-terms"] [data-testid="legal-row"][data-status="draft"]');
+  await page.click('[data-testid="legal-group-terms"] [data-testid="legal-activate"]');
+  check('Ohne Prüfhinweis: normaler Dialog, keine Warnung', (await vis('.dialog__footer button:has-text("Veröffentlichen")')) && !(await vis('[data-testid="legal-override-dialog"]', 500)));
+  await page.click('.dialog__footer button:has-text("Veröffentlichen")');
+  await page.waitForFunction(() => !document.querySelector('[data-testid="legal-group-terms"] [data-testid="legal-row"][data-status="draft"]'));
+  check('Ohne Prüfhinweis veröffentlicht, Vorversion archiviert', (await page.locator('[data-testid="legal-group-terms"] [data-testid="legal-row"][data-status="active"]').count()) === 1 && (await vis('[data-testid="legal-group-terms"] [data-testid="legal-row"][data-status="archived"]')));
 });
 
 /* Mobil */

@@ -21,6 +21,13 @@ function resolveMode(): AuthMode {
 }
 
 export const AUTH_MODE: AuthMode = resolveMode();
+/**
+ * Supabase „Secure email change“ (Auth → Providers → Email; Standard: an). Dann muss eine E-Mail-Änderung
+ * über Links an die bisherige UND die neue Adresse bestätigt werden. Die Einstellung ist im Browser nicht
+ * abfragbar; nur wenn sie im Dashboard ausgeschaltet wird, hier VITE_SECURE_EMAIL_CHANGE=off setzen,
+ * damit die Hinweistexte stimmen.
+ */
+export const SECURE_EMAIL_CHANGE = (env.VITE_SECURE_EMAIL_CHANGE ?? '').trim().toLowerCase() !== 'off';
 /** Anmeldung + Lizenzprüfung aktiv (Supabase oder Mock) */
 export const CLOUD_ENABLED = AUTH_MODE !== 'local';
 

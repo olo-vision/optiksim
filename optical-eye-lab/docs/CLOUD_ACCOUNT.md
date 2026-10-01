@@ -114,3 +114,25 @@ Umsetzung jetzt:
 3. Die Session wird mit `return_url = SITE_URL/account` und `locale = de` erstellt, optional mit `STRIPE_PORTAL_CONFIGURATION_ID`.
 4. Fehlt die Portal-Konfiguration, legt `ensurePortalConfiguration()` einmalig eine an (Metadaten `olo=olo-lab3d-default`) und versucht es erneut. Die Konfiguration enthält Rechnungen, Zahlungsmittel, Rechnungsdaten und Kündigung zum Periodenende; ein Tarifwechsel im Portal ist aus.
 5. Die Meldungen: `503 portal_not_configured` bzw. `502 stripe_error` mit verständlichem Text. Die Seite zeigt sie direkt unter dem Button an.
+
+## 8. E-Mail-Adresse ändern (Konto → Anmeldung und Sicherheit)
+
+Ablauf (Supabase Auth, implicit flow):
+1. Passwort bestätigen (`signInWithPassword`), dann `updateUser({ email }, { emailRedirectTo: SITE/account?email_changed=1 })`.
+2. Erfolg wird **nur** angezeigt, wenn Supabase die Änderung nachweislich angenommen hat (`src/cloud/emailChange.ts`):
+   - `new_email` = angeforderte Adresse **und** `email_change_sent_at` gesetzt → Bestätigung versendet. Die Seite nennt
+     beide Empfänger (bei „Secure email change“ alte **und** neue Adresse) und zeigt den offenen Stand auch nach dem
+     Neuladen (aus `new_email`).
+   - Adresse sofort geändert → „Confirm email“ ist in Supabase aus; die Seite meldet die Änderung, verspricht aber
+     keine E-Mail.
+   - sonst Fehler mit verständlicher Meldung (Versand gescheitert, Adresse vergeben, Wartezeit …), keine Technik.
+3. „Erneut senden“ (`auth.resend({ type: 'email_change' })`) nur bei offener Änderung und frühestens 60 s nach dem
+   letzten Versand (Supabase-Limit; die Schaltfläche zeigt die Restzeit).
+4. Rücksprung `/account?email_changed=1`: ausgewertet werden Hash/Query (`#message=…other email` = erster von zwei
+   Links, `#error=…otp_expired` = abgelaufen) und der aktuelle Benutzer. „Bestätigt“ erscheint nur, wenn keine
+   Änderung mehr offen ist.
+5. Die Profil-Adresse folgt per Trigger `handle_user_email_change`. Die Rechnungs-E-Mail des Stripe-Kunden wird
+   dabei **nicht** geändert (das Kundenportal erlaubt nur Anschrift, Name und USt-IdNr.); Rechnungen gehen weiter an
+   die bisherige Adresse, bis sie im Stripe-Dashboard angepasst wird (offener Punkt).
+
+Supabase-Einstellungen dazu: `docs/PRODUCTION_READINESS.md` Abschnitt 6.

@@ -11,7 +11,7 @@
  *  - Konto löschen         → endgültig und sofort (Art. 17 DSGVO); gesetzlich aufzubewahrende
  *                            Rechnungs- und Vertragsnachweise bleiben bis zum Fristende gespeichert
  */
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router';
 import { Building2, Database, Download, FileText, KeyRound, LockKeyhole, LogOut, Mail, RotateCcw, ShieldAlert, Trash2, UserRound } from 'lucide-react';
 import { Button, Notice, PageHeader, Pill, TextField } from '@/ui/ds';
@@ -24,6 +24,8 @@ import { BillingSummary } from './Billing';
 import { exportLibrary } from '../../library/actions';
 import { DEMO_PLAN, formatDate, INSTITUTION_TYPE_LABEL, licenseLabel } from '@/cloud/plans';
 import { translateError } from '@/cloud/errors';
+import { SECURE_EMAIL_CHANGE } from '@/cloud/config';
+import { classifyEmailChangeReturn, resendWaitSeconds, takeArrivalAuthRedirect } from '@/cloud/emailChange';
 import type { AccountOverview } from '@/cloud/types';
 import { useAppStore } from '@/state/store';
 
@@ -90,29 +92,95 @@ function PersonalData() {
 
 /* ------------------------------ Anmeldung & Sicherheit ------------------------------ */
 
+const EMAIL_REDIRECT = () => `${window.location.origin}/account?email_changed=1`;
+const timeFmt = new Intl.DateTimeFormat('de-DE', { dateStyle: 'short', timeStyle: 'short' });
+
+/** Hinweis zu einer offenen E-Mail-Änderung – Stand laut Supabase (new_email, email_change_sent_at) */
+function EmailChangePending({ current, pending, sentAt }: { current: string; pending: string; sentAt: string | null }) {
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const [, tick] = useState(0);
+  const wait = resendWaitSeconds(sentAt);
+  useEffect(() => {
+    if (wait <= 0) return;
+    const t = window.setTimeout(() => tick((n) => n + 1), 1000);
+    return () => window.clearTimeout(t);
+  });
+  return (
+    <div className="auth-note auth-note--ok email-change-pending" data-testid="email-change-pending" role="status">
+      <Mail size={14} />
+      <div>
+        {SECURE_EMAIL_CHANGE ? (
+          <p data-testid="email-change-sent">
+            Änderung auf <strong>{pending}</strong> angefordert. Wir haben je einen Bestätigungslink an Ihre neue Adresse <strong>{pending}</strong> und an Ihre bisherige Adresse <strong>{current}</strong> gesendet. Die neue Adresse gilt, sobald Sie beide Links geöffnet haben – bis dahin melden Sie sich weiter mit {current} an.
+          </p>
+        ) : (
+          <p data-testid="email-change-sent">
+            Änderung auf <strong>{pending}</strong> angefordert. Wir haben einen Bestätigungslink an <strong>{pending}</strong> gesendet. Die neue Adresse gilt, sobald Sie den Link geöffnet haben – bis dahin melden Sie sich weiter mit {current} an.
+          </p>
+        )}
+        <p className="email-change-pending__meta">
+          {sentAt && <>Gesendet am {timeFmt.format(new Date(sentAt))}. </>}Keine E-Mail erhalten? Bitte sehen Sie auch im Spam-Ordner nach.
+        </p>
+        <div className="email-change-pending__actions">
+          <Button
+            size="sm"
+            loading={busy}
+            disabled={wait > 0}
+            data-testid="email-change-resend"
+            onClick={async () => {
+              setBusy(true);
+              setMsg(null);
+              try {
+                const r = await cloudBackend().resendEmailChange(EMAIL_REDIRECT());
+                await useCloud.getState().refresh();
+                setMsg({ ok: true, text: r.status === 'pending' ? 'Die Bestätigungs-E-Mail wurde erneut gesendet.' : 'Ihre E-Mail-Adresse wurde geändert.' });
+              } catch (x) {
+                setMsg({ ok: false, text: translateError(x).message });
+              } finally {
+                setBusy(false);
+              }
+            }}
+          >
+            {wait > 0 ? `Erneut senden (${wait} s)` : 'Erneut senden'}
+          </Button>
+        </div>
+        {msg && (
+          <p className={msg.ok ? 'email-change-pending__ok' : 'ds-field__error'} data-testid={msg.ok ? 'email-change-resent' : 'email-change-resend-error'} role={msg.ok ? undefined : 'alert'}>
+            {msg.text}
+          </p>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function EmailChange() {
-  const email = useCloud((s) => s.user?.email ?? '');
+  const user = useCloud((s) => s.user);
+  const email = user?.email ?? '';
+  const pending = user?.pendingEmail && user.pendingEmail.toLowerCase() !== email.toLowerCase() ? user.pendingEmail : null;
   const [open, setOpen] = useState(false);
   const [next, setNext] = useState('');
   const [pw, setPw] = useState('');
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<{ field?: string; text: string } | null>(null);
-  const [sentTo, setSentTo] = useState<string | null>(null);
+  const [changedTo, setChangedTo] = useState<string | null>(null);
   return (
     <div className="account-row" data-testid="account-email">
       <div className="account-row__main">
         <strong>E-Mail-Adresse</strong>
-        <span>{email}</span>
-        {sentTo && (
-          <p className="auth-note auth-note--ok" data-testid="email-change-sent">
+        <span data-testid="account-email-current">{email}</span>
+        {pending && !open && <EmailChangePending current={email} pending={pending} sentAt={user?.emailChangeSentAt ?? null} />}
+        {changedTo && !pending && (
+          <p className="auth-note auth-note--ok" data-testid="email-change-done">
             <Mail size={14} />
-            <span>Wir haben einen Bestätigungslink an {sentTo} gesendet. Die neue Adresse gilt erst, wenn Sie den Link geöffnet haben.</span>
+            <span>Ihre E-Mail-Adresse wurde geändert. Sie melden sich ab jetzt mit {changedTo} an.</span>
           </p>
         )}
       </div>
       {!open ? (
         <Button size="sm" onClick={() => setOpen(true)} data-testid="email-change-open">
-          Ändern
+          {pending ? 'Andere Adresse' : 'Ändern'}
         </Button>
       ) : (
         <form
@@ -124,8 +192,10 @@ function EmailChange() {
             try {
               const b = cloudBackend();
               await b.reauthenticate(pw);
-              await b.changeEmail(next.trim(), `${window.location.origin}/account?email_changed=1`);
-              setSentTo(next.trim());
+              // Erfolg wird nur angezeigt, wenn Supabase die Änderung tatsächlich angenommen hat (siehe emailChangeResultFrom)
+              const r = await b.changeEmail(next.trim(), EMAIL_REDIRECT());
+              await useCloud.getState().refresh();
+              setChangedTo(r.status === 'changed' ? r.newEmail : null);
               setOpen(false);
               setNext('');
               setPw('');
@@ -139,9 +209,20 @@ function EmailChange() {
         >
           <TextField label="Neue E-Mail-Adresse" type="email" value={next} onChange={(e) => setNext(e.target.value)} autoComplete="email" required error={err?.field === 'email' ? err.text : null} />
           <TextField label="Aktuelles Passwort" type="password" value={pw} onChange={(e) => setPw(e.target.value)} autoComplete="current-password" required error={err?.field === 'password' ? err.text : null} />
-          {err && !err.field && <p className="ds-field__error">{err.text}</p>}
+          {err && !err.field && (
+            <p className="ds-field__error" role="alert" data-testid="email-change-error">
+              {err.text}
+            </p>
+          )}
           <div className="form-actions">
-            <Button onClick={() => setOpen(false)}>Abbrechen</Button>
+            <Button
+              onClick={() => {
+                setOpen(false);
+                setErr(null);
+              }}
+            >
+              Abbrechen
+            </Button>
             <Button type="submit" variant="primary" loading={busy} disabled={!next.trim() || !pw}>
               Bestätigungslink senden
             </Button>
@@ -454,13 +535,24 @@ export function AccountPage() {
   const location = useLocation();
   const p = account?.profile;
 
+  const emailReturnHandled = useRef(false);
   // Rücksprung aus dem Bestätigungslink der E-Mail-Änderung / Sprung zum Datenschutzbereich
   useEffect(() => {
     const q = new URLSearchParams(location.search);
-    if (q.get('email_changed')) {
-      notify('Ihre neue E-Mail-Adresse ist bestätigt.');
-      void useCloud.getState().refresh();
+    if (q.get('email_changed') && !emailReturnHandled.current) {
+      emailReturnHandled.current = true;
       navigate('/account', { replace: true });
+      // Ergebnis aus der Antwort von Supabase ableiten – nicht pauschal „bestätigt“ melden
+      void (async () => {
+        await useCloud
+          .getState()
+          .refresh()
+          .catch(() => undefined);
+        const r = classifyEmailChangeReturn(takeArrivalAuthRedirect(), useCloud.getState().user);
+        if (r.kind === 'confirmed') notify(`Ihre neue E-Mail-Adresse ${r.email} ist bestätigt. Bitte melden Sie sich künftig damit an.`);
+        else if (r.kind === 'partial') notify(SECURE_EMAIL_CHANGE ? 'Danke, ein Bestätigungslink ist angenommen. Bitte öffnen Sie jetzt auch den Link in der zweiten E-Mail – erst dann gilt die neue Adresse.' : 'Die Änderung ist noch nicht abgeschlossen. Bitte öffnen Sie den Link in der Bestätigungs-E-Mail.', 'warning');
+        else notify(r.message, 'warning');
+      })();
     }
     if (location.hash === '#privacy') document.getElementById('privacy')?.scrollIntoView({ block: 'start' });
   }, [location.search, location.hash, navigate]);

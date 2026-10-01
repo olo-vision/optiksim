@@ -17,7 +17,7 @@ import { usePageTitle } from '../../usePageTitle';
 import { cloudBackend } from '../../cloudSession';
 import { formatDate, LEGAL_AUDIENCE_LABEL, LEGAL_DOC_TYPE_LABEL } from '@/cloud/plans';
 import { countReviewMarkers, legalDocPath, suggestNextVersion } from '@/cloud/legal';
-import { LEGAL_DOC_TYPES, type AdminDeclarationRow, type AdminLegalDocument, type LegalAudience, type LegalDocType, type LegalDraftInput } from '@/cloud/types';
+import { CloudError, LEGAL_DOC_TYPES, type AdminDeclarationRow, type AdminLegalDocument, type LegalAudience, type LegalDocType, type LegalDraftInput } from '@/cloud/types';
 import { useAppStore } from '@/state/store';
 import { LegalMarkdown } from './LegalPages';
 
@@ -103,17 +103,51 @@ export function AdminLegalPage() {
     });
   };
 
-  const activate = (d: AdminLegalDocument) => {
-    const open = countReviewMarkers(d.content) + countReviewMarkers(d.checkboxLabel);
-    if (open) {
-      notify(`Dieser Entwurf enthält noch ${open} Prüfhinweis${open === 1 ? '' : 'e'}. Bitte klären, aus dem Text entfernen und dann veröffentlichen.`, 'warning');
-      return;
+  /** Warnung bei offenen Prüfhinweisen: blockiert nicht, verlangt aber eine bewusste Bestätigung (Server prüft ebenfalls, OLR01). */
+  const confirmReviewOverride = (d: AdminLegalDocument, open: number) =>
+    confirmDialog({
+      title: 'Prüfhinweise vorhanden',
+      message: (
+        <div className="legal-override" data-testid="legal-override-dialog">
+          <p>
+            <strong>
+              Dieses Dokument enthält noch {open === 1 ? 'einen Prüfhinweis' : `${open} Prüfhinweise`}. Möchten Sie es trotzdem veröffentlichen?
+            </strong>
+          </p>
+          <p>
+            {d.title} (Version {d.version}) wird sofort für neue Registrierungen, Demos und Käufe verwendet. Die Prüfhinweise werden unverändert Teil der veröffentlichten Fassung und sind für Kundinnen und Kunden sichtbar. Veröffentlichte Versionen können nicht mehr geändert werden – Korrekturen erfolgen über eine neue Version.
+          </p>
+        </div>
+      ),
+      confirmLabel: 'Trotzdem veröffentlichen',
+      cancelLabel: 'Abbrechen',
+      tone: 'danger',
+    });
+
+  const publish = async (d: AdminLegalDocument, acknowledgeReview: boolean) => {
+    try {
+      await cloudBackend().adminLegalActivate(d.id, { acknowledgeReview });
+    } catch (e) {
+      // Server hat Prüfhinweise gefunden, die hier nicht gezählt wurden: ebenfalls bewusst bestätigen lassen
+      if (!acknowledgeReview && e instanceof CloudError && e.code === 'OLR01') {
+        if (await confirmReviewOverride(d, Math.max(1, countReviewMarkers(d.content) + countReviewMarkers(d.checkboxLabel)))) return publish(d, true);
+        return;
+      }
+      throw e;
     }
-    void confirmDialog({
-      title: `${d.title} (Version ${d.version}) veröffentlichen?`,
-      message: 'Die Version wird sofort für neue Registrierungen, Demos und Käufe verwendet. Eine bisher aktive Version desselben Typs und derselben Zielgruppe wird archiviert. Veröffentlichte Versionen können nicht mehr geändert werden.',
-      confirmLabel: 'Veröffentlichen',
-    }).then((ok) => void (ok && run(() => cloudBackend().adminLegalActivate(d.id), `Version ${d.version} ist aktiv.`)));
+  };
+
+  const activate = async (d: AdminLegalDocument) => {
+    const open = countReviewMarkers(d.content) + countReviewMarkers(d.checkboxLabel);
+    const ok = open
+      ? await confirmReviewOverride(d, open)
+      : await confirmDialog({
+          title: `${d.title} (Version ${d.version}) veröffentlichen?`,
+          message: 'Die Version wird sofort für neue Registrierungen, Demos und Käufe verwendet. Eine bisher aktive Version desselben Typs und derselben Zielgruppe wird archiviert. Veröffentlichte Versionen können nicht mehr geändert werden.',
+          confirmLabel: 'Veröffentlichen',
+        });
+    if (!ok) return;
+    await run(() => publish(d, open > 0), `Version ${d.version} ist aktiv.`);
   };
 
   const groups = LEGAL_DOC_TYPES.map((type) => ({ type, items: (docs ?? []).filter((d) => d.type === type) }));
@@ -190,8 +224,12 @@ export function AdminLegalPage() {
                           <td>{formatDate(d.effectiveFrom)}</td>
                           <td>
                             {d.title}
-                            {d.status === 'draft' && countReviewMarkers(d.content) + countReviewMarkers(d.checkboxLabel) > 0 && (
-                              <span className="legal-review-count" data-testid="legal-review-count" title="Offene [Prüfhinweis]-Markierungen – vor dem Veröffentlichen klären und entfernen">
+                            {countReviewMarkers(d.content) + countReviewMarkers(d.checkboxLabel) > 0 && (
+                              <span
+                                className="legal-review-count"
+                                data-testid={d.status === 'draft' ? 'legal-review-count' : 'legal-review-count-published'}
+                                title={d.status === 'draft' ? 'Offene [Prüfhinweis]-Markierungen – möglichst vor dem Veröffentlichen klären; Veröffentlichen ist nur nach ausdrücklicher Bestätigung möglich' : 'Diese Fassung wurde bewusst mit Prüfhinweisen veröffentlicht – Korrektur nur über eine neue Version'}
+                              >
                                 {countReviewMarkers(d.content) + countReviewMarkers(d.checkboxLabel)} Prüfhinweis{countReviewMarkers(d.content) + countReviewMarkers(d.checkboxLabel) === 1 ? '' : 'e'}
                               </span>
                             )}
@@ -205,7 +243,7 @@ export function AdminLegalPage() {
                                 <Button size="sm" variant="ghost" icon={Eye} onClick={() => setPreview(d)}>
                                   Vorschau
                                 </Button>
-                                <Button size="sm" variant="primary" icon={Rocket} onClick={() => activate(d)} data-testid="legal-activate">
+                                <Button size="sm" variant="primary" icon={Rocket} onClick={() => void activate(d)} data-testid="legal-activate">
                                   Veröffentlichen
                                 </Button>
                                 <Button size="sm" variant="ghost" icon={Trash2} aria-label="Entwurf löschen" onClick={() => void confirmDialog({ title: 'Entwurf löschen?', message: `${d.title} (Version ${d.version})`, confirmLabel: 'Löschen', tone: 'danger' }).then((ok) => void (ok && run(() => cloudBackend().adminLegalDeleteDraft(d.id), 'Entwurf gelöscht.')))} />

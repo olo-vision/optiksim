@@ -118,7 +118,7 @@ export function suggestNextVersion(versions: string[]): string {
   return `${maj}.${min + 1}`;
 }
 
-/** Markierung offener Punkte in Entwürfen – Veröffentlichung ist erst ohne sie möglich (Server prüft) */
+/** Markierung offener Punkte in Entwürfen – Veröffentlichung trotz Markierung nur nach ausdrücklicher Bestätigung eines Super-Admins (Server prüft, Code OLR01) */
 export const REVIEW_MARKER = '[Prüfhinweis';
 export const hasReviewMarkers = (text: string | null | undefined) => !!text && text.includes(REVIEW_MARKER);
 export const countReviewMarkers = (text: string | null | undefined) => (text ? text.split(REVIEW_MARKER).length - 1 : 0);

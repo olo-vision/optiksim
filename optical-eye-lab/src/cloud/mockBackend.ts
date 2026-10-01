@@ -15,7 +15,7 @@
  * Datenbank; tests/db/stripe.test.ts). Haken: stripeEvent, setWebhookDelay, setCheckoutOutcome.
  */
 import type { AuthEvent, CloudBackend } from './backend';
-import type { AccountLifecycleRow } from './types';
+import type { AccountLifecycleRow, EmailChangeResult } from './types';
 import { registrationMetadata, validateRegistration } from './validation';
 import {
   CloudError,
@@ -56,7 +56,9 @@ import {
 } from './types';
 import { hasActiveLicense } from './access';
 import { B2B_COUNTRY_MESSAGE, planAllowedFor } from './plans';
-import { hasReviewMarkers } from './legal';
+import { countReviewMarkers } from './legal';
+import { emailChangeResultFrom, resendWaitSeconds } from './emailChange';
+import { translateError } from './errors';
 
 const KEY = 'olo-mock-cloud';
 
@@ -110,7 +112,13 @@ interface MockDb {
   /** Zeitpunkt der letzten (Neu-)Anmeldung – Nachbau des JWT-iat für die Löschung */
   authAt: number;
   /** E-Mail-Änderung, die noch bestätigt werden muss (Testhaken confirmEmailChange) */
-  pendingEmail?: { userId: string; email: string } | null;
+  pendingEmail?: { userId: string; email: string; sentAt: string; confirmedCurrent?: boolean; confirmedNew?: boolean } | null;
+  /**
+   * Nachbau der Supabase-Einstellungen zur E-Mail-Änderung:
+   * mode 'send' (Bestätigung per E-Mail), 'autoconfirm' („Confirm email“ aus: sofort geändert, keine E-Mail),
+   * 'smtp_error' (Versand scheitert → Supabase antwortet 500); secure = „Secure email change“ (beide Adressen bestätigen).
+   */
+  emailChange?: { mode: 'send' | 'autoconfirm' | 'smtp_error'; secure: boolean };
 }
 
 interface MockConsent {
@@ -299,8 +307,10 @@ export class MockBackend implements CloudBackend {
   private emit(e: AuthEvent, u: CloudUser | null) {
     for (const l of this.listeners) l(e, u);
   }
-  private asUser(u: MockUser): CloudUser {
-    return { id: u.id, email: u.email };
+  private asUser(u: MockUser, db?: MockDb): CloudUser {
+    const pend = (db ?? this.read()).pendingEmail;
+    const mine = pend && pend.userId === u.id ? pend : null;
+    return { id: u.id, email: u.email, pendingEmail: mine?.email ?? null, emailChangeSentAt: mine?.sentAt ?? null };
   }
   private delay() {
     return new Promise((r) => setTimeout(r, 30));
@@ -662,14 +672,15 @@ export class MockBackend implements CloudBackend {
     return doc.id;
   }
 
-  async adminLegalActivate(id: string) {
+  async adminLegalActivate(id: string, opts?: { acknowledgeReview?: boolean }) {
     const db = this.read();
     this.requireSuperAdmin(db);
     const doc = db.legalDocs.find((x) => x.id === id);
     if (!doc || doc.status !== 'draft') throw new CloudError('Nur Entwürfe können veröffentlicht werden.', undefined, '42501');
     if (doc.effectiveFrom && Date.parse(doc.effectiveFrom) > Date.now()) throw new CloudError('Das Datum „gültig ab“ liegt in der Zukunft. Bitte am Stichtag veröffentlichen.');
     if (!doc.content.trim() && !doc.type.startsWith('consent_')) throw new CloudError('Der Inhalt ist leer.');
-    if (hasReviewMarkers(doc.content) || hasReviewMarkers(doc.checkboxLabel)) throw new CloudError('Der Entwurf enthält noch [Prüfhinweis]-Markierungen. Bitte klären und entfernen, dann veröffentlichen.');
+    const markers = countReviewMarkers(doc.content) + countReviewMarkers(doc.checkboxLabel);
+    if (markers > 0 && opts?.acknowledgeReview !== true) throw new CloudError(`Dieses Dokument enthält noch ${markers} Prüfhinweis(e). Bitte bestätigen Sie die Veröffentlichung ausdrücklich.`, undefined, 'OLR01');
     const now = new Date().toISOString();
     for (const x of db.legalDocs) if (x.type === doc.type && x.audience === doc.audience && x.status === 'active') Object.assign(x, { status: 'archived', archivedAt: now });
     Object.assign(doc, { status: 'active', publishedAt: now, effectiveFrom: doc.effectiveFrom ?? now, contentHash: `mock-${doc.id.slice(0, 8)}` });
@@ -987,18 +998,59 @@ export class MockBackend implements CloudBackend {
     this.write(db);
   }
 
-  async changeEmail(newEmail: string) {
+  async changeEmail(newEmail: string, _redirectTo?: string): Promise<EmailChangeResult> {
     await this.delay();
     const email = newEmail.trim().toLowerCase();
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email)) throw new CloudError('Bitte geben Sie eine gültige E-Mail-Adresse ein.', 'email');
     const db = this.read();
     const u = db.users.find((x) => x.id === db.sessionUserId);
-    if (!u) throw new CloudError('Ihre Sitzung ist abgelaufen. Bitte melden Sie sich erneut an.');
+    if (!u) throw new CloudError('Ihre Sitzung ist abgelaufen. Bitte melden Sie sich erneut an.', undefined, 'session');
     if (u.email === email) throw new CloudError('Die neue E-Mail-Adresse entspricht der bisherigen.', 'email');
-    if (db.users.some((x) => x.email === email)) throw new CloudError('Für diese E-Mail-Adresse existiert bereits ein Konto.', 'email');
-    // Nachbau: Bestätigungslink sofort „geklickt“ (in Supabase erst nach Bestätigung wirksam)
-    db.pendingEmail = { userId: u.id, email };
+    if (db.users.some((x) => x.email === email)) throw translateError({ code: 'email_exists', status: 422, message: 'A user with this email address has already been registered' });
+    const cfg = db.emailChange ?? { mode: 'send', secure: true };
+    const prev = db.pendingEmail?.userId === u.id ? db.pendingEmail : null;
+    // wie Supabase: höchstens eine E-Mail derselben Art je 60 s
+    if (prev && resendWaitSeconds(prev.sentAt) > 0) throw translateError({ code: 'over_email_send_rate_limit', status: 429, message: `For security purposes, you can only request this after ${resendWaitSeconds(prev.sentAt)} seconds.` });
+    if (cfg.mode === 'smtp_error') throw translateError({ code: 'unexpected_failure', status: 500, message: 'Error sending email change email' });
+    const before = u.email;
+    if (cfg.mode === 'autoconfirm') {
+      this.applyEmailChange(db, u, email);
+      this.write(db);
+      this.emit('USER_UPDATED', this.asUser(u, db));
+      return emailChangeResultFrom(email, { email: u.email, new_email: null, email_change_sent_at: null }, before, cfg.secure);
+    }
+    const sentAt = new Date().toISOString();
+    db.pendingEmail = { userId: u.id, email, sentAt };
+    db.mails.push({ kind: 'auth_email_change_new', to: email, subject: 'Confirm Change of Email', relatedKey: u.id, at: sentAt });
+    if (cfg.secure) db.mails.push({ kind: 'auth_email_change_current', to: u.email, subject: 'Confirm Change of Email', relatedKey: u.id, at: sentAt });
     this.write(db);
+    this.emit('USER_UPDATED', this.asUser(u, db));
+    return emailChangeResultFrom(email, { email: u.email, new_email: email, email_change_sent_at: sentAt }, before, cfg.secure);
+  }
+
+  async resendEmailChange(_redirectTo?: string): Promise<EmailChangeResult> {
+    await this.delay();
+    const db = this.read();
+    const u = db.users.find((x) => x.id === db.sessionUserId);
+    if (!u) throw new CloudError('Ihre Sitzung ist abgelaufen. Bitte melden Sie sich erneut an.', undefined, 'session');
+    const pend = db.pendingEmail?.userId === u.id ? db.pendingEmail : null;
+    if (!pend) throw new CloudError('Es ist keine Änderung der E-Mail-Adresse offen.', undefined, 'no_pending_email');
+    const wait = resendWaitSeconds(pend.sentAt);
+    if (wait > 0) throw translateError({ code: 'over_email_send_rate_limit', status: 429, message: `For security purposes, you can only request this after ${wait} seconds.` });
+    const cfg = db.emailChange ?? { mode: 'send', secure: true };
+    if (cfg.mode === 'smtp_error') throw translateError({ code: 'unexpected_failure', status: 500, message: 'Error sending email change email' });
+    pend.sentAt = new Date().toISOString();
+    db.mails.push({ kind: 'auth_email_change_new', to: pend.email, subject: 'Confirm Change of Email', relatedKey: u.id, at: pend.sentAt });
+    if (cfg.secure && !pend.confirmedCurrent) db.mails.push({ kind: 'auth_email_change_current', to: u.email, subject: 'Confirm Change of Email', relatedKey: u.id, at: pend.sentAt });
+    this.write(db);
+    return emailChangeResultFrom(pend.email, { email: u.email, new_email: pend.email, email_change_sent_at: pend.sentAt }, u.email, cfg.secure);
+  }
+
+  private applyEmailChange(db: MockDb, u: MockUser, email: string) {
+    u.email = email;
+    const p = db.profiles.find((x) => x.userId === u.id);
+    if (p) p.email = email; // Trigger handle_user_email_change
+    db.pendingEmail = null;
   }
 
   async changePassword(currentPassword: string, newPassword: string) {
@@ -1131,6 +1183,17 @@ export class MockBackend implements CloudBackend {
         this.write(db);
       },
       /** simuliert den Klick auf den Link in der Passwort-Reset-E-Mail */
+      /** ruft das Veröffentlichen direkt auf (wie ein manipulierter Client) und liefert den Fehlercode bzw. 'ok' */
+      tryLegalActivate: async (type: string, acknowledgeReview = false) => {
+        const d = this.read().legalDocs.find((x) => x.type === type && x.status === 'draft');
+        if (!d) return 'kein Entwurf';
+        try {
+          await this.adminLegalActivate(d.id, { acknowledgeReview });
+          return 'ok';
+        } catch (e) {
+          return (e as CloudError).code ?? (e as Error).message;
+        }
+      },
       openRecoveryLink: (email: string) => {
         const db = this.read();
         const { u } = byEmail(db, email);
@@ -1138,20 +1201,42 @@ export class MockBackend implements CloudBackend {
         this.write(db);
         this.emit('PASSWORD_RECOVERY', this.asUser(u));
       },
-      /** simuliert den Klick auf den Bestätigungslink der E-Mail-Änderung (wie Supabase: danach gilt die neue Adresse) */
-      confirmEmailChange: () => {
+      /**
+       * simuliert den Klick auf einen Bestätigungslink der E-Mail-Änderung. Bei „Secure email change“ gilt die neue
+       * Adresse erst nach beiden Links ('current' = Mail an die bisherige, 'new' = Mail an die neue Adresse, 'both').
+       * Rückgabe: Rücksprung-Hash wie bei Supabase.
+       */
+      confirmEmailChange: (link: 'current' | 'new' | 'both' = 'both') => {
         const db = this.read();
         const pend = db.pendingEmail;
-        if (!pend) throw new Error('keine E-Mail-Änderung offen');
+        if (!pend) return '#error=access_denied&error_code=otp_expired&error_description=Email+link+is+invalid+or+has+expired';
         const u = db.users.find((x) => x.id === pend.userId)!;
-        u.email = pend.email;
-        const p = db.profiles.find((x) => x.userId === pend.userId);
-        if (p) p.email = pend.email; // Trigger handle_user_email_change
-        db.pendingEmail = null;
+        const secure = (db.emailChange ?? { secure: true }).secure;
+        if (link === 'current' || link === 'both') pend.confirmedCurrent = true;
+        if (link === 'new' || link === 'both') pend.confirmedNew = true;
+        if (secure && !(pend.confirmedCurrent && pend.confirmedNew)) {
+          this.write(db);
+          return '#message=Confirmation+link+accepted.+Please+proceed+to+confirm+link+sent+to+the+other+email';
+        }
+        this.applyEmailChange(db, u, pend.email);
         this.write(db);
-        this.emit('USER_UPDATED', this.asUser(u));
-        return pend.email;
+        this.emit('USER_UPDATED', this.asUser(u, db));
+        return '#access_token=mock&type=email_change';
       },
+      /** Supabase-Einstellungen der E-Mail-Änderung nachbilden */
+      setEmailChangeMode: (mode: 'send' | 'autoconfirm' | 'smtp_error', secure = true) => {
+        const db = this.read();
+        db.emailChange = { mode, secure };
+        this.write(db);
+      },
+      /** Wartezeit für „Erneut senden“ überspringen (Versandzeit zurückdatieren) */
+      ageEmailChange: (seconds: number) => {
+        const db = this.read();
+        if (db.pendingEmail) db.pendingEmail.sentAt = new Date(Date.parse(db.pendingEmail.sentAt) - seconds * 1000).toISOString();
+        this.write(db);
+      },
+      /** versendete Auth-Mails zur E-Mail-Änderung (Empfänger) */
+      emailChangeMails: () => this.read().mails.filter((m) => m.kind.startsWith('auth_email_change')).map((m) => `${m.kind.replace('auth_email_change_', '')}:${m.to}`),
       /** Anzahl gespeicherter Cloud-Simulationen eines Kontos (Tests) */
       cloudSimCount: (email: string) => {
         const db = this.read();

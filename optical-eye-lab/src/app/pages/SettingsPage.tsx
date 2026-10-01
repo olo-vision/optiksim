@@ -250,7 +250,6 @@ export function SettingsPage() {
                 ]}
               />
             </SettingRow>
-            <Switch label="Löschen bestätigen" description="Vor dem Löschen von Simulationen nachfragen." checked={p.confirmDestructive} onChange={up('confirmDestructive')} />
           </Group>
           <Group title="Einführung">
             <SettingRow label="Einführung erneut anzeigen" description="Die kurze Tour durch die wichtigsten Bereiche.">

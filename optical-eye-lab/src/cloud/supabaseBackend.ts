@@ -6,11 +6,14 @@
 import { createClient, type SupabaseClient, type User as SbUser } from '@supabase/supabase-js';
 import type { CloudBackend } from './backend';
 import { translateError } from './errors';
+import { SECURE_EMAIL_CHANGE } from './config';
+import { emailChangeResultFrom } from './emailChange';
 import { registrationMetadata, validateRegistration } from './validation';
-import type { AccountLifecycleRow, AccountOverview, CloudSimulationFull, CloudSimulationPatch, CloudSimulationRow, CloudTemplateRow, NewCloudSimulation, AdminAccountRow, AdminConsentRow, AdminDeclarationRow, ConsumerDeclarationInput, ConsumerDeclarationReceipt, AdminLegalDocument, BillingInterval, BillingStatus, CloudAccount, CloudInstitution, CloudLicense, CloudProfile, CloudUser, InstitutionType, LegalConsentContext, LegalDocRef, LegalDocSummary, LegalDocument, LegalDraftInput, LicensePlan, LicenseSource, LicenseStatus, SubscriptionStatus } from './types';
+import type { AccountLifecycleRow, AccountOverview, CloudSimulationFull, CloudSimulationPatch, CloudSimulationRow, CloudTemplateRow, NewCloudSimulation, AdminAccountRow, AdminConsentRow, AdminDeclarationRow, ConsumerDeclarationInput, ConsumerDeclarationReceipt, AdminLegalDocument, BillingInterval, BillingStatus, CloudAccount, CloudInstitution, CloudLicense, CloudProfile, CloudUser, EmailChangeResult, InstitutionType, LegalConsentContext, LegalDocRef, LegalDocSummary, LegalDocument, LegalDraftInput, LicensePlan, LicenseSource, LicenseStatus, SubscriptionStatus } from './types';
 import { CloudError } from './types';
 
-const toUser = (u: SbUser | null | undefined): CloudUser | null => (u ? { id: u.id, email: u.email ?? '' } : null);
+const toUser = (u: SbUser | null | undefined): CloudUser | null =>
+  u ? { id: u.id, email: u.email ?? '', pendingEmail: u.new_email ?? null, emailChangeSentAt: u.email_change_sent_at ?? null } : null;
 
 type Row = Record<string, unknown>;
 const s = (v: unknown) => (v === null || v === undefined ? null : String(v));
@@ -417,8 +420,8 @@ export class SupabaseBackend implements CloudBackend {
     return String(data);
   }
 
-  async adminLegalActivate(id: string) {
-    const { error } = await this.client.rpc('admin_legal_activate', { p_id: id });
+  async adminLegalActivate(id: string, opts?: { acknowledgeReview?: boolean }) {
+    const { error } = await this.client.rpc('admin_legal_activate', { p_id: id, p_acknowledge_review: opts?.acknowledgeReview === true });
     if (error) throw translateError(error);
   }
 
@@ -580,11 +583,29 @@ export class SupabaseBackend implements CloudBackend {
     }
   }
 
-  async changeEmail(newEmail: string, redirectTo: string) {
+  async changeEmail(newEmail: string, redirectTo: string): Promise<EmailChangeResult> {
     const email = newEmail.trim().toLowerCase();
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email)) throw new CloudError('Bitte geben Sie eine gültige E-Mail-Adresse ein.', 'email');
-    const { error } = await this.client.auth.updateUser({ email }, { emailRedirectTo: redirectTo });
+    const before = await this.sessionUser();
+    if (before.email.toLowerCase() === email) throw new CloudError('Die neue E-Mail-Adresse entspricht der bisherigen.', 'email');
+    const startedAt = Date.now();
+    const { data, error } = await this.client.auth.updateUser({ email }, { emailRedirectTo: redirectTo });
     if (error) throw translateError(error);
+    // Erfolg nur, wenn Supabase die Änderung tatsächlich angenommen hat (new_email + email_change_sent_at bzw. sofort geändert)
+    return emailChangeResultFrom(email, data.user, before.email, SECURE_EMAIL_CHANGE, startedAt);
+  }
+
+  async resendEmailChange(redirectTo: string): Promise<EmailChangeResult> {
+    // aktuellen Stand vom Server (nicht aus dem lokalen Sitzungsspeicher)
+    const { data: cur, error: curErr } = await this.client.auth.getUser();
+    if (curErr || !cur.user) throw translateError(curErr ?? new Error('Auth session missing'));
+    const pending = cur.user.new_email;
+    if (!pending) throw new CloudError('Es ist keine Änderung der E-Mail-Adresse offen.', undefined, 'no_pending_email');
+    const startedAt = Date.now();
+    const { error } = await this.client.auth.resend({ type: 'email_change', email: pending, options: { emailRedirectTo: redirectTo } });
+    if (error) throw translateError(error);
+    const { data } = await this.client.auth.getUser();
+    return emailChangeResultFrom(pending, data.user ?? cur.user, cur.user.email ?? '', SECURE_EMAIL_CHANGE, startedAt);
   }
 
   async changePassword(currentPassword: string, newPassword: string) {

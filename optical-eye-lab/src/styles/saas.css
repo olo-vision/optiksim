@@ -1371,6 +1371,13 @@
   color: var(--text);
   font-size: var(--fs-sm);
 }
+.legal-override p {
+  margin: 0 0 10px;
+  line-height: 1.5;
+}
+.legal-override p:last-child {
+  margin-bottom: 0;
+}
 .legal-review-count {
   display: inline-block;
   margin-left: 8px;
@@ -1577,4 +1584,28 @@
   display: inline-flex;
   flex-wrap: wrap;
   gap: 4px;
+}
+
+/* E-Mail-Änderung: offener Stand laut Supabase */
+.email-change-pending {
+  align-items: flex-start;
+  margin-top: 8px;
+}
+.email-change-pending > div {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+.email-change-pending p {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.email-change-pending__meta {
+  color: var(--text-3);
+  font-size: var(--fs-sm);
+}
+.email-change-pending__ok {
+  color: var(--ok, var(--text-2));
+  font-size: var(--fs-sm);
 }

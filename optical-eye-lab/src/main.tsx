@@ -1,3 +1,5 @@
+// zuerst: Rücksprung aus Auth-Links (E-Mail-Änderung) festhalten, bevor supabase-js die Adresse auswertet
+import './cloud/emailChange';
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { RouterProvider } from 'react-router';

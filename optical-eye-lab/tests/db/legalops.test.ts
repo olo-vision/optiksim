@@ -66,16 +66,57 @@ describe('Entwurfs-Import der Rechtstexte 1.0', () => {
     expect(await h.rows('select id, content from public.legal_documents order by id')).toEqual(before);
   });
 
-  it('Veröffentlichen mit offenem [Prüfhinweis] wird abgelehnt; nach Klärung möglich', async () => {
+  it('Veröffentlichen mit offenem [Prüfhinweis] ohne ausdrückliche Bestätigung wird abgelehnt; nach Klärung möglich', async () => {
     const d = (await h.rows<{ id: string; content: string; title: string; checkbox_label: string | null }>(`select id, content, title, checkbox_label from public.legal_documents where type = 'privacy' and version = '1.0'`))[0];
     expect(d.content).toContain('[Prüfhinweis');
-    expect(await h.asUser(admin, () => code(() => db.query('select public.admin_legal_activate($1)', [d.id])))).toBe('22023');
+    expect(await h.asUser(admin, () => code(() => db.query('select public.admin_legal_activate($1)', [d.id])))).toBe('OLR01');
+    expect(await h.asUser(admin, () => code(() => db.query('select public.admin_legal_activate($1, false)', [d.id])))).toBe('OLR01');
+    expect((await h.rows<{ status: string }>(`select status::text from public.legal_documents where id = $1`, [d.id]))[0].status).toBe('draft');
     const cleaned = d.content.replace(/\[Prüfhinweis[^\]]*\]\n?/g, '');
     await h.asUser(admin, () => db.query(`select public.admin_legal_save_draft($1, 'privacy', 'all', '1.0', $2, $3, $4, null)`, [d.id, d.title, cleaned, d.checkbox_label]));
     expect(await h.asUser(admin, () => code(() => db.query('select public.admin_legal_activate($1)', [d.id])))).toBeNull();
     const active = await h.rows<{ status: string; content_hash: string }>(`select status::text, content_hash from public.legal_documents where id = $1`, [d.id]);
     expect(active[0].status).toBe('active');
     expect(active[0].content_hash).toMatch(/^[0-9a-f]{64}$/);
+  });
+
+  it('Super-Admin kann trotz Prüfhinweis bewusst veröffentlichen: neue Version, alte archiviert, unveränderlich, protokolliert', async () => {
+    const r = await h.asUser(admin, async () => {
+      const prev = (await h.rows<{ id: string }>(`select public.admin_legal_save_draft(null, 'terms', 'b2b', '7.0', 'AGB B2B', 'Alt.', null, null) as id`))[0].id;
+      await db.query('select public.admin_legal_activate($1)', [prev]);
+      const next = (await h.rows<{ id: string }>(`select public.admin_legal_save_draft(null, 'terms', 'b2b', '7.1', 'AGB B2B', $1, null, null) as id`, ['Neu.\n\n[Prüfhinweis: Bestellbutton prüfen.]\n\n[Prüfhinweis: Gerichtsstand.]']))[0].id;
+      return { prev, next };
+    });
+    expect(await h.asUser(admin, () => code(() => db.query('select public.admin_legal_activate($1)', [r.next])))).toBe('OLR01');
+    expect(await h.asUser(admin, () => code(() => db.query('select public.admin_legal_activate($1, true)', [r.next])))).toBeNull();
+    const rows = await h.rows<{ id: string; status: string; content: string; content_hash: string | null }>(`select id, status::text, content, content_hash from public.legal_documents where id in ($1, $2)`, [r.prev, r.next]);
+    const prev = rows.find((x) => x.id === r.prev)!;
+    const next = rows.find((x) => x.id === r.next)!;
+    expect(prev.status).toBe('archived');
+    expect(prev.content).toBe('Alt.');
+    expect(next.status).toBe('active');
+    expect(next.content).toContain('[Prüfhinweis: Bestellbutton prüfen.]');
+    expect(next.content_hash).toMatch(/^[0-9a-f]{64}$/);
+    // veröffentlicht = unveränderlich, auch nicht über den Entwurfs-Speicherweg; ein zweites Veröffentlichen geht nicht
+    expect(await code(() => db.query(`update public.legal_documents set content = 'x' where id = $1`, [r.next]))).toBe('42501');
+    expect(await h.asUser(admin, () => code(() => db.query(`select public.admin_legal_save_draft($1, 'terms', 'b2b', '7.1', 'AGB B2B', 'x', null, null)`, [r.next])))).toBe('42501');
+    expect(await h.asUser(admin, () => code(() => db.query('select public.admin_legal_activate($1, true)', [r.next])))).toBe('42501');
+    const log = await h.rows<{ metadata: { review_markers: number; review_override: boolean } }>(`select metadata from public.audit_logs where action = 'legal.activated' and metadata->>'document_id' = $1`, [r.next]);
+    expect(log[0].metadata).toMatchObject({ review_markers: 2, review_override: true });
+    const prevLog = await h.rows<{ metadata: { review_override: boolean } }>(`select metadata from public.audit_logs where action = 'legal.activated' and metadata->>'document_id' = $1`, [r.prev]);
+    expect(prevLog[0].metadata.review_override).toBe(false);
+  });
+
+  it('andere Rollen können die Prüfhinweis-Warnung nicht übergehen', async () => {
+    const requiredFor = async (t: string) => (await h.rows<{ id: string }>(`select id from public.legal_required_documents('registration', $1)`, [t])).map((x) => x.id);
+    const draft = await h.asUser(admin, async () => (await h.rows<{ id: string }>(`select public.admin_legal_save_draft(null, 'terms', 'b2b', '8.0', 'AGB B2B', '[Prüfhinweis: offen]', null, null) as id`))[0].id);
+    const instAdmin = await h.register('inst-admin@firma.de', { first_name: 'Ina', institution_type: 'business', institution_name: 'Firma Ina', address_line_1: 'Weg 1', postal_code: '1', city: 'X', country: 'DE', legal_consents: await requiredFor('business') });
+    await db.query(`update public.profiles set role = 'institution_admin' where user_id = $1`, [instAdmin]);
+    const plain = await h.register('nutzer@privat.de', { first_name: 'Nils', institution_type: 'private', legal_consents: await requiredFor('private') });
+    for (const u of [instAdmin, plain]) expect(await h.asUser(u, () => code(() => db.query('select public.admin_legal_activate($1, true)', [draft])))).toBe('42501');
+    expect(await h.asUser(null, () => code(() => db.query('select public.admin_legal_activate($1, true)', [draft])))).not.toBeNull();
+    expect((await h.rows<{ status: string }>(`select status::text from public.legal_documents where id = $1`, [draft]))[0].status).toBe('draft');
+    await h.asUser(admin, () => db.query('select public.admin_legal_delete_draft($1)', [draft]));
   });
 
   it('Impressum ist öffentlich abrufbar, wird aber nie als Zustimmung verlangt', async () => {

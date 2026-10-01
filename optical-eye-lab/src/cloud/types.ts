@@ -323,7 +323,20 @@ export interface CloudAccount {
 export interface CloudUser {
   id: string;
   email: string;
+  /** angeforderte, noch nicht bestätigte neue E-Mail-Adresse (Supabase `new_email`) */
+  pendingEmail?: string | null;
+  /** Zeitpunkt, zu dem Supabase die Bestätigungs-E-Mail(s) versendet hat (`email_change_sent_at`) */
+  emailChangeSentAt?: string | null;
 }
+
+/**
+ * Ergebnis einer E-Mail-Änderung – nur aus der tatsächlichen Antwort von Supabase abgeleitet:
+ * 'pending' = Änderung angenommen und Bestätigungs-E-Mail versendet (new_email + email_change_sent_at gesetzt),
+ * 'changed' = Adresse sofort geändert (in Supabase ist „Confirm email“ ausgeschaltet – es wird keine E-Mail versendet).
+ */
+export type EmailChangeResult =
+  | { status: 'pending'; newEmail: string; currentEmail: string; sentAt: string | null; confirmBoth: boolean }
+  | { status: 'changed'; newEmail: string };
 
 export interface RegistrationInput {
   firstName: string;

@@ -25,8 +25,17 @@ export const closeAppDialog = () => useAppDialogs.setState({ dialog: null });
 
 const notify = (m: string, tone: 'info' | 'success' | 'warning' = 'info') => useAppStore.getState().notify(m, tone);
 
+export const SIM_NAME_MAX = 120;
+
 export async function renameSimulation(meta: SimulationMetadata): Promise<string | null> {
-  const name = await promptDialog({ title: 'Simulation umbenennen', label: 'Name', initial: meta.name, confirmLabel: 'Umbenennen' });
+  const raw = await promptDialog({
+    title: 'Simulation umbenennen',
+    label: 'Name',
+    initial: meta.name,
+    confirmLabel: 'Umbenennen',
+    validate: (v) => (!v.trim() ? 'Bitte geben Sie einen Namen ein.' : v.trim().length > SIM_NAME_MAX ? `Bitte höchstens ${SIM_NAME_MAX} Zeichen verwenden.` : null),
+  });
+  const name = raw?.trim();
   if (!name || name === meta.name) return null;
   const r = await runAction((u) => platform.library.rename(u, meta.id, name), 'Umbenannt');
   return r ? name : null;
@@ -37,19 +46,20 @@ export function duplicateSimulation(meta: SimulationMetadata) {
 }
 
 export async function deleteSimulation(meta: SimulationMetadata): Promise<boolean> {
-  if (useAppStore.getState().prefs.confirmDestructive) {
-    const ok = await confirmDialog({
-      title: 'Simulation löschen?',
-      message: (
-        <>
-          „<strong>{meta.name}</strong>“ wird dauerhaft {platform.library.storageKind === 'cloud' ? 'aus Ihrem Konto (auf allen Geräten)' : 'aus diesem Browser'} gelöscht. Das kann nicht rückgängig gemacht werden.
-        </>
-      ),
-      confirmLabel: 'Löschen',
-      tone: 'danger',
-    });
-    if (!ok) return false;
-  }
+  // Gespeicherte Simulationen werden nie ohne Rückfrage gelöscht (endgültig, in der Cloud auf allen Geräten).
+  // Die frühere Einstellung „Löschen bestätigen“ (prefs.confirmDestructive) wird deshalb nicht mehr ausgewertet.
+  const ok = await confirmDialog({
+    title: 'Simulation löschen?',
+    message: (
+      <span data-testid="delete-sim-message">
+        Möchten Sie „<strong>{meta.name}</strong>“ wirklich löschen? Die Simulation wird dauerhaft {platform.library.storageKind === 'cloud' ? 'aus Ihrem Konto entfernt – auf allen Geräten' : 'aus diesem Browser entfernt'}. Das kann nicht rückgängig gemacht werden.
+      </span>
+    ),
+    confirmLabel: 'Endgültig löschen',
+    cancelLabel: 'Abbrechen',
+    tone: 'danger',
+  });
+  if (!ok) return false;
   return (await runAction((u) => platform.library.remove(u, meta.id), `„${meta.name}“ gelöscht`)) !== undefined;
 }
 

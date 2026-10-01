@@ -21,6 +21,12 @@ export function translateError(e: unknown): CloudError {
   if (code === 'user_already_exists' || code === 'email_exists' || msg.includes('already registered')) return map('Für diese E-Mail-Adresse existiert bereits ein Konto.', 'email');
   if (code === 'weak_password' || msg.includes('password should be')) return map('Das Passwort ist zu schwach. Bitte ein längeres Passwort mit Buchstaben und Ziffern wählen.', 'password');
   if (code === 'email_address_invalid' || msg.includes('invalid email') || msg.includes('email address') && msg.includes('invalid')) return map('Diese E-Mail-Adresse wird nicht akzeptiert.', 'email');
+  // Supabase: „For security purposes, you can only request this after 42 seconds.“
+  const wait = /only request this after (\d+) seconds?/.exec(err.message ?? '');
+  if (wait) return map(`Aus Sicherheitsgründen können Sie erst in ${wait[1]} Sekunden erneut eine E-Mail anfordern.`);
+  // Versand der Auth-E-Mail gescheitert (SMTP-Fehler, Standard-Mailserver von Supabase nur für Team-Adressen …)
+  if (code === 'email_address_not_authorized' || msg.includes('error sending') || (msg.includes('not authorized') && msg.includes('email')))
+    return map('Die Bestätigungs-E-Mail konnte gerade nicht versendet werden. Bitte versuchen Sie es in einigen Minuten erneut. Falls das Problem bleibt, schreiben Sie uns an info@olo-vision.de.');
   if (code === 'over_email_send_rate_limit' || code === 'over_request_rate_limit' || err.status === 429 || msg.includes('rate limit')) return map('Zu viele Versuche. Bitte warten Sie einen Moment und versuchen Sie es erneut.');
   if (code === 'same_password') return map('Das neue Passwort muss sich vom bisherigen unterscheiden.', 'password');
   if (code === 'session_not_found' || code === 'refresh_token_not_found' || code === 'PGRST301' || code === 'PGRST303' || msg.includes('auth session missing') || msg.includes('jwt expired') || msg.includes('invalid jwt'))

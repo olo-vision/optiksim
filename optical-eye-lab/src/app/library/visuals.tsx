@@ -116,7 +116,7 @@ export function SimulationActionsMenu({ meta, onChanged }: { meta: SimulationMet
       width={230}
       label={`Aktionen für ${meta.name}`}
       trigger={(open) => (
-        <button type="button" className={`card-more${open ? ' is-open' : ''}`} aria-label={`Aktionen für ${meta.name}`} onClick={(e) => e.stopPropagation()}>
+        <button type="button" className={`card-more${open ? ' is-open' : ''}`} aria-label={`Aktionen für ${meta.name}`} aria-haspopup="menu" aria-expanded={open} data-testid="sim-actions">
           <MoreHorizontal size={16} />
         </button>
       )}

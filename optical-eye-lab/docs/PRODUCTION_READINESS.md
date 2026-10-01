@@ -9,6 +9,7 @@ Die Migrationen 1–5 sind bekannt aus 0.9.
 | 6 | `20261001090000_cloud_content_accounts.sql` | Cloud-Inhalte, Kontostatus, Löschung |
 | 7 | `20261002090000_account_retention.sql` | Aufbewahrung geschlossener Konten, Erinnerung, Admin-Lebenszyklus |
 | 8 | `20261003090000_production_hardening.sql` | siehe unten |
+| 9 | `20261004090000_legal_publish_review_override.sql` | Vertragscenter: Prüfhinweise warnen statt hart zu blockieren (nur Super-Admin, mit Bestätigung, protokolliert) |
 
 Inhalt von Migration 8:
 - Geschlossene Konten sind serverseitig gesperrt (Lizenz und Demo).
@@ -95,8 +96,19 @@ select public.sync_license_for_institution('<institution-uuid>', 'go-live');
 - **Auth → SMTP:** united-domains eintragen, sonst gilt das Supabase-Limit für Auth-E-Mails.
 - **Auth → URL-Konfiguration:**
   - Site URL `https://olo-lab.de`
-  - Redirect-URLs: `https://olo-lab.de/login`, `/reset-password` und `/account`
+  - Redirect-URLs: `https://olo-lab.de/**` (deckt `/login`, `/reset-password` und `/account?email_changed=1` ab; eine
+    Angabe ohne Platzhalter wie `https://olo-lab.de/account` passt **nicht** auf `/account?email_changed=1`)
 - **Auth-E-Mail-Vorlagen:** auf Deutsch und in der „Sie“-Form anpassen (Bestätigung, Passwort, E-Mail-Änderung).
+- **E-Mail-Adresse ändern** (Details: `docs/CLOUD_ACCOUNT.md` Abschnitt 8):
+  - Auth → Providers → Email: „Confirm email“ **an** (sonst ändert Supabase die Adresse sofort und versendet nichts).
+  - „Secure email change“ an (empfohlen; Bestätigung über die bisherige und die neue Adresse). Wird es ausgeschaltet,
+    beim Frontend-Build `VITE_SECURE_EMAIL_CHANGE=off` setzen, damit die Hinweistexte stimmen.
+  - Auth → SMTP: eigener Mailserver (united-domains). Der eingebaute Supabase-Mailer versendet nur an Adressen des
+    Projekt-Teams und nur wenige Mails pro Stunde.
+  - Auth → Rate Limits: „Rate limit for sending emails“ ausreichend hoch (z. B. 30/h).
+  - Auth → Emails → „Change Email Address“: Vorlage mit `{{ .ConfirmationURL }}`.
+  - Prüfen: Auth → Logs nach `/user` bzw. `mail.send` filtern; in `auth.users` müssen `email_change` und
+    `email_change_sent_at` nach einer Anforderung gesetzt sein.
 - **Cron `olo-mail-jobs`:** stündlich (siehe `docs/LEGAL_OPERATIONS.md` 3.6). Er verarbeitet jetzt auch die Erinnerung und Löschung geschlossener Konten und den Nachversand von Kündigungs- und Widerrufsbestätigungen.
 
 ## 7. Was die Härtung behebt (Kurzfassung)

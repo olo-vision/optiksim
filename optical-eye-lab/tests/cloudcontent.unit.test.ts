@@ -194,6 +194,36 @@ describe('CloudContentStore – Bibliothek im Konto', () => {
   });
 });
 
+describe('Löschen aus dem Drei-Punkte-Menü (Cloud + lokale Kopien)', () => {
+  it('Löschen entfernt die Cloud-Simulation, Entwurf und lokale Sicherungskopie dieses Kontos – fremde lokale Daten bleiben', async () => {
+    await signUp('del@optik.de');
+    const a = await device('del@optik.de');
+    const rec = await a.lib.create(a.user, { name: 'Löschkandidat', doc: doc('Löschkandidat') });
+    // lokale Sicherungskopie aus der Übernahme (gleiche ID, gleiches Konto) + Entwurf + fremder lokaler Eintrag
+    await a.repos.createSim({ ...rec.meta, ownerId: a.user.id }, rec.doc);
+    await a.repos.saveDraft({ simId: rec.meta.id, doc: rec.doc, savedAt: new Date().toISOString() });
+    const other = await a.repos.createSim({ ...rec.meta, id: 'sim_fremd', ownerId: 'sb_anderes-konto' }, rec.doc);
+    await a.lib.remove(a.user, rec.meta.id);
+    expect(a.backend.hooks().cloudSimCount('del@optik.de')).toBe(0);
+    expect(await a.repos.getSimMeta(rec.meta.id)).toBeFalsy();
+    expect(await a.repos.getDraft(rec.meta.id)).toBeFalsy();
+    expect(await a.repos.getSimMeta(other.id)).toBeTruthy();
+    expect((await a.lib.list(a.user)).some((m) => m.id === rec.meta.id)).toBe(false);
+  });
+
+  it('Umbenennen und Duplizieren laufen über den Cloud-Speicher und sind auf einem zweiten Gerät sichtbar', async () => {
+    await signUp('dup@optik.de');
+    const a = await device('dup@optik.de');
+    const rec = await a.lib.create(a.user, { name: 'Original', doc: doc('Original') });
+    await a.lib.rename(a.user, rec.meta.id, 'Umbenannt');
+    const copy = await a.lib.duplicate(a.user, rec.meta.id);
+    const b = await device('dup@optik.de');
+    const names = (await b.lib.list(b.user)).map((m) => m.name).sort();
+    expect(names).toEqual([copy.meta.name, 'Umbenannt'].sort());
+    expect(copy.meta.id).not.toBe(rec.meta.id);
+  });
+});
+
 describe('Übernahme lokaler Daten (LocalStorage → Konto)', () => {
   /** Lokaler Bestand wie in 0.8/0.9 (Arbeitsbereich sb_<uuid>) */
   async function seedLocal(repos: Repositories, ownerId: string, names: string[]) {

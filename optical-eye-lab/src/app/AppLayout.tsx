@@ -47,7 +47,8 @@ function CloudUserMenu({ compact, direction = 'up' }: { compact?: boolean; direc
   return (
     <Menu
       direction={direction}
-      align="left"
+      // kompakt = rundes Symbol oben rechts (Simulator/Modul): an der rechten Kante ausrichten, nach links aufklappen
+      align={compact ? 'right' : 'left'}
       width={250}
       label="Benutzermenü"
       trigger={(open) => (
@@ -99,7 +100,8 @@ function LocalUserMenu({ compact, direction = 'up' }: { compact?: boolean; direc
   return (
     <Menu
       direction={direction}
-      align="left"
+      // kompakt = rundes Symbol oben rechts (Simulator/Modul): an der rechten Kante ausrichten, nach links aufklappen
+      align={compact ? 'right' : 'left'}
       width={250}
       label="Benutzermenü"
       trigger={(open) => (

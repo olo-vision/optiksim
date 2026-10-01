@@ -6,7 +6,9 @@ ausweis über Stripe und die automatische Beendigung privater Jahreslizenzen.
 
 > Die Texte sind eine sorgfältig vorbereitete erste Fassung, aber **keine anwaltlich geprüften oder garantiert
 > rechtssicheren Texte**. Punkte mit Prüfbedarf sind im Text mit **[Prüfhinweis: …]** markiert. Das Vertragscenter
-> veröffentlicht einen Entwurf erst, wenn alle Markierungen entfernt sind.
+> zeigt diese Markierungen deutlich an. Ein Entwurf mit Markierungen lässt sich nur nach einem ausdrücklichen
+> Warn-Dialog („Trotzdem veröffentlichen“) und nur durch einen Super-Admin veröffentlichen; die Hinweise sind dann
+> Teil der veröffentlichten Fassung (Migration `20261004090000_legal_publish_review_override.sql`).
 
 ## 1. Dokumente (Entwürfe 1.0)
 
@@ -36,7 +38,7 @@ Session). Ein Kauf ohne alle Pflicht-Zustimmungen ist serverseitig ausgeschlosse
 
 | Bereich | Änderung |
 |---|---|
-| Migration `20260930090000_legal_operations.sql` | Dokumenttyp `imprint`; Tabellen `consumer_declarations` (Kündigungen/Widerrufe, Inhalt unveränderlich, 3 Jahre Aufbewahrung) und `system_mails` (E-Mail-Protokoll, Doppelversand ausgeschlossen); `subscriptions.renewal_reminder_sent_at`; Serverfunktionen nur für `service_role`; Admin-Funktionen nur Super-Admin; Veröffentlichen nur ohne `[Prüfhinweis]` |
+| Migration `20260930090000_legal_operations.sql` | Dokumenttyp `imprint`; Tabellen `consumer_declarations` (Kündigungen/Widerrufe, Inhalt unveränderlich, 3 Jahre Aufbewahrung) und `system_mails` (E-Mail-Protokoll, Doppelversand ausgeschlossen); `subscriptions.renewal_reminder_sent_at`; Serverfunktionen nur für `service_role`; Admin-Funktionen nur Super-Admin; Veröffentlichen mit `[Prüfhinweis]` nur nach ausdrücklicher Bestätigung (seit Migration `20261004090000`, Code `OLR01` ohne Bestätigung) |
 | Edge Function `consumer-request` (neu, ohne JWT) | Kündigungs-/Widerrufsbutton: Erklärung speichern, per E-Mail-Adresse dem Konto zuordnen, ordentliche Kündigung **automatisch** bei Stripe zum Periodenende, Eingangsbestätigung an die Konto-Adresse, Hinweis an OLO Vision. Honeypot, max. 3 E-Mails je Adresse und Stunde, Antwort verrät nie, ob ein Konto existiert |
 | Edge Function `mail-jobs` (neu, per `x-cron-secret`) | stündlich: fehlgeschlagene Vertragsbestätigungen nachholen (7 Tage), Erinnerung 14 Tage vor Ende privater Jahreslizenzen |
 | `stripe-webhook` | Vertragsbestätigung nach dem Kauf (einmal je Session, mit allen akzeptierten Texten als Anhang, § 312f Abs. 2 BGB); private Jahreslizenz wird sofort auf „endet zum Periodenende“ gesetzt – auch nach einer Reaktivierung im Kundenportal; Hinweis an OLO Vision bei B2B-Kauf mit Rechnungsland ≠ DE |
@@ -110,7 +112,11 @@ $$);
 ### 3.7 Rechtstexte prüfen und veröffentlichen
 
 *Admin → Rechtliches*: Entwürfe öffnen, **Vorschau** prüfen, `[Prüfhinweis: …]` klären (ggf. mit Kanzlei), den
-Hinweis aus dem Text entfernen, speichern, **Veröffentlichen**. Reihenfolge egal; solange ein Dokument fehlt, wird es
+Hinweis aus dem Text entfernen, speichern, **Veröffentlichen**. Enthält ein Entwurf noch Prüfhinweise, erscheint beim
+Veröffentlichen ein Warn-Dialog („Dieses Dokument enthält noch Prüfhinweise. Möchten Sie es trotzdem veröffentlichen?“
+mit „Abbrechen“ / „Trotzdem veröffentlichen“). Bestätigt ein Super-Admin, wird die Fassung **mit** den Hinweisen
+veröffentlicht – sie sind dann für Kunden sichtbar und im Audit-Protokoll (`review_override`) vermerkt. Korrekturen
+danach nur über eine neue Version; veröffentlichte Versionen bleiben unveränderlich. Reihenfolge egal; solange ein Dokument fehlt, wird es
 im jeweiligen Ablauf nicht abgefragt (Warnhinweis im Vertragscenter). Vor dem Verkauf an echte Kunden müssen alle 9
 aktiv sein.
 
@@ -150,7 +156,7 @@ Die folgenden Punkte sind im Text als `[Prüfhinweis]` markiert bzw. offen:
 
 ## 6. Tests
 
-- `tests/db/legalops.test.ts` (PostgreSQL): Import der Entwürfe ohne Überschreiben, Prüfhinweis-Sperre, Impressum,
+- `tests/db/legalops.test.ts` (PostgreSQL): Import der Entwürfe ohne Überschreiben, Prüfhinweis-Warnung (ohne Bestätigung `OLR01`, mit Bestätigung nur Super-Admin, neue Version, Vorversion archiviert, Audit), Impressum,
   Erklärungen (Zuordnung, Unveränderlichkeit, Rechte), Vertragsbestätigung (einmalig, mit Dokumenten), Erinnerung,
   End-to-End Handler + Webhook + Kündigung/Widerruf + Mail-Jobs + SMTP-Ausfall.
 - `tests/legalops.unit.test.ts`: Preise Server = Browser, Hinweis am Stripe-Button, E-Mail-Texte und -Konfiguration,

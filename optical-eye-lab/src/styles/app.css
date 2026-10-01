@@ -1409,6 +1409,21 @@ body.is-scrubbing * {
 .menu__popover--left {
   left: 0;
 }
+/* Menüs werden im Portal fest im Viewport positioniert (Position/Breite/Höhe: computeMenuPosition) */
+.menu__popover--portal {
+  position: fixed;
+  right: auto;
+  bottom: auto;
+  max-width: calc(100vw - 16px);
+  overscroll-behavior: contain;
+  z-index: 260;
+}
+.menu__popover--portal.menu__popover--above {
+  transform-origin: bottom;
+}
+.menu__popover--portal .menu__heading {
+  overflow-wrap: anywhere;
+}
 .menu__popover--right {
   right: 0;
 }

@@ -248,6 +248,13 @@ export class CloudContentStore implements ContentRepository {
     this.loadedRevision.delete(id);
     this.listedRevision.delete(id);
     await this.local.clearDraft(id).catch(() => undefined);
+    // lokale Sicherungskopie aus der Übernahme (bis zu 30 Tage) mit entfernen – gelöscht heißt auch auf diesem Gerät gelöscht
+    try {
+      const copy = (await this.local.listSimMeta()).find((m) => m.id === id && m.ownerId === this.identity.workspaceUserId);
+      if (copy) await this.local.deleteSim(id);
+    } catch {
+      /* lokale Aufräumarbeit ist optional */
+    }
   }
 
   private thumbRequests = new Map<string, Promise<string | null>>();

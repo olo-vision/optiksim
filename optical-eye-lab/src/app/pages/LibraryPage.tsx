@@ -136,10 +136,10 @@ export function LibraryPage() {
           ))}
         </select>
         <div className="segmented segmented--sm" role="radiogroup" aria-label="Ansicht">
-          <button type="button" role="radio" aria-checked={view === 'grid'} className={`segmented__item${view === 'grid' ? ' is-active' : ''}`} onClick={() => setViewMode('grid')} data-tip="Kacheln">
+          <button type="button" role="radio" aria-checked={view === 'grid'} className={`segmented__item${view === 'grid' ? ' is-active' : ''}`} onClick={() => setViewMode('grid')} data-tip="Kacheln" aria-label="Kachelansicht">
             <LayoutGrid size={14} />
           </button>
-          <button type="button" role="radio" aria-checked={view === 'list'} className={`segmented__item${view === 'list' ? ' is-active' : ''}`} onClick={() => setViewMode('list')} data-tip="Liste">
+          <button type="button" role="radio" aria-checked={view === 'list'} className={`segmented__item${view === 'list' ? ' is-active' : ''}`} onClick={() => setViewMode('list')} data-tip="Liste" aria-label="Listenansicht">
             <List size={14} />
           </button>
         </div>

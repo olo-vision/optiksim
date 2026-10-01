@@ -3,7 +3,7 @@
  *   SupabaseBackend – echte Anmeldung/Datenbank (Produktion)
  *   MockBackend     – Nachbau im Browser (nur Tests/Entwicklung, VITE_AUTH_MODE=mock)
  */
-import type { AccountLifecycleRow, AccountOverview, CloudSimulationFull, CloudSimulationPatch, CloudSimulationRow, CloudTemplateRow, NewCloudSimulation, AdminAccountRow, AdminConsentRow, AdminDeclarationRow, ConsumerDeclarationInput, ConsumerDeclarationReceipt, DeclarationStatus, AdminLegalDocument, BillingInterval, CloudAccount, CloudUser, InstitutionType, LegalConsentContext, LegalDocRef, LegalDocSummary, LegalDocument, LegalDraftInput, LicensePlan, LicenseSource, LicenseStatus, RegistrationInput } from './types';
+import type { AccountLifecycleRow, AccountOverview, CloudSimulationFull, CloudSimulationPatch, CloudSimulationRow, CloudTemplateRow, NewCloudSimulation, AdminAccountRow, AdminConsentRow, AdminDeclarationRow, ConsumerDeclarationInput, ConsumerDeclarationReceipt, DeclarationStatus, AdminLegalDocument, BillingInterval, CloudAccount, CloudUser, EmailChangeResult, InstitutionType, LegalConsentContext, LegalDocRef, LegalDocSummary, LegalDocument, LegalDraftInput, LicensePlan, LicenseSource, LicenseStatus, RegistrationInput } from './types';
 
 export type AuthEvent = 'SIGNED_IN' | 'SIGNED_OUT' | 'TOKEN_REFRESHED' | 'USER_UPDATED' | 'PASSWORD_RECOVERY' | 'INITIAL_SESSION' | string;
 
@@ -48,7 +48,11 @@ export interface CloudBackend {
   /** Super-Admin: Vertragscenter */
   adminLegalList(): Promise<AdminLegalDocument[]>;
   adminLegalSaveDraft(input: LegalDraftInput): Promise<string>;
-  adminLegalActivate(id: string): Promise<void>;
+  /**
+   * Entwurf veröffentlichen (nur Super-Admin). Enthält er noch [Prüfhinweis]-Markierungen, lehnt der Server
+   * ohne `acknowledgeReview` mit Code OLR01 ab; mit `acknowledgeReview: true` wird bewusst trotzdem veröffentlicht.
+   */
+  adminLegalActivate(id: string, opts?: { acknowledgeReview?: boolean }): Promise<void>;
   adminLegalArchive(id: string): Promise<void>;
   adminLegalDeleteDraft(id: string): Promise<void>;
   adminListConsents(institutionId: string): Promise<AdminConsentRow[]>;
@@ -87,7 +91,10 @@ export interface CloudBackend {
   /** Mit dem aktuellen Passwort erneut anmelden (frische Sitzung für sensible Aktionen) */
   reauthenticate(password: string): Promise<void>;
   /** E-Mail ändern: Bestätigungslink an die neue Adresse; wirksam erst nach Bestätigung */
-  changeEmail(newEmail: string, redirectTo: string): Promise<void>;
+  /** E-Mail-Änderung anfordern; wirft, wenn Supabase sie nicht angenommen hat (siehe EmailChangeResult). */
+  changeEmail(newEmail: string, redirectTo: string): Promise<EmailChangeResult>;
+  /** Bestätigungs-E-Mail(s) einer offenen E-Mail-Änderung erneut senden (Supabase: frühestens nach 60 s). */
+  resendEmailChange(redirectTo: string): Promise<EmailChangeResult>;
   changePassword(currentPassword: string, newPassword: string): Promise<void>;
   /** Endgültig löschen (Edge Function delete-account); vorher reauthenticate() */
   deleteAccount(confirm: string, targetUserId?: string): Promise<void>;
